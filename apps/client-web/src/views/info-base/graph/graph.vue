@@ -599,6 +599,8 @@ function focusCameraOnNode(blockId: number): void {
     x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
     y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
     zoom: currentZoom,
+  }, {
+    duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400,
   })
 }
 
