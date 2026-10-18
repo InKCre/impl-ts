@@ -16,6 +16,17 @@
     flex: 1;
     min-height: 0;
   }
+  &__view-switch {
+    padding: sys-var(space, sm) sys-var(space, md) 0;
+    display: flex;
+    justify-content: flex-end;
+
+    /* InkTabs 的 underline 与 tab 边界齐平，视觉拥挤；
+       给 tabs 容器加水平 padding，让 underline 比 tab 内容宽出呼吸空间。 */
+    :deep(.ink-tabs) {
+      padding-inline: sys-var(space, sm);
+    }
+  }
   &__toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -112,5 +123,15 @@
   }
   .vue-flow__pane.dragging {
     cursor: grabbing;
+  }
+  /* Force GPU compositing on the transformation pane to prevent
+     ghost borders / flickering during rapid zoom changes. */
+  :deep(.vue-flow__transformationpane) {
+    will-change: transform;
+  }
+  /* Ensure nodes are promoted to their own compositing layer so that
+     border artifacts don't leak between zoom levels. */
+  :deep(.vue-flow__node) {
+    will-change: transform;
   }
 }

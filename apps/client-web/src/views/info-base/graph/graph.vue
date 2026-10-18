@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { VueFlow, useNodesInitialized, useVueFlow, type NodeDragEvent } from '@vue-flow/core'
-import { InkButton, InkDropdown, InkForm, InkLoading } from '@inkcre/ui-web'
+import { InkButton, InkDropdown, InkForm, InkLoading, InkPlaceholder } from '@inkcre/ui-web'
+import dagre from '@dagrejs/dagre'
 import {
   CapabilityDelegationUnavailable,
   getInfoBaseRouter,
@@ -20,6 +22,7 @@ import RelationEdgeComponent from '@/components/info-base/RelationEdge/RelationE
 import BlockInspectorPopup from '@/components/info-base/BlockInspectorPopup/BlockInspectorPopup.vue'
 import RelationInspectorPopup from '@/components/info-base/RelationInspectorPopup/RelationInspectorPopup.vue'
 import SolvedContentPopup from '@/components/info-base/SolvedContentPopup/SolvedContentPopup.vue'
+import InfoBaseViewTabs from '@/components/info-base/InfoBaseViewTabs.vue'
 import { blockNode, relationEdge, type BlockNode, type RelationEdge } from './graph-model'
 import { openRecallSearch } from '@/components/recall/recall-search'
 
@@ -29,6 +32,7 @@ type SceneStatus = 'loading' | 'ready' | 'empty' | 'missing' | 'not-found' | 'li
 const SCALE_LIMITS: Record<SceneScale, number> = { compact: 8, standard: 20, broad: 50 }
 const container = ref<HTMLElement | null>(null)
 const infoBaseRouter = getInfoBaseRouter()
+const { t } = useI18n()
 const currentRoute = computed(() => infoBaseRouter.current.value)
 const nodes = shallowRef<BlockNode[]>([])
 const edges = shallowRef<RelationEdge[]>([])
@@ -82,22 +86,24 @@ const focalRelation = computed(() => {
 
 const sceneDescription = computed(() => {
   const address = sceneAddress.value
-  if (address?.type === 'block') return `Around Block #${address.block}`
-  if (address?.type === 'relation') return `Around Relation #${address.relation}`
-  if (address?.type === 'path') return `Path from #${address.from} to #${address.to}`
-  if (address?.type === 'recall') return `Results for “${address.query}”`
-  return 'Explore your information'
+  if (address?.type === 'block') return t('infoBase.graph.scene.block', { block: address.block })
+  if (address?.type === 'relation')
+    return t('infoBase.graph.scene.relation', { relation: address.relation })
+  if (address?.type === 'path')
+    return t('infoBase.graph.scene.path', { from: address.from, to: address.to })
+  if (address?.type === 'recall') return t('infoBase.graph.scene.recall', { query: address.query })
+  return t('infoBase.graph.scene.default')
 })
-const scaleOptions = [
-  { value: 'compact', label: 'Small · 8 relations' },
-  { value: 'standard', label: 'Standard · 20 relations' },
-  { value: 'broad', label: 'Large · 50 relations' },
-]
-const directionOptions = [
-  { value: 'both', label: 'Both directions' },
-  { value: 'in', label: 'Incoming' },
-  { value: 'out', label: 'Outgoing' },
-]
+const scaleOptions = computed(() => [
+  { value: 'compact', label: t('infoBase.graph.scale.compact') },
+  { value: 'standard', label: t('infoBase.graph.scale.standard') },
+  { value: 'broad', label: t('infoBase.graph.scale.broad') },
+])
+const directionOptions = computed(() => [
+  { value: 'both', label: t('infoBase.graph.direction.both') },
+  { value: 'in', label: t('infoBase.graph.direction.in') },
+  { value: 'out', label: t('infoBase.graph.direction.out') },
+])
 
 function activeRelation(relation: Relation): boolean {
   if (direction.value === 'both') return true
@@ -156,6 +162,12 @@ function setGraph(graph: GraphModel): void {
   )
   applyPresentation()
   void loadPreviews(graph.blocks, incident, generation)
+  // Layout after a short delay to allow Vue Flow to measure nodes.
+  setTimeout(() => {
+    layoutMeasuredNodes()
+    updateNodeInternals(nodes.value.map((node) => node.id))
+    void nextTick(() => routeEdges())
+  }, 100)
 }
 
 async function loadPreviews(
@@ -261,82 +273,53 @@ function layoutMeasuredNodes(): void {
   const measured = getNodes.value
   if (measured.length === 0) return
   const byId = new Map(measured.map((node) => [node.id, node]))
-  const focalId = focalBlock.value !== null ? String(focalBlock.value) : measured[0]!.id
-  const dimensions = (id: string) => {
-    const node = byId.get(id)!
-    return { width: node.dimensions.width, height: node.dimensions.height }
+
+  // User drag owns its coordinates; skip layout for dragged nodes.
+  const dragged = new Set(draggedNodes)
+  const unpositioned = nodes.value.filter((node) => !dragged.has(node.id))
+  if (unpositioned.length === 0) return
+
+  const g = new dagre.graphlib.Graph()
+  g.setDefaultEdgeLabel(() => ({}))
+  g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 120, marginx: 40, marginy: 40 })
+
+  for (const node of unpositioned) {
+    const measuredNode = byId.get(node.id)
+    // Use actual dimensions if available, otherwise estimate from block content.
+    const width = measuredNode?.dimensions.width || 180
+    const height = measuredNode?.dimensions.height || 80
+    g.setNode(node.id, { width, height })
   }
-  const gap = 32
-  const occupied: Array<{ x: number; y: number; width: number; height: number }> = []
-  const positions = new Map<string, { x: number; y: number }>()
-  const overlaps = (box: { x: number; y: number; width: number; height: number }) =>
-    occupied.some(
-      (other) =>
-        box.x < other.x + other.width + gap &&
-        box.x + box.width + gap > other.x &&
-        box.y < other.y + other.height + gap &&
-        box.y + box.height + gap > other.y
-    )
-  // User drag owns its coordinates. Keep automatic positions too unless a changed preview now collides.
-  const retained = [...nodes.value].sort(
-    (left, right) => Number(draggedNodes.has(right.id)) - Number(draggedNodes.has(left.id))
-  )
-  for (const node of retained) {
-    const position = draggedNodes.has(node.id)
-      ? byId.get(node.id)?.position
-      : positionCache.get(node.id)
-    if (!position) continue
-    const box = { ...position, ...dimensions(node.id) }
-    if (!draggedNodes.has(node.id) && overlaps(box)) continue
-    positions.set(node.id, position)
-    positionCache.set(node.id, position)
-    occupied.push(box)
-  }
-  const focalSize = dimensions(focalId)
-  const focalPosition = positions.get(focalId) ?? positionCache.get(focalId) ?? { x: 0, y: 0 }
-  const center = {
-    x: focalPosition.x + focalSize.width / 2,
-    y: focalPosition.y + focalSize.height / 2,
-  }
-  const largest = Math.max(
-    ...measured.map((node) => Math.hypot(node.dimensions.width, node.dimensions.height))
-  )
-  const step = Math.max(220, largest / 2 + gap)
-  const farthest = Math.max(
-    0,
-    ...occupied.map((box) => Math.hypot(box.x - center.x, box.y - center.y) + largest)
-  )
-  // Beyond existing bounds, two more rings per new rectangle always provide an empty candidate.
-  const maxRing = Math.ceil(farthest / step) + nodes.value.length * 2 + 2
-  const unplaced = nodes.value
-    .filter((node) => !positions.has(node.id))
-    .sort((left, right) =>
-      left.id === focalId ? -1 : right.id === focalId ? 1 : Number(left.id) - Number(right.id)
-    )
-  for (const node of unplaced) {
-    const size = dimensions(node.id)
-    let placed = false
-    for (let ring = node.id === focalId ? 0 : 1; ring <= maxRing && !placed; ring++) {
-      const radius = ring * step
-      const slots = ring === 0 ? 1 : Math.max(8, Math.ceil((2 * Math.PI * radius) / 212))
-      for (let slot = 0; slot < slots; slot++) {
-        const angle = -Math.PI / 2 + (2 * Math.PI * slot) / slots
-        const position = {
-          x: center.x + Math.cos(angle) * radius - size.width / 2,
-          y: center.y + Math.sin(angle) * radius - size.height / 2,
-        }
-        const box = { ...position, ...size }
-        if (overlaps(box)) continue
-        positions.set(node.id, position)
-        positionCache.set(node.id, position)
-        occupied.push(box)
-        placed = true
-        break
-      }
+  for (const edge of edges.value) {
+    if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
+      g.setEdge(edge.source, edge.target)
     }
-    if (!placed) throw new Error('Graph layout exceeded its scene bound')
   }
-  nodes.value = nodes.value.map((node) => ({ ...node, position: positions.get(node.id)! }))
+
+  dagre.layout(g)
+
+  const positions = new Map<string, { x: number; y: number }>()
+  for (const node of unpositioned) {
+    const dagreNode = g.node(node.id)
+    if (dagreNode) {
+      positions.set(node.id, {
+        x: dagreNode.x - dagreNode.width / 2,
+        y: dagreNode.y - dagreNode.height / 2,
+      })
+    }
+  }
+  // Keep dragged nodes at their current positions.
+  for (const node of nodes.value) {
+    if (dragged.has(node.id)) {
+      const current = byId.get(node.id)?.position
+      if (current) positions.set(node.id, current)
+    }
+  }
+
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    position: positions.get(node.id) ?? node.position,
+  }))
 }
 
 function routeEdges(): void {
@@ -368,7 +351,6 @@ function routeEdges(): void {
 }
 
 async function realizeScene(): Promise<void> {
-  if (!previewReady.value || !nodesInitialized.value) return
   if (realizing) {
     realizationRequested = true
     return
@@ -382,7 +364,7 @@ async function realizeScene(): Promise<void> {
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
     )
-    if (current !== generation || !previewReady.value || !nodesInitialized.value) return
+    if (current !== generation) return
     layoutMeasuredNodes()
     await nextTick()
     routeEdges()
@@ -415,14 +397,13 @@ watch(direction, applyPresentation)
 watch(
   [
     nodesInitialized,
-    previewReady,
     () =>
       getNodes.value
         .map((node) => `${node.id}:${node.dimensions.width}:${node.dimensions.height}`)
         .join(','),
   ],
   () => {
-    if (nodesInitialized.value && previewReady.value) void realizeScene()
+    if (nodesInitialized.value) void realizeScene()
   }
 )
 
@@ -451,6 +432,7 @@ function onNodeDragStart(event: NodeDragEvent): void {
 
 function onNodeDragStop(event: NodeDragEvent): void {
   positionCache.set(event.node.id, { ...event.node.position })
+  draggedNodes.delete(event.node.id)
   routeEdges()
 }
 
@@ -470,27 +452,36 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
 
 <template>
   <main ref="container" class="graph-view">
+    <div class="graph-view__view-switch">
+      <InfoBaseViewTabs />
+    </div>
     <header class="graph-view__toolbar">
       <div class="graph-view__context">
         <h1>{{ sceneDescription }}</h1>
-        <p v-if="status === 'ready'">{{ nodes.length }} blocks · {{ edges.length }} relations</p>
+        <p v-if="status === 'ready'">
+          {{ t('infoBase.graph.stats', { blocks: nodes.length, relations: edges.length }) }}
+        </p>
       </div>
       <div class="graph-view__actions">
         <InkButton
           v-if="focalRelation !== null"
-          text="Relation details"
+          :text="t('infoBase.graph.relationDetails')"
           theme="subtle"
-          :aria-label="`Inspect Relation #${focalRelation}`"
+          :aria-label="t('infoBase.graph.inspectRelation', { relation: focalRelation })"
           @click="inspectRelation(focalRelation)"
         />
-        <InkButton text="Search" theme="subtle" @click="openRecallSearch" />
+        <InkButton :text="t('infoBase.graph.search')" theme="subtle" @click="openRecallSearch" />
         <details v-if="focalBlock !== null" class="graph-view__options">
-          <summary>View options</summary>
+          <summary>{{ t('infoBase.graph.viewOptions') }}</summary>
           <InkForm layout="col">
-            <InkDropdown v-model="scale" label="Neighborhood size" :options="scaleOptions" />
+            <InkDropdown
+              v-model="scale"
+              :label="t('infoBase.graph.neighborhoodSize')"
+              :options="scaleOptions"
+            />
             <InkDropdown
               v-model="direction"
-              label="Emphasize relations"
+              :label="t('infoBase.graph.emphasizeRelations')"
               :options="directionOptions"
             />
           </InkForm>
@@ -500,27 +491,50 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
 
     <div v-if="status === 'loading'" class="graph-view__state" role="status">
       <InkLoading />
-      <p>Loading graph…</p>
+      <p>{{ t('infoBase.graph.loading') }}</p>
     </div>
-    <div v-else-if="status !== 'ready'" class="graph-view__state">
-      <div>
-        <h2 v-if="status === 'empty'">No information here yet</h2>
-        <h2 v-else-if="status === 'missing'">This item is no longer available</h2>
-        <h2 v-else-if="status === 'not-found'">No connecting path found</h2>
-        <h2 v-else-if="status === 'limit'">The path exceeds the exploration limit</h2>
-        <h2 v-else role="alert">Unable to load the graph</h2>
-        <p v-if="status === 'empty' || status === 'missing'">Search for another starting point.</p>
-        <p v-else-if="status === 'limit'">Try two closer starting points.</p>
-        <p v-else-if="status === 'not-found'">Try another pair of blocks.</p>
-        <p v-else-if="delegationUnavailable">
-          No retrieval Peer is available right now. Your query is preserved. Wait for a Peer to
-          become ready, then retry to check live Peers again.
-        </p>
-        <p v-else>Your current location is preserved. You can try loading it again.</p>
-        <InkButton v-if="status === 'error'" text="Retry" theme="primary" @click="loadScene" />
-        <InkButton v-else text="Search information" theme="subtle" @click="openRecallSearch" />
-      </div>
-    </div>
+    <InkPlaceholder
+      v-else-if="status !== 'ready'"
+      class="graph-view__placeholder"
+      :state="status === 'error' ? 'error' : 'empty'"
+      :title="
+        status === 'empty'
+          ? t('infoBase.graph.emptyTitle')
+          : status === 'missing'
+            ? t('infoBase.graph.missingTitle')
+            : status === 'not-found'
+              ? t('infoBase.graph.notFoundTitle')
+              : status === 'limit'
+                ? t('infoBase.graph.limitTitle')
+                : t('infoBase.graph.errorTitle')
+      "
+      :description="
+        status === 'empty' || status === 'missing'
+          ? t('infoBase.graph.emptyHint')
+          : status === 'limit'
+            ? t('infoBase.graph.limitHint')
+            : status === 'not-found'
+              ? t('infoBase.graph.notFoundHint')
+              : delegationUnavailable
+                ? t('infoBase.graph.delegationUnavailableHint')
+                : t('infoBase.graph.genericHint')
+      "
+    >
+      <template #actions>
+        <InkButton
+          v-if="status === 'error'"
+          :text="t('infoBase.graph.retry')"
+          theme="primary"
+          @click="loadScene"
+        />
+        <InkButton
+          v-else
+          :text="t('infoBase.graph.searchInformation')"
+          theme="subtle"
+          @click="openRecallSearch"
+        />
+      </template>
+    </InkPlaceholder>
 
     <VueFlow
       v-else
@@ -530,8 +544,10 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
       :min-zoom="0.05"
       :max-zoom="2.4"
       :nodes-draggable="true"
-      @node-drag-start="onNodeDragStart"
-      @node-drag-stop="onNodeDragStop"
+      :node-drag-threshold="0"
+      :pan-on-drag="[0, 1, 2]"
+      @nodeDragStart="onNodeDragStart"
+      @nodeDragStop="onNodeDragStop"
     >
       <template #node-block="nodeProps">
         <BlockNodeComponent v-bind="nodeProps" @focus="focusBlock" @inspect="inspectBlock" />
