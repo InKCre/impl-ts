@@ -44,18 +44,6 @@ const inspect = () => emit('inspect', props.data.block.id)
       'block-node--focusing': data.focusing,
     }"
   >
-    <!-- Exploratory dashed lines when focusing -->
-    <svg v-if="data.focusing" class="block-node__exploratory-lines" aria-hidden="true">
-      <line x1="50%" y1="0" x2="50%" y2="-30" />
-      <line x1="100%" y1="50%" x2="130" y2="50%" />
-      <line x1="50%" y1="100%" x2="50%" y2="130" />
-      <line x1="0" y1="50%" x2="-30" y2="50%" />
-      <line x1="100%" y1="0" x2="130" y2="-30" />
-      <line x1="0" y1="0" x2="-30" y2="-30" />
-      <line x1="100%" y1="100%" x2="130" y2="130" />
-      <line x1="0" y1="100%" x2="-30" y2="130" />
-    </svg>
-
     <div
       class="block-node__content nopan"
       role="button"
@@ -65,10 +53,7 @@ const inspect = () => emit('inspect', props.data.block.id)
       @keydown.enter.prevent="onNodeClick"
       @keydown.space.prevent="onNodeClick"
     >
-      <div v-if="data.focusing" class="block-node__focusing-indicator">
-        <InkLoading size="sm" />
-      </div>
-      <InkLoading v-else-if="data.previewStatus === 'loading'" />
+      <InkLoading v-if="data.previewStatus === 'loading'" />
       <PreviewRenderer
         v-else-if="data.previewStatus === 'success' && data.resolver"
         :resolver="data.resolver"
