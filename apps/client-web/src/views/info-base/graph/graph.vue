@@ -58,7 +58,7 @@ watch(expansionMode, (mode) => {
   localStorage.setItem(EXPANSION_MODE_KEY, mode)
 })
 
-const { fitView, zoomIn, zoomOut, getNodes, onMoveStart, updateNodeInternals, setCenter, setViewport } = useVueFlow()
+const { fitView, zoomIn, zoomOut, getNodes, onMoveStart, updateNodeInternals, setCenter, setViewport, getViewport } = useVueFlow()
 const nodesInitialized = useNodesInitialized()
 onMoveStart(() => {
   pendingCamera.value = false
@@ -399,9 +399,8 @@ async function realizeScene(): Promise<void> {
       narrow && focalId !== null ? [String(focalId)] : nodes.value.map((node) => node.id)
     await fitView({
       nodes: visibleNodes,
-      minZoom: narrow && focalId !== null ? 0.75 : 0.05,
+      minZoom: 0.05,
       padding: 0.18,
-      maxZoom: 1.25,
       duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260,
     })
   } finally {
@@ -517,11 +516,11 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
           const centerY = focalNode.position.y + (focalNode.dimensions?.height ?? 80) / 2
           const container = document.querySelector('.vue-flow')
           const rect = container?.getBoundingClientRect()
-          const zoom = 1.25
+          const currentZoom = getViewport()?.zoom ?? 1
           void setViewport({
-            x: (rect?.width ?? 800) / 2 - centerX * zoom,
-            y: (rect?.height ?? 600) / 2 - centerY * zoom,
-            zoom,
+            x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
+            y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
+            zoom: currentZoom,
           })
         }
       }, 100)
@@ -592,11 +591,11 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
           const centerY = focalNode.position.y + (focalNode.dimensions?.height ?? 80) / 2
           const container = document.querySelector('.vue-flow')
           const rect = container?.getBoundingClientRect()
-          const zoom = 1.25
+          const currentZoom = getViewport()?.zoom ?? 1
           void setViewport({
-            x: (rect?.width ?? 800) / 2 - centerX * zoom,
-            y: (rect?.height ?? 600) / 2 - centerY * zoom,
-            zoom,
+            x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
+            y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
+            zoom: currentZoom,
           })
         }
       }
