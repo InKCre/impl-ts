@@ -28,8 +28,10 @@ import { openRecallSearch } from '@/components/recall/recall-search'
 
 type SceneScale = 'compact' | 'standard' | 'broad'
 type SceneStatus = 'loading' | 'ready' | 'empty' | 'missing' | 'not-found' | 'limit' | 'error'
+type ExpansionMode = 'smooth' | 'incremental'
 
 const SCALE_LIMITS: Record<SceneScale, number> = { compact: 8, standard: 20, broad: 50 }
+const EXPANSION_MODE_KEY = 'inkcre.graph.expansionMode'
 const container = ref<HTMLElement | null>(null)
 const infoBaseRouter = getInfoBaseRouter()
 const { t } = useI18n()
@@ -40,6 +42,9 @@ const status = ref<SceneStatus>('loading')
 const delegationUnavailable = ref(false)
 const scale = ref<SceneScale>('standard')
 const direction = ref<GraphDirection>('both')
+const expansionMode = ref<ExpansionMode>(
+  (localStorage.getItem(EXPANSION_MODE_KEY) as ExpansionMode) || 'smooth'
+)
 const previewReady = ref(false)
 const pendingCamera = ref(false)
 const positionCache = new Map<string, { x: number; y: number }>()
@@ -47,6 +52,10 @@ const draggedNodes = new Set<string>()
 let generation = 0
 let realizing = false
 let realizationRequested = false
+
+watch(expansionMode, (mode) => {
+  localStorage.setItem(EXPANSION_MODE_KEY, mode)
+})
 
 const { fitView, zoomIn, zoomOut, getNodes, onMoveStart, updateNodeInternals } = useVueFlow()
 const nodesInitialized = useNodesInitialized()
@@ -103,6 +112,10 @@ const directionOptions = computed(() => [
   { value: 'both', label: t('infoBase.graph.direction.both') },
   { value: 'in', label: t('infoBase.graph.direction.in') },
   { value: 'out', label: t('infoBase.graph.direction.out') },
+])
+const expansionModeOptions = computed(() => [
+  { value: 'smooth', label: t('infoBase.graph.expansion.smooth') },
+  { value: 'incremental', label: t('infoBase.graph.expansion.incremental') },
 ])
 
 function activeRelation(relation: Relation): boolean {
@@ -392,7 +405,11 @@ async function realizeScene(): Promise<void> {
   }
 }
 
-watch([sceneKey, scale], () => void loadScene(), { immediate: true })
+watch([sceneKey, scale], () => {
+  // In incremental mode, scene changes are handled by mergeGraph; skip full reload.
+  if (expansionMode.value === 'incremental' && status.value === 'ready') return
+  void loadScene()
+}, { immediate: true })
 watch(direction, applyPresentation)
 watch(
   [
@@ -408,13 +425,121 @@ watch(
 )
 
 function focusBlock(block: number): void {
-  pendingCamera.value = true
-  void infoBaseRouter.push({ name: 'overview', focal_block: block })
+  if (expansionMode.value === 'incremental') {
+    // Incremental: load new neighborhood and merge into existing graph.
+    void loadIncrementalBlock(block)
+  } else {
+    // Smooth: replace graph, animate camera to new focal.
+    pendingCamera.value = true
+    void infoBaseRouter.push({ name: 'overview', focal_block: block })
+  }
 }
 
 function focusRelation(relation: number): void {
-  pendingCamera.value = true
-  void infoBaseRouter.push({ name: 'overview', focal_relation: relation })
+  if (expansionMode.value === 'incremental') {
+    void loadIncrementalRelation(relation)
+  } else {
+    pendingCamera.value = true
+    void infoBaseRouter.push({ name: 'overview', focal_relation: relation })
+  }
+}
+
+async function loadIncrementalBlock(block: number): Promise<void> {
+  const current = generation
+  try {
+    const result = await GraphNavigationRetrievalManager.getBlockNeighborhood(block, {
+      direction: 'both',
+      limit: SCALE_LIMITS[scale.value],
+    })
+    if (current !== generation || !result?.graph) return
+    mergeGraph(result.graph, block)
+    // Update URL to reflect new focal without full reload
+    void infoBaseRouter.push({ name: 'overview', focal_block: block })
+  } catch (cause) {
+    console.error('[InfoBase] Failed to load incremental neighborhood.', cause)
+  }
+}
+
+async function loadIncrementalRelation(relation: number): Promise<void> {
+  const current = generation
+  try {
+    const result = await GraphNavigationRetrievalManager.getRelationNeighborhood(relation)
+    if (current !== generation || !result?.graph) return
+    mergeGraph(result.graph, null, relation)
+    void infoBaseRouter.push({ name: 'overview', focal_relation: relation })
+  } catch (cause) {
+    console.error('[InfoBase] Failed to load incremental relation.', cause)
+  }
+}
+
+function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRelation?: number): void {
+  const existingBlockIds = new Set(nodes.value.map((n) => n.data.block.id))
+  const existingRelationIds = new Set(edges.value.map((e) => e.data.relation.id))
+
+  const newBlocks = graph.blocks.filter((b) => !existingBlockIds.has(b.id))
+  const newRelations = graph.relations.filter((r) => !existingRelationIds.has(r.id))
+
+  if (newBlocks.length === 0 && newRelations.length === 0) {
+    // Just update focal highlighting
+    applyPresentation()
+    return
+  }
+
+  const incident = new Map<number, Relation[]>()
+  for (const relation of graph.relations) {
+    incident.set(relation.from_, [...(incident.get(relation.from_) ?? []), relation])
+    incident.set(relation.to_, [...(incident.get(relation.to_) ?? []), relation])
+  }
+
+  // Add new nodes
+  const newNodes = newBlocks.map((block) =>
+    blockNode(block, {
+      focal: block.id === newFocalBlock,
+      muted: false,
+      position: positionCache.get(String(block.id)),
+    })
+  )
+
+  // Add new edges
+  const newEdges = newRelations.map((relation) =>
+    relationEdge(relation, {
+      focal: relation.id === newFocalRelation,
+      muted: false,
+    })
+  )
+
+  // Merge into existing graph
+  nodes.value = [...nodes.value, ...newNodes]
+  edges.value = [...edges.value, ...newEdges]
+
+  // Update focal highlighting
+  const targetFocal = newFocalBlock ?? focalBlock.value
+  const targetFocalRelation = newFocalRelation ?? focalRelation.value
+
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      focal: node.data.block.id === targetFocal,
+    },
+  }))
+  edges.value = edges.value.map((edge) => ({
+    ...edge,
+    data: {
+      ...edge.data,
+      focal: edge.data.relation.id === targetFocalRelation,
+    },
+  }))
+
+  // Load previews for new blocks only
+  void loadPreviews(newBlocks, incident, generation)
+
+  // Re-layout with dagre (including new nodes), preserving dragged positions
+  setTimeout(() => {
+    layoutMeasuredNodes()
+    updateNodeInternals(nodes.value.map((n) => n.id))
+    void nextTick(() => routeEdges())
+  }, 100)
 }
 
 function inspectBlock(block: number): void {
@@ -483,6 +608,11 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
               v-model="direction"
               :label="t('infoBase.graph.emphasizeRelations')"
               :options="directionOptions"
+            />
+            <InkDropdown
+              v-model="expansionMode"
+              :label="t('infoBase.graph.expansionMode')"
+              :options="expansionModeOptions"
             />
           </InkForm>
         </details>
