@@ -48,10 +48,10 @@ const expansionMode = ref<ExpansionMode>(
 const previewReady = ref(false)
 const pendingCamera = ref(false)
 const transitioning = ref(false)
+const realizing = ref(false)
 const positionCache = new Map<string, { x: number; y: number }>()
 const draggedNodes = new Set<string>()
 let generation = 0
-let realizing = false
 let realizationRequested = false
 
 watch(expansionMode, (mode) => {
@@ -372,43 +372,50 @@ function routeEdges(): void {
 }
 
 async function realizeScene(): Promise<void> {
-  if (realizing) {
+  if (realizing.value) {
     realizationRequested = true
     return
   }
-  realizing = true
+  realizing.value = true
   const current = generation
   try {
-    await nextTick()
+    // Trigger node measurement
     updateNodeInternals(nodes.value.map((node) => node.id))
-    // VueFlow's public update schedules measurement on the next animation frame.
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    )
-    if (current !== generation) return
-    layoutMeasuredNodes()
-    await nextTick()
-    routeEdges()
-    await nextTick()
-    if (current !== generation || !pendingCamera.value) return
-    pendingCamera.value = false
-    const narrow = (container.value?.clientWidth ?? 0) < 640
-    const focalId =
-      focalBlock.value ?? (sceneAddress.value?.type === 'path' ? sceneAddress.value.from : null)
-    const visibleNodes =
-      narrow && focalId !== null ? [String(focalId)] : nodes.value.map((node) => node.id)
-    await fitView({
-      nodes: visibleNodes,
-      minZoom: 0.05,
-      padding: 0.18,
-      duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260,
-    })
-  } finally {
-    realizing = false
-    if (realizationRequested) {
-      realizationRequested = false
-      void realizeScene()
-    }
+    // Use setTimeout instead of await to avoid blocking
+    setTimeout(() => {
+      if (current !== generation) {
+        realizing.value = false
+        return
+      }
+      layoutMeasuredNodes()
+      routeEdges()
+      if (current !== generation || !pendingCamera.value) {
+        realizing.value = false
+        return
+      }
+      pendingCamera.value = false
+      const narrow = (container.value?.clientWidth ?? 0) < 640
+      const focalId =
+        focalBlock.value ?? (sceneAddress.value?.type === 'path' ? sceneAddress.value.from : null)
+      const visibleNodes =
+        narrow && focalId !== null ? [String(focalId)] : nodes.value.map((node) => node.id)
+      void fitView({
+        nodes: visibleNodes,
+        minZoom: 0.05,
+        maxZoom: 1,
+        padding: 0.3,
+        duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260,
+      }).finally(() => {
+        realizing.value = false
+        if (realizationRequested) {
+          realizationRequested = false
+          void realizeScene()
+        }
+      })
+    }, 100)
+  } catch (e) {
+    realizing.value = false
+    console.error('[Graph] realizeScene error:', e)
   }
 }
 
@@ -510,19 +517,7 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
     applyPresentation()
     if (newFocalBlock !== null) {
       setTimeout(() => {
-        const focalNode = getNodes.value.find((n) => n.id === String(newFocalBlock))
-        if (focalNode) {
-          const centerX = focalNode.position.x + (focalNode.dimensions?.width ?? 180) / 2
-          const centerY = focalNode.position.y + (focalNode.dimensions?.height ?? 80) / 2
-          const container = document.querySelector('.vue-flow')
-          const rect = container?.getBoundingClientRect()
-          const currentZoom = getViewport()?.zoom ?? 1
-          void setViewport({
-            x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
-            y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
-            zoom: currentZoom,
-          })
-        }
+        focusCameraOnNode(newFocalBlock)
       }, 100)
     }
     return
@@ -534,12 +529,12 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
     incident.set(relation.to_, [...(incident.get(relation.to_) ?? []), relation])
   }
 
-  // Add new nodes
+  // Add new nodes with temporary positions (will be laid out below)
   const newNodes = newBlocks.map((block) =>
     blockNode(block, {
       focal: block.id === newFocalBlock,
       muted: false,
-      position: positionCache.get(String(block.id)),
+      position: { x: 0, y: 0 }, // Temporary, will be positioned by layoutNewNodes
     })
   )
 
@@ -577,30 +572,92 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
   // Load previews for new blocks only
   void loadPreviews(newBlocks, incident, generation)
 
-  // Re-layout with dagre (including new nodes), preserving dragged positions
+  // Layout only new nodes around existing graph, then focus camera
   setTimeout(() => {
-    layoutMeasuredNodes()
+    layoutNewNodes(newBlocks.map(b => b.id))
     updateNodeInternals(nodes.value.map((n) => n.id))
     void nextTick(() => {
       routeEdges()
-      // Animate camera to focal block center after layout
+      // Focus camera on new focal block after layout
       if (newFocalBlock !== null) {
-        const focalNode = getNodes.value.find((n) => n.id === String(newFocalBlock))
-        if (focalNode) {
-          const centerX = focalNode.position.x + (focalNode.dimensions?.width ?? 180) / 2
-          const centerY = focalNode.position.y + (focalNode.dimensions?.height ?? 80) / 2
-          const container = document.querySelector('.vue-flow')
-          const rect = container?.getBoundingClientRect()
-          const currentZoom = getViewport()?.zoom ?? 1
-          void setViewport({
-            x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
-            y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
-            zoom: currentZoom,
-          })
-        }
+        focusCameraOnNode(newFocalBlock)
       }
     })
   }, 100)
+}
+
+// Focus camera on a specific node without changing zoom
+function focusCameraOnNode(blockId: number): void {
+  const node = getNodes.value.find((n) => n.id === String(blockId))
+  if (!node) return
+  const centerX = node.position.x + (node.dimensions?.width ?? 180) / 2
+  const centerY = node.position.y + (node.dimensions?.height ?? 80) / 2
+  const container = document.querySelector('.vue-flow')
+  const rect = container?.getBoundingClientRect()
+  const currentZoom = getViewport()?.zoom ?? 1
+  void setViewport({
+    x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
+    y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
+    zoom: currentZoom,
+  })
+}
+
+// Layout only new nodes, positioning them around existing nodes
+function layoutNewNodes(newBlockIds: number[]): void {
+  if (newBlockIds.length === 0) return
+
+  const newNodeIds = new Set(newBlockIds.map(id => String(id)))
+  const existingNodes = nodes.value.filter(n => !newNodeIds.has(n.id))
+  const newNodes = nodes.value.filter(n => newNodeIds.has(n.id))
+
+  if (existingNodes.length === 0) {
+    // No existing nodes, layout all nodes with dagre
+    layoutMeasuredNodes()
+    return
+  }
+
+  // Calculate bounding box of existing nodes
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const node of existingNodes) {
+    const graphNode = getNodes.value.find(n => n.id === node.id)
+    const width = graphNode?.dimensions?.width ?? 180
+    const height = graphNode?.dimensions?.height ?? 80
+    minX = Math.min(minX, node.position.x)
+    maxX = Math.max(maxX, node.position.x + width)
+    minY = Math.min(minY, node.position.y)
+    maxY = Math.max(maxY, node.position.y + height)
+  }
+
+  const existingWidth = maxX - minX
+  const existingHeight = maxY - minY
+  const centerX = (minX + maxX) / 2
+  const centerY = (minY + maxY) / 2
+
+  // Position new nodes in a circle around existing nodes
+  const radius = Math.max(existingWidth, existingHeight) / 2 + 200
+  const angleStep = (2 * Math.PI) / newNodes.length
+
+  const positions = new Map<string, { x: number; y: number }>()
+  newNodes.forEach((node, index) => {
+    const graphNode = getNodes.value.find(n => n.id === node.id)
+    const width = graphNode?.dimensions?.width ?? 180
+    const height = graphNode?.dimensions?.height ?? 80
+    const angle = angleStep * index - Math.PI / 2 // Start from top
+    const x = centerX + radius * Math.cos(angle) - width / 2
+    const y = centerY + radius * Math.sin(angle) - height / 2
+    positions.set(node.id, { x, y })
+  })
+
+  // Apply positions to new nodes only
+  nodes.value = nodes.value.map((node) => {
+    if (newNodeIds.has(node.id)) {
+      const pos = positions.get(node.id)
+      if (pos) {
+        return { ...node, position: pos }
+      }
+    }
+    return node
+  })
 }
 
 function inspectBlock(block: number): void {
@@ -614,6 +671,11 @@ function inspectRelation(relation: number): void {
 function onNodeDragStart(event: NodeDragEvent): void {
   pendingCamera.value = false
   draggedNodes.add(event.node.id)
+}
+
+function onNodeDrag(_event: NodeDragEvent): void {
+  // Update edge routing in real-time during drag for responsive feel
+  routeEdges()
 }
 
 function onNodeDragStop(event: NodeDragEvent): void {
@@ -738,6 +800,7 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
       :node-drag-threshold="0"
       :pan-on-drag="[0, 1, 2]"
       @nodeDragStart="onNodeDragStart"
+      @nodeDrag="onNodeDrag"
       @nodeDragStop="onNodeDragStop"
     >
       <template #node-block="nodeProps">
