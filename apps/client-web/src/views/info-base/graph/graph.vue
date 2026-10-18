@@ -57,7 +57,7 @@ watch(expansionMode, (mode) => {
   localStorage.setItem(EXPANSION_MODE_KEY, mode)
 })
 
-const { fitView, zoomIn, zoomOut, getNodes, onMoveStart, updateNodeInternals } = useVueFlow()
+const { fitView, zoomIn, zoomOut, getNodes, onMoveStart, updateNodeInternals, setCenter, setViewport } = useVueFlow()
 const nodesInitialized = useNodesInitialized()
 onMoveStart(() => {
   pendingCamera.value = false
@@ -222,7 +222,12 @@ async function loadPreviews(
 
 async function loadScene(): Promise<void> {
   const current = ++generation
-  status.value = 'loading'
+  // Only show full loading state when graph is empty (first load).
+  // During smooth transitions, keep the existing graph visible while new data loads.
+  const isFirstLoad = nodes.value.length === 0
+  if (isFirstLoad) {
+    status.value = 'loading'
+  }
   delegationUnavailable.value = false
   previewReady.value = false
   pendingCamera.value = true
@@ -480,8 +485,25 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
   const newRelations = graph.relations.filter((r) => !existingRelationIds.has(r.id))
 
   if (newBlocks.length === 0 && newRelations.length === 0) {
-    // Just update focal highlighting
+    // Just update focal highlighting and move camera to focal block
     applyPresentation()
+    if (newFocalBlock !== null) {
+      setTimeout(() => {
+        const focalNode = getNodes.value.find((n) => n.id === String(newFocalBlock))
+        if (focalNode) {
+          const centerX = focalNode.position.x + (focalNode.dimensions?.width ?? 180) / 2
+          const centerY = focalNode.position.y + (focalNode.dimensions?.height ?? 80) / 2
+          const container = document.querySelector('.vue-flow')
+          const rect = container?.getBoundingClientRect()
+          const zoom = 1.25
+          void setViewport({
+            x: (rect?.width ?? 800) / 2 - centerX * zoom,
+            y: (rect?.height ?? 600) / 2 - centerY * zoom,
+            zoom,
+          })
+        }
+      }, 100)
+    }
     return
   }
 
@@ -538,7 +560,25 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
   setTimeout(() => {
     layoutMeasuredNodes()
     updateNodeInternals(nodes.value.map((n) => n.id))
-    void nextTick(() => routeEdges())
+    void nextTick(() => {
+      routeEdges()
+      // Animate camera to focal block center after layout
+      if (newFocalBlock !== null) {
+        const focalNode = getNodes.value.find((n) => n.id === String(newFocalBlock))
+        if (focalNode) {
+          const centerX = focalNode.position.x + (focalNode.dimensions?.width ?? 180) / 2
+          const centerY = focalNode.position.y + (focalNode.dimensions?.height ?? 80) / 2
+          const container = document.querySelector('.vue-flow')
+          const rect = container?.getBoundingClientRect()
+          const zoom = 1.25
+          void setViewport({
+            x: (rect?.width ?? 800) / 2 - centerX * zoom,
+            y: (rect?.height ?? 600) / 2 - centerY * zoom,
+            zoom,
+          })
+        }
+      }
+    })
   }, 100)
 }
 
@@ -619,12 +659,12 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
       </div>
     </header>
 
-    <div v-if="status === 'loading'" class="graph-view__state" role="status">
+    <div v-if="status === 'loading' && nodes.length === 0" class="graph-view__state" role="status">
       <InkLoading />
       <p>{{ t('infoBase.graph.loading') }}</p>
     </div>
     <InkPlaceholder
-      v-else-if="status !== 'ready'"
+      v-else-if="status !== 'ready' && nodes.length === 0"
       class="graph-view__placeholder"
       :state="status === 'error' ? 'error' : 'empty'"
       :title="

@@ -134,4 +134,24 @@
   :deep(.vue-flow__node) {
     will-change: transform;
   }
+  /* Smooth position transitions for nodes during layout changes. */
+  :deep(.vue-flow__node) {
+    transition: transform 0.3s ease;
+  }
+  /* Fade in animation for newly added nodes. */
+  :deep(.vue-flow__node-enter-active) {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  :deep(.vue-flow__node-enter-from) {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  /* Fade out animation for removed nodes. */
+  :deep(.vue-flow__node-leave-active) {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  :deep(.vue-flow__node-leave-to) {
+    opacity: 0;
+    transform: scale(0.8);
+  }
 }
