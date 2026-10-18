@@ -116,27 +116,6 @@
     display: flex;
     gap: sys-var(space, xs);
   }
-  /* Pulsing dot shown next to the title while a new focal is being loaded. */
-  &__loading-dot {
-    display: inline-block;
-    inline-size: 8px;
-    block-size: 8px;
-    border-radius: 50%;
-    background: sys-var(color, text, subtle);
-    margin-inline-start: sys-var(space, xs);
-    animation: graph-view-pulse 1s ease-in-out infinite;
-  }
-}
-
-@keyframes graph-view-pulse {
-  0%, 100% {
-    opacity: 0.3;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 .vue-flow {
   .vue-flow__pane {

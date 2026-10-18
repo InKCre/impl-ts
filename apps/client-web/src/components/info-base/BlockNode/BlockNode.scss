@@ -12,6 +12,7 @@
   background: sys-var(color, surface, base);
   border: 1px solid sys-var(color, border, base);
   border-radius: 0;
+  position: relative;
   &--focal {
     outline: 1px solid sys-var(color, border, strong);
     border-color: sys-var(color, border, strong);
@@ -20,10 +21,45 @@
     background: sys-var(color, surface, subtle);
     border-style: dashed;
   }
+  &--focusing {
+    border-color: sys-var(color, border, strong);
+    box-shadow: 0 0 0 2px sys-var(color, border, subtle);
+  }
+  &__exploratory-lines {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+    line {
+      stroke: sys-var(color, border, strong);
+      stroke-width: 1.5;
+      stroke-dasharray: 4 4;
+      animation: block-node-explore 1.5s ease-in-out infinite;
+    }
+    line:nth-child(1) { animation-delay: 0s; }
+    line:nth-child(2) { animation-delay: 0.1s; }
+    line:nth-child(3) { animation-delay: 0.2s; }
+    line:nth-child(4) { animation-delay: 0.3s; }
+    line:nth-child(5) { animation-delay: 0.4s; }
+    line:nth-child(6) { animation-delay: 0.5s; }
+    line:nth-child(7) { animation-delay: 0.6s; }
+    line:nth-child(8) { animation-delay: 0.7s; }
+  }
+  &__focusing-indicator {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    background: sys-var(color, surface, base);
+    opacity: 0.9;
+  }
   &__content {
     cursor: pointer;
     padding: sys-var(space, md);
     min-height: 48px;
+    position: relative;
   }
   &__content:focus-visible {
     outline: 2px solid sys-var(color, border, strong);
@@ -56,5 +92,16 @@
   &__preview-error {
     @include apply-font(body-sm);
     color: sys-var(color, text, subtle);
+  }
+}
+
+@keyframes block-node-explore {
+  0%, 100% {
+    opacity: 0.2;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    opacity: 1;
+    stroke-dashoffset: -8;
   }
 }

@@ -432,12 +432,24 @@ watch(
   }
 )
 
+function setNodeFocusing(blockId: number | null): void {
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      focusing: blockId !== null && node.data.block.id === blockId,
+    },
+  }))
+}
+
 function focusBlock(block: number): void {
   transitioning.value = true
+  setNodeFocusing(block)
   if (expansionMode.value === 'incremental') {
     // Incremental: load new neighborhood and merge into existing graph.
     void loadIncrementalBlock(block).finally(() => {
       transitioning.value = false
+      setNodeFocusing(null)
     })
   } else {
     // Smooth: replace graph, animate camera to new focal.
@@ -448,6 +460,7 @@ function focusBlock(block: number): void {
 
 function focusRelation(relation: number): void {
   transitioning.value = true
+  setNodeFocusing(null)
   if (expansionMode.value === 'incremental') {
     void loadIncrementalRelation(relation).finally(() => {
       transitioning.value = false
@@ -631,10 +644,7 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
     </div>
     <header class="graph-view__toolbar">
       <div class="graph-view__context">
-        <h1>
-          {{ sceneDescription }}
-          <span v-if="transitioning" class="graph-view__loading-dot" aria-label="Loading" />
-        </h1>
+        <h1>{{ sceneDescription }}</h1>
         <p v-if="status === 'ready'">
           {{ t('infoBase.graph.stats', { blocks: nodes.length, relations: edges.length }) }}
         </p>
