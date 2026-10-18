@@ -47,6 +47,7 @@ const expansionMode = ref<ExpansionMode>(
 )
 const previewReady = ref(false)
 const pendingCamera = ref(false)
+const transitioning = ref(false)
 const positionCache = new Map<string, { x: number; y: number }>()
 const draggedNodes = new Set<string>()
 let generation = 0
@@ -269,6 +270,7 @@ async function loadScene(): Promise<void> {
       graph = { blocks: result.matches.map((match) => match.block), relations: [] }
     }
     if (current !== generation) return
+    transitioning.value = false
     if (graph) {
       setGraph(graph)
       status.value = graph.blocks.length > 0 ? 'ready' : 'empty'
@@ -284,6 +286,7 @@ async function loadScene(): Promise<void> {
     edges.value = []
     delegationUnavailable.value = cause instanceof CapabilityDelegationUnavailable
     status.value = 'error'
+    transitioning.value = false
   }
 }
 
@@ -430,9 +433,12 @@ watch(
 )
 
 function focusBlock(block: number): void {
+  transitioning.value = true
   if (expansionMode.value === 'incremental') {
     // Incremental: load new neighborhood and merge into existing graph.
-    void loadIncrementalBlock(block)
+    void loadIncrementalBlock(block).finally(() => {
+      transitioning.value = false
+    })
   } else {
     // Smooth: replace graph, animate camera to new focal.
     pendingCamera.value = true
@@ -441,8 +447,11 @@ function focusBlock(block: number): void {
 }
 
 function focusRelation(relation: number): void {
+  transitioning.value = true
   if (expansionMode.value === 'incremental') {
-    void loadIncrementalRelation(relation)
+    void loadIncrementalRelation(relation).finally(() => {
+      transitioning.value = false
+    })
   } else {
     pendingCamera.value = true
     void infoBaseRouter.push({ name: 'overview', focal_relation: relation })
@@ -622,7 +631,10 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
     </div>
     <header class="graph-view__toolbar">
       <div class="graph-view__context">
-        <h1>{{ sceneDescription }}</h1>
+        <h1>
+          {{ sceneDescription }}
+          <span v-if="transitioning" class="graph-view__loading-dot" aria-label="Loading" />
+        </h1>
         <p v-if="status === 'ready'">
           {{ t('infoBase.graph.stats', { blocks: nodes.length, relations: edges.length }) }}
         </p>
