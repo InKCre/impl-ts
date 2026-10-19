@@ -77,11 +77,16 @@ async function expectPostSearchResult(
   query: string,
   blockId: number
 ): Promise<import('@playwright/test').Locator> {
-  await page.goto(`/info-base/list?q=${encodeURIComponent(query)}`)
+  if (new URL(page.url()).pathname !== '/') await page.goto('/')
+  const search = page.getByRole('searchbox', { name: 'Search the info base' })
+  await expect(search).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator('.app-connection')).toBeHidden({ timeout: 30_000 })
+  await search.fill(query)
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
   const result = page
     .locator('.info-base-list-view__matches li')
     .filter({ hasText: `#${blockId} · extensions.twitter.tweet.v2` })
-  await expect(result).toBeVisible()
+  await expect(result).toBeVisible({ timeout: 30_000 })
   return result
 }
 
@@ -497,7 +502,7 @@ test('Core cookie authorization writes native records that the real Twitter MF c
     postBlock!.id
   )
   await bodySearch.locator('.info-base-list-view__match').click()
-  await expect(page).toHaveURL(new RegExp(`/info-base/list/blocks/${postBlock!.id}$`))
+  await expect(page).toHaveURL((url) => url.pathname === `/info-base/list/blocks/${postBlock!.id}`)
   await expect(page.locator('.block-inspector-popup')).toContainText(`#${postBlock!.id}`)
   await page.locator('.block-inspector-popup').getByRole('button', { name: 'View content' }).click()
   await expect(page.locator('.solved-content-popup')).toContainText(
