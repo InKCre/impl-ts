@@ -138,3 +138,7 @@ Producers emit exact, versioned Resolver IDs; keep protocol/source identity and 
 in canonical metadata/root Blocks; put actual media or document bytes in a semantic content Block;
 and represent associations with Relations. They never encode attachment identity into root
 content or choose a semantic Storage type. Storage remains bytes-only mechanics.
+
+An archive that captures only source media metadata need not create a persistent semantic
+content Block. `inkcre/twitter` retains native Media records without a Media-to-content Relation;
+its resolver reads bytes from an allowed CDN only after the user explicitly expands that Media.
