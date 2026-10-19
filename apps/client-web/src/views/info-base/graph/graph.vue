@@ -23,7 +23,6 @@ import RelationEdgeComponent from '@/components/info-base/RelationEdge/RelationE
 import BlockInspectorPopup from '@/components/info-base/BlockInspectorPopup/BlockInspectorPopup.vue'
 import RelationInspectorPopup from '@/components/info-base/RelationInspectorPopup/RelationInspectorPopup.vue'
 import SolvedContentPopup from '@/components/info-base/SolvedContentPopup/SolvedContentPopup.vue'
-import InfoBaseViewTabs from '@/components/info-base/InfoBaseViewTabs.vue'
 import { blockNode, relationEdge, type BlockNode, type RelationEdge } from './graph-model'
 import { openRecallSearch } from '@/components/recall/recall-search'
 
@@ -955,9 +954,6 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
 
 <template>
   <main ref="container" class="graph-view">
-    <div class="graph-view__view-switch">
-      <InfoBaseViewTabs />
-    </div>
     <header class="graph-view__toolbar">
       <div class="graph-view__context">
         <h1>{{ sceneDescription }}</h1>
