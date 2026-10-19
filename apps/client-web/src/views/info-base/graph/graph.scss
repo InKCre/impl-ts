@@ -47,10 +47,36 @@
     gap: sys-var(space, md);
   }
   &__options {
-    summary {
-      @include apply-font(label-md);
+    &-summary {
+      display: inline-flex;
+      align-items: center;
+      gap: sys-var(space, xs);
+      padding: 7px 16px;
+      border: 1px solid sys-var(color, border, base);
+      border-radius: sys-var(radius, base);
+      background: sys-var(color, surface, base);
+      font-size: 14px;
+      line-height: 20px;
+      min-height: unset;
       cursor: pointer;
+      box-sizing: border-box;
+      transition: background-color 0.15s ease;
+
+      &:hover {
+        background: sys-var(color, surface, subtle);
+      }
+
+      &::after {
+        content: '▾';
+        font-size: 10px;
+        transition: transform 0.2s ease;
+      }
     }
+
+    &[open] &-summary::after {
+      transform: rotate(180deg);
+    }
+
     summary:focus-visible {
       outline: 2px solid sys-var(color, border, strong);
       outline-offset: 2px;
