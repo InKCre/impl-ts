@@ -10,6 +10,13 @@ function getArchiveBase(): URL {
 
 type BlockRow = { id: number; resolver: string; content: string }
 type RelationRow = { from_: number; to_: number; content: string }
+type LexicalJob = { id: number; status: string; state: Record<string, unknown> }
+
+const CORE_LEXICAL_MAINTAIN_JOB = 'core.feature_retrieval.lexical.maintain.v1'
+
+function coreBase(): URL {
+  return new URL(coreUrl.endsWith('/') ? coreUrl : `${coreUrl}/`)
+}
 
 async function databaseToken(): Promise<string> {
   return new SignJWT({ role: 'authenticated' })
@@ -28,6 +35,54 @@ async function databaseRows<Row>(path: string): Promise<Row[]> {
   const body = await response.text()
   expect(response.ok, body).toBe(true)
   return JSON.parse(body) as Row[]
+}
+
+async function maintainLexicalIndex(page: import('@playwright/test').Page): Promise<LexicalJob> {
+  const authorization = { Authorization: `Bearer ${await databaseToken()}` }
+  const created = await page.request.post(new URL('jobs', coreBase()).toString(), {
+    headers: authorization,
+    data: {
+      type: CORE_LEXICAL_MAINTAIN_JOB,
+      parameters: { options: { max_records: 1000 } },
+    },
+  })
+  const createdBody = await created.text()
+  expect(created.status(), createdBody).toBe(201)
+  const initial = JSON.parse(createdBody) as LexicalJob
+
+  const read = async (): Promise<LexicalJob> => {
+    const response = await page.request.get(new URL(`jobs/${initial.id}`, coreBase()).toString(), {
+      headers: authorization,
+    })
+    const body = await response.text()
+    expect(response.ok(), body).toBe(true)
+    return JSON.parse(body) as LexicalJob
+  }
+  const deadline = Date.now() + 120_000
+  while (Date.now() < deadline) {
+    const job = await read()
+    if (job.status === 'finished') return job
+    if (['failed', 'timed_out', 'aborted'].includes(job.status)) {
+      throw new Error(
+        `Lexical maintenance Job #${job.id} ${job.status}: ${JSON.stringify(job.state)}`
+      )
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  throw new Error(`Lexical maintenance Job #${initial.id} did not finish within 120 seconds.`)
+}
+
+async function expectPostSearchResult(
+  page: import('@playwright/test').Page,
+  query: string,
+  blockId: number
+): Promise<import('@playwright/test').Locator> {
+  await page.goto(`/info-base/list?q=${encodeURIComponent(query)}`)
+  const result = page
+    .locator('.info-base-list-view__matches li')
+    .filter({ hasText: `#${blockId} · extensions.twitter.tweet.v2` })
+  await expect(result).toBeVisible()
+  return result
 }
 
 test.beforeEach(async ({ page }) => {
@@ -49,6 +104,7 @@ test.beforeEach(async ({ page }) => {
 test('Core cookie authorization writes native records that the real Twitter MF can read', async ({
   page,
 }) => {
+  test.setTimeout(180_000)
   const archiveBase = getArchiveBase()
   const webOrigin = new URL(process.env.INKCRE_E2E_WEB_URL!).origin
   const stamp = `${Date.now()}`
@@ -57,7 +113,9 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   const quoteId = `${stamp}03`
   const replyId = `${stamp}04`
   const mediaId = `${stamp}05`
+  const failedMediaId = `${stamp}07`
   const imageUrl = 'https://pbs.twimg.com/media/inkcre-acceptance-no-fetch.jpg'
+  const failedImageUrl = 'https://pbs.twimg.com/media/inkcre-acceptance-controlled-failure.jpg'
 
   const twitterRemoteEntry = page.waitForResponse((response) => {
     const url = new URL(response.url())
@@ -124,7 +182,7 @@ test('Core cookie authorization writes native records that the real Twitter MF c
           },
           replyTo: { postId: replyId, userId, handle: `acceptance_${stamp}` },
           quote: { postId: quoteId, url: `https://x.com/${stamp}/status/${quoteId}` },
-          mediaIds: [mediaId],
+          mediaIds: [mediaId, failedMediaId],
           article: {
             id: `${stamp}06`,
             title: 'Long-form archive article title',
@@ -133,7 +191,15 @@ test('Core cookie authorization writes native records that the real Twitter MF c
           counts: { likes: 4 },
         },
       ],
-      media: [{ id: mediaId, type: 'photo', url: imageUrl, alt: 'Acceptance image metadata' }],
+      media: [
+        { id: mediaId, type: 'photo', url: imageUrl, alt: 'Acceptance image metadata' },
+        {
+          id: failedMediaId,
+          type: 'photo',
+          url: failedImageUrl,
+          alt: 'Controlled failure image metadata',
+        },
+      ],
     },
   })
   const submitBody = await submit.text()
@@ -141,11 +207,11 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   const submitted = JSON.parse(submitBody) as {
     summary: { accepted: number; failed: number; total: number }
   }
-  expect(submitted.summary).toMatchObject({ accepted: 5, failed: 0, total: 5 })
+  expect(submitted.summary).toMatchObject({ accepted: 6, failed: 0, total: 6 })
 
   const query = await page.request.post(new URL('api/v1/archive/query', archiveBase).toString(), {
     headers: { 'x-tweet-db-client': 'x-monkey' },
-    data: { users: [userId], posts: [postId], media: [mediaId] },
+    data: { users: [userId], posts: [postId], media: [mediaId, failedMediaId] },
   })
   expect(query.status()).toBe(200)
   const queried = (await query.json()) as {
@@ -175,12 +241,48 @@ test('Core cookie authorization writes native records that the real Twitter MF c
     (row) => (JSON.parse(row.content) as { id?: string }).id === mediaId
   )
   expect(mediaBlock).toBeDefined()
+  const failedMediaBlock = mediaBlocks.find(
+    (row) => (JSON.parse(row.content) as { id?: string }).id === failedMediaId
+  )
+  expect(failedMediaBlock).toBeDefined()
   const relations = await databaseRows<RelationRow>(
     `relations?select=from_,to_,content&from_=eq.${postBlock!.id}`
   )
   expect(
     relations.some((row) => row.to_ === mediaBlock!.id && JSON.parse(row.content).type === 'media')
   ).toBe(true)
+  expect(
+    relations.some(
+      (row) => row.to_ === failedMediaBlock!.id && JSON.parse(row.content).type === 'media'
+    )
+  ).toBe(true)
+
+  const controlledMediaReads: string[] = []
+  await page.route('https://pbs.twimg.com/media/**', async (route) => {
+    const url = route.request().url()
+    if (url === imageUrl) {
+      controlledMediaReads.push(url)
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+          'base64'
+        ),
+      })
+      return
+    }
+    if (url === failedImageUrl) {
+      controlledMediaReads.push(url)
+      await route.fulfill({
+        status: 503,
+        contentType: 'text/plain',
+        body: 'controlled source failure',
+      })
+      return
+    }
+    await route.continue()
+  })
 
   await page.goto(`/info-base/graph/blocks/${postBlock!.id}/content`)
   const content = page.locator('.solved-content-popup')
@@ -189,27 +291,68 @@ test('Core cookie authorization writes native records that the real Twitter MF c
     'href',
     `https://x.com/i/status/${postId}`
   )
-  await expect(content.locator('.rich-text strong')).toHaveText('Rich text')
+  const boldSegment = content.locator('.rich-text--bold').filter({ hasText: 'Rich text' })
+  await expect(boldSegment).toBeVisible()
+  expect(
+    Number(await boldSegment.evaluate((element) => getComputedStyle(element).fontWeight))
+  ).toBeGreaterThanOrEqual(600)
   await expect(content).toContainText('Long-form archive article title')
   await expect(content).toContainText('Long-form paragraph remains readable.')
   await expect(content).toContainText('Reply to @')
   await expect(content).toContainText(`Quoted post · ${quoteId}`)
   await expect(content).toContainText('Acceptance image metadata')
-  await expect(content.getByRole('button', { name: 'Load media' })).toBeVisible()
+  await expect(content).toContainText('Controlled failure image metadata')
+  const mediaCards = content.locator('.archive-media')
+  await expect(mediaCards).toHaveCount(2)
+  const imageCard = mediaCards.filter({ hasText: 'Acceptance image metadata' })
+  const failedMediaCard = mediaCards.filter({ hasText: 'Controlled failure image metadata' })
+  await expect(imageCard.getByRole('button', { name: 'Load media' })).toBeVisible()
+  await expect(failedMediaCard.getByRole('button', { name: 'Load media' })).toBeVisible()
   expect(
     await page.evaluate(
-      (url) =>
+      ({ imageUrl, failedImageUrl }) =>
         performance
           .getEntriesByType('resource')
           .map((entry) => entry.name)
-          .filter((name) => name === url),
-      imageUrl
+          .filter((name) => name === imageUrl || name === failedImageUrl),
+      { imageUrl, failedImageUrl }
     )
   ).toEqual([])
+  expect(controlledMediaReads).toEqual([])
+  const imageRead = page.waitForRequest((request) => request.url() === imageUrl)
+  await imageCard.getByRole('button', { name: 'Load media' }).click()
+  await imageRead
+  const loadedImage = imageCard.locator('img')
+  await expect(loadedImage).toBeVisible()
+  await expect(loadedImage).toHaveJSProperty('naturalWidth', 1)
+  const failedImageRead = page.waitForRequest((request) => request.url() === failedImageUrl)
+  await failedMediaCard.getByRole('button', { name: 'Load media' }).click()
+  await failedImageRead
+  await expect(failedMediaCard.getByRole('alert')).toContainText('HTTP 503')
+  expect(controlledMediaReads).toEqual([imageUrl, failedImageUrl])
+
   await content.getByRole('button', { name: `View reply ${replyId}` }).click()
   await expect(page).toHaveURL(
     new RegExp(
       `/info-base/graph/blocks/${relations.find((row) => row.content.includes('reply'))?.to_}$`
     )
+  )
+
+  const indexJob = await maintainLexicalIndex(page)
+  expect(indexJob.state).toMatchObject({ failed: 0, unavailable: 0 })
+  for (const query of [postId, `acceptance_${stamp}`, 'Rich text survives with its author']) {
+    await expectPostSearchResult(page, query, postBlock!.id)
+  }
+  const bodySearch = await expectPostSearchResult(
+    page,
+    'Rich text survives with its author',
+    postBlock!.id
+  )
+  await bodySearch.locator('.info-base-list-view__match').click()
+  await expect(page).toHaveURL(new RegExp(`/info-base/list/blocks/${postBlock!.id}$`))
+  await expect(page.locator('.block-inspector-popup')).toContainText(`#${postBlock!.id}`)
+  await page.locator('.block-inspector-popup').getByRole('button', { name: 'View content' }).click()
+  await expect(page.locator('.solved-content-popup')).toContainText(
+    'Rich text survives with its author and context.'
   )
 })
