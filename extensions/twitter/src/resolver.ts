@@ -283,9 +283,11 @@ export class ArchiveMediaResolver extends Resolver<string, MediaRecord> {
     const media = await this.getSolvedContent(options)
     if (!isMedia(media)) return { media, content: null }
     const relations = await this.getRelations({
+      // Graph previews may seed ResolverCache with only the visible incident
+      // edges, which can omit a media block's hidden byte-content pointer.
+      refresh: true,
       includeOut: true,
       includeIn: false,
-      refresh: options.refresh,
     })
     const pointer = relations.find((relation) => relation.content === 'content')
     if (!pointer) return { media, content: null }

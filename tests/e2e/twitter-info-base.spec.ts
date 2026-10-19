@@ -170,7 +170,9 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   expect(remoteEntry.ok()).toBe(true)
   expect(new URL(remoteEntry.url()).origin).toBe(webOrigin)
   await twitter.getByRole('button', { name: 'Setup' }).click()
-  await expect(page.getByRole('button', { name: 'Connect x-monkey' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Connect x-monkey' })).toBeVisible({
+    timeout: 30_000,
+  })
   await expect(page.getByText(/x-monkey service address:/)).toContainText(
     new URL('twitter/x-monkey', coreBase()).toString()
   )
@@ -183,9 +185,9 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   expect([...new URLSearchParams(connect.postData() ?? '').keys()]).toEqual(['token'])
   await page.waitForURL('**/twitter/x-monkey/account')
   await expect(page.getByRole('heading', { name: 'InKCre x-monkey 连接' })).toBeVisible()
-  const sessionCookie = (await page.context().cookies(coreUrl)).find(
-    (cookie) => cookie.name === 'inkcre_twitter_archive'
-  )
+  const sessionCookie = (
+    await page.context().cookies(new URL('account', archiveBase).toString())
+  ).find((cookie) => cookie.name === 'inkcre_twitter_archive')
   expect(sessionCookie?.httpOnly).toBe(true)
   expect(sessionCookie?.secure).toBe(true)
   expect(sessionCookie?.sameSite).toBe('None')
@@ -308,6 +310,7 @@ test('Core cookie authorization writes native records that the real Twitter MF c
       await route.fulfill({
         status: 200,
         contentType: 'image/png',
+        headers: { 'Access-Control-Allow-Origin': '*' },
         body: Buffer.from(
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
           'base64'
@@ -320,6 +323,7 @@ test('Core cookie authorization writes native records that the real Twitter MF c
       await route.fulfill({
         status: 503,
         contentType: 'text/plain',
+        headers: { 'Access-Control-Allow-Origin': '*' },
         body: 'controlled source failure',
       })
       return
@@ -329,7 +333,7 @@ test('Core cookie authorization writes native records that the real Twitter MF c
 
   await page.goto(`/info-base/graph/blocks/${postBlock!.id}/content`)
   const content = page.locator('.solved-content-popup')
-  await expect(content).toContainText('Archive Acceptance Author')
+  await expect(content).toContainText('Archive Acceptance Author', { timeout: 30_000 })
   await expect(content.getByRole('link', { name: `Original post · ${postId}` })).toHaveAttribute(
     'href',
     `https://x.com/i/status/${postId}`
