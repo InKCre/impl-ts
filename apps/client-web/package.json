@@ -11,13 +11,16 @@
     "type-check": "vue-tsc --build"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
     "@inkcre/core": "workspace:*",
     "@inkcre/extension-runtime-client-web": "github:InKCre/ext-reg#57dcd80289285620a1fd27a0a48027e56c4ce7b1&path:/runtimes/client-web",
     "@inkcre/ui-web": "2.2.1",
     "@module-federation/runtime": "^0.21.4",
     "@supabase/postgrest-js": "^2.84.0",
+    "@types/d3-force": "^3.0.10",
     "@vue-flow/core": "^1.48.1",
     "@vueuse/core": "^14.0.0",
+    "d3-force": "^3.0.0",
     "dayjs": "^1.11.19",
     "jose": "^6.1.2",
     "pinia": "^3.0.3",

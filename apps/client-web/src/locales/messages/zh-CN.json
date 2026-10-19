@@ -371,6 +371,7 @@
       "layoutAlgorithm": "布局算法",
       "layout": {
         "radial": "径向（圆）",
+        "force": "力导向",
         "hierarchical": "层次（树）"
       },
       "community": {

@@ -370,6 +370,7 @@
       "layoutAlgorithm": "Layout algorithm",
       "layout": {
         "radial": "Radial (circle)",
+        "force": "Force-directed",
         "hierarchical": "Hierarchical (tree)"
       },
       "community": {

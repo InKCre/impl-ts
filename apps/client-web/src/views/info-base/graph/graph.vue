@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { VueFlow, useNodesInitialized, useVueFlow, type NodeDragEvent } from '@vue-flow/core'
 import { InkButton, InkDropdown, InkForm, InkLoading, InkPlaceholder } from '@inkcre/ui-web'
 import dagre from '@dagrejs/dagre'
+import { forceSimulation, forceManyBody, forceLink, forceCollide, forceCenter, forceRadial } from 'd3-force'
 import {
   CapabilityDelegationUnavailable,
   getInfoBaseRouter,
@@ -29,7 +30,7 @@ import { openRecallSearch } from '@/components/recall/recall-search'
 type SceneScale = 'compact' | 'standard' | 'broad'
 type SceneStatus = 'loading' | 'ready' | 'empty' | 'missing' | 'not-found' | 'limit' | 'error'
 type ExpansionMode = 'smooth' | 'incremental'
-type LayoutAlgorithm = 'hierarchical' | 'radial'
+type LayoutAlgorithm = 'hierarchical' | 'radial' | 'force'
 
 const SCALE_LIMITS: Record<SceneScale, number> = { compact: 8, standard: 20, broad: 50 }
 const EXPANSION_MODE_KEY = 'inkcre.graph.expansionMode'
@@ -131,6 +132,7 @@ const expansionModeOptions = computed(() => [
 ])
 const layoutAlgorithmOptions = computed(() => [
   { value: 'radial', label: t('infoBase.graph.layout.radial') },
+  { value: 'force', label: t('infoBase.graph.layout.force') },
   { value: 'hierarchical', label: t('infoBase.graph.layout.hierarchical') },
 ])
 
@@ -308,6 +310,8 @@ async function loadScene(): Promise<void> {
 function layoutMeasuredNodes(): void {
   if (layoutAlgorithm.value === 'radial') {
     layoutRadial()
+  } else if (layoutAlgorithm.value === 'force') {
+    layoutForce()
   } else {
     layoutHierarchical()
   }
@@ -366,7 +370,68 @@ function layoutHierarchical(): void {
   }))
 }
 
-// Radial layout: focal node at center, others arranged in concentric rings by BFS depth
+// Force-directed layout using d3-force
+function layoutForce(): void {
+  const measured = getNodes.value
+  if (measured.length === 0) return
+  const byId = new Map(measured.map((node) => [node.id, node]))
+  const dragged = new Set(draggedNodes)
+
+  const nodeWidth = 182
+  const nodeHeight = 122
+  const centerX = 0
+  const centerY = 0
+
+  // Prepare nodes for simulation
+  const simNodes = nodes.value.map((node) => ({
+    id: node.id,
+    x: byId.get(node.id)?.position.x ?? centerX + (Math.random() - 0.5) * 400,
+    y: byId.get(node.id)?.position.y ?? centerY + (Math.random() - 0.5) * 400,
+    radius: Math.sqrt(nodeWidth * nodeWidth + nodeHeight * nodeHeight) / 2,
+  }))
+
+  // Prepare links for simulation
+  const simLinks = edges.value
+    .filter(e => simNodes.some(n => n.id === e.source) && simNodes.some(n => n.id === e.target))
+    .map(e => ({ source: e.source, target: e.target }))
+
+  // Create force simulation
+  const simulation = forceSimulation(simNodes)
+    .force('charge', forceManyBody().strength(-800))
+    .force('link', forceLink(simLinks).id((d: any) => d.id).distance(250).strength(0.5))
+    .force('collide', forceCollide().radius((d: any) => d.radius + 40).iterations(2))
+    .force('center', forceCenter(centerX, centerY))
+    .stop()
+
+  // Run simulation synchronously
+  for (let i = 0; i < 300; i++) {
+    simulation.tick()
+  }
+
+  // Extract positions
+  const positions = new Map<string, { x: number; y: number }>()
+  for (const simNode of simNodes) {
+    positions.set(simNode.id, {
+      x: simNode.x - nodeWidth / 2,
+      y: simNode.y - nodeHeight / 2,
+    })
+  }
+
+  // Keep dragged nodes at their current positions
+  for (const node of nodes.value) {
+    if (dragged.has(node.id)) {
+      const current = byId.get(node.id)?.position
+      if (current) positions.set(node.id, current)
+    }
+  }
+
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    position: positions.get(node.id) ?? node.position,
+  }))
+}
+
+// Radial layout using d3-force with radial force
 function layoutRadial(): void {
   const measured = getNodes.value
   if (measured.length === 0) return
@@ -393,7 +458,6 @@ function layoutRadial(): void {
   const visited = new Set<string>()
 
   if (focalId) {
-    // BFS starting from focal
     const queue: Array<[string, number]> = [[focalId, 0]]
     visited.add(focalId)
     ringDepth.set(focalId, 0)
@@ -409,7 +473,6 @@ function layoutRadial(): void {
         }
       }
     }
-    // Any unvisited nodes (disconnected) go to the outermost ring
     const maxDepth = Math.max(...ringDepth.values(), 0)
     for (const node of nodes.value) {
       if (!ringDepth.has(node.id)) {
@@ -417,73 +480,58 @@ function layoutRadial(): void {
       }
     }
   } else {
-    // No focal, all nodes in one ring
     for (const node of nodes.value) {
       ringDepth.set(node.id, 1)
     }
   }
 
-  // Group nodes by ring
-  const rings = new Map<number, string[]>()
-  for (const node of nodes.value) {
+  // Calculate radius for each depth
+  const maxDepth = Math.max(...ringDepth.values(), 1)
+  const baseRadius = 300
+  const radiusStep = 250
+
+  const depthRadius = new Map<number, number>()
+  for (let d = 1; d <= maxDepth; d++) {
+    depthRadius.set(d, baseRadius + (d - 1) * radiusStep)
+  }
+
+  // Prepare nodes with target radius
+  const simNodes = nodes.value.map((node) => {
     const depth = ringDepth.get(node.id) ?? 1
-    if (!rings.has(depth)) rings.set(depth, [])
-    rings.get(depth)!.push(node.id)
+    const targetRadius = depth === 0 ? 0 : depthRadius.get(depth) ?? baseRadius
+    return {
+      id: node.id,
+      x: byId.get(node.id)?.position.x ?? centerX + (Math.random() - 0.5) * 400,
+      y: byId.get(node.id)?.position.y ?? centerY + (Math.random() - 0.5) * 400,
+      radius: Math.sqrt(nodeWidth * nodeWidth + nodeHeight * nodeHeight) / 2,
+      targetRadius,
+    }
+  })
+
+  // Prepare links
+  const simLinks = edges.value
+    .filter(e => simNodes.some(n => n.id === e.source) && simNodes.some(n => n.id === e.target))
+    .map(e => ({ source: e.source, target: e.target }))
+
+  // Create simulation with radial force
+  const simulation = forceSimulation(simNodes)
+    .force('charge', forceManyBody().strength(-500))
+    .force('link', forceLink(simLinks).id((d: any) => d.id).distance(200).strength(0.3))
+    .force('collide', forceCollide().radius((d: any) => d.radius + 30).iterations(2))
+    .force('radial', forceRadial((d: any) => d.targetRadius, centerX, centerY).strength(0.8))
+    .stop()
+
+  // Run simulation
+  for (let i = 0; i < 300; i++) {
+    simulation.tick()
   }
 
-  // Calculate minimum radius for each ring to avoid overlap
-  // Use diagonal distance to account for rotation
-  const nodeDiagonal = Math.sqrt(nodeWidth * nodeWidth + nodeHeight * nodeHeight)
-  const padding = 50 // Extra space between nodes
-
-  const ringRadii = new Map<number, number>()
-  let maxDepth = 0
-  for (const depth of rings.keys()) {
-    maxDepth = Math.max(maxDepth, depth)
-  }
-
-  // Calculate radius for each ring
-  for (const [depth, nodeIds] of rings) {
-    if (depth === 0) continue
-
-    const nodeCount = nodeIds.length
-    const angleStep = (2 * Math.PI) / nodeCount
-
-    // Minimum radius to fit nodes around the circle without overlap
-    // Using chord length: chord = 2 * r * sin(angleStep / 2)
-    // We need chord >= nodeDiagonal + padding
-    const chord = nodeDiagonal + padding
-    const minRadiusByAngle = chord / (2 * Math.sin(angleStep / 2))
-
-    // Also ensure radius grows with depth
-    const minRadiusByDepth = depth * (nodeHeight + padding)
-
-    const radius = Math.max(minRadiusByAngle, minRadiusByDepth, 200)
-    ringRadii.set(depth, radius)
-  }
-
-  // Position nodes
+  // Extract positions
   const positions = new Map<string, { x: number; y: number }>()
-
-  // Focal node at center
-  if (focalId && ringDepth.get(focalId) === 0) {
-    positions.set(focalId, { x: centerX, y: centerY })
-  }
-
-  // Arrange each ring
-  for (const [depth, nodeIds] of rings) {
-    if (depth === 0) continue // focal already placed
-
-    const radius = ringRadii.get(depth)!
-    const angleStep = (2 * Math.PI) / nodeIds.length
-
-    nodeIds.forEach((nodeId, index) => {
-      // Stagger starting angle per ring for visual variety
-      const ringOffset = (depth * Math.PI) / 4
-      const angle = angleStep * index + ringOffset
-      const x = centerX + radius * Math.cos(angle) - nodeWidth / 2
-      const y = centerY + radius * Math.sin(angle) - nodeHeight / 2
-      positions.set(nodeId, { x, y })
+  for (const simNode of simNodes) {
+    positions.set(simNode.id, {
+      x: simNode.x - nodeWidth / 2,
+      y: simNode.y - nodeHeight / 2,
     })
   }
 
