@@ -107,8 +107,9 @@ Worker, or runtime-config endpoint fallback.
 The signing secret is masked during ordinary display, excluded from logs, and retained only in
 browser-owned runtime state. The explicit full-browser export includes the secret so importing it can
 restore the same connection, identity, and local preferences in another browser. Signed JWTs are memory-only. The auth store derives algorithm,
-issuer, audience, role, and maximum lifetime from the generated Peer runtime contract, regenerates
-the token when the secret changes, and clears it when the secret is removed. PostgREST JSON access,
+issuer, audience, and role from the generated Peer runtime contract. Ordinary Web tokens use the
+browser signer's 24-hour default lifetime, independently of database admission policy. The store
+regenerates the token when the secret changes and clears it when the secret is removed. PostgREST JSON access,
 raw byte access, and Peer HTTP delegation reuse this single authentication authority.
 
 Web Peer registration publishes the client-web application version and a best-effort browser/version/system

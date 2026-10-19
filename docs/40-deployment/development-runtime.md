@@ -110,6 +110,11 @@ which proves the checked client remains compatible with current delivery. A brea
 revision requires the coordinated producer-first migration defined by the shared contract.
 Pull-request evidence does not establish source-branch or migration equality between repositories.
 
+尚未发布的候选 Core 可用 `pnpm contract:sync --image sha256:<完整的本地镜像 ID>` 生成投影，再用相同参数追加
+`--check` 核对。镜像必须已存在于所选 local/ssh Docker daemon，工具核对 ID 并使用同一不可变镜像创建、清理
+独占的 typegen 数据库，不接受可移动 tag，也不会拉取本地 ID。此入口不支持 external provider；需选择构建候选的
+同一 provider。`contracts/core-release.json` 仍只接纳已发布的 GHCR digest，本地生成不能代替发布产物验收。
+
 ## Operator Commands
 
 Run these from the repository root; [`package.json`](../../package.json) owns their exact carriers.

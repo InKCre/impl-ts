@@ -135,6 +135,8 @@ const reviewedNonEnvironmentUrls = new Set(
     'https://github.com/vueuse/vueuse/blob/658444bf9f8b96118dbd06eba411bb6639e24e88/packages/core/useStorageAsync/index.ts',
     'https://openrouter.ai/api/v1',
     'https://platform.openai.com/api-keys',
+    // Captured post provenance is independent of the user's InKCre deployment.
+    'https://x.com/i/status/${fullPost.id}',
     // Public product infrastructure, not a deployment/runtime environment coordinate.
     'https://registry.inkcre.dev',
   ].map((value) => new URL(value).href)

@@ -11,7 +11,12 @@
  */
 
 import { Resolver, type ExtensionModule } from '@inkcre/core'
-import { TweetResolver } from './resolver'
+import {
+  ArchiveMediaResolver,
+  ArchivePostResolver,
+  ArchiveUserResolver,
+  TweetResolver,
+} from './resolver'
 import TwitterSetupWizard from './components/twitterSetupWizard/twitterSetupWizard.vue'
 
 const Extension: ExtensionModule = {
@@ -21,6 +26,9 @@ const Extension: ExtensionModule = {
 
   async initialize() {
     Resolver.register(TweetResolver.type, TweetResolver)
+    Resolver.register(ArchivePostResolver.type, ArchivePostResolver)
+    Resolver.register(ArchiveUserResolver.type, ArchiveUserResolver)
+    Resolver.register(ArchiveMediaResolver.type, ArchiveMediaResolver)
   },
 
   async activate() {
@@ -34,6 +42,9 @@ const Extension: ExtensionModule = {
   async dispose() {
     console.log('[Twitter Extension] Disposed')
     Resolver.unregister(TweetResolver.type, TweetResolver)
+    Resolver.unregister(ArchivePostResolver.type, ArchivePostResolver)
+    Resolver.unregister(ArchiveUserResolver.type, ArchiveUserResolver)
+    Resolver.unregister(ArchiveMediaResolver.type, ArchiveMediaResolver)
   },
 }
 

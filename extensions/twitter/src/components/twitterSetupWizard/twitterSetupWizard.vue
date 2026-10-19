@@ -10,7 +10,7 @@ import {
   InkPicker,
   type DropdownOption,
 } from '@inkcre/ui-web'
-import type { Cron, Source } from '@inkcre/core'
+import { authStore, type Cron, type Source } from '@inkcre/core'
 import {
   discoverCoreCandidates,
   readTwitterOAuthAppConfig,
@@ -265,6 +265,32 @@ async function beginOAuth(): Promise<void> {
     void pollTransaction(transaction.value.id)
   })
 }
+async function connectXMonkey(): Promise<void> {
+  const base = status.value?.x_monkey_base_url
+  if (!base) return
+  await run('connect-x-monkey', async () => {
+    // Explicit user action mints a fresh Peer JWT, then sends it only in a
+    // top-level form POST so Core can set its own HttpOnly session cookie.
+    const token = await authStore.refreshToken()
+    const target = new URL(base)
+    const basePath = target.pathname.replace(/\/+$/, '')
+    target.pathname = `${basePath}/session`
+    target.search = ''
+    target.hash = ''
+    const form = document.createElement('form')
+    form.method = 'post'
+    form.enctype = 'application/x-www-form-urlencoded'
+    form.action = target.toString()
+    const tokenField = document.createElement('input')
+    tokenField.type = 'hidden'
+    tokenField.name = 'token'
+    tokenField.value = token
+    form.append(tokenField)
+    document.body.append(form)
+    form.submit()
+    form.remove()
+  })
+}
 async function disconnect(): Promise<void> {
   if (!api.value) return
   await run('disconnect', async () => {
@@ -366,6 +392,20 @@ onBeforeUnmount(() => {
           />
           <InkButton v-else text="Retry" theme="subtle" @click="initialize" />
         </div>
+        <section v-if="status?.x_monkey_base_url" class="twitter-setup__x-monkey">
+          <h3>Connect x-monkey storage</h3>
+          <p class="twitter-setup__hint">
+            This connects the selected Core to x-monkey with a fresh InKCre Peer credential. It is
+            separate from X bookmark authorization.
+          </p>
+          <InkButton
+            text="Connect x-monkey"
+            theme="subtle"
+            :is-loading="pending === 'connect-x-monkey'"
+            :disabled="busy"
+            @click="connectXMonkey"
+          />
+        </section>
       </div>
       <div v-else-if="currentStep === 1" class="twitter-setup__panel">
         <h3>Connect an X account</h3>
