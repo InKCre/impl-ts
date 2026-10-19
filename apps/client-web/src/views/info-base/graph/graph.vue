@@ -49,6 +49,7 @@ const previewReady = ref(false)
 const pendingCamera = ref(false)
 const transitioning = ref(false)
 const realizing = ref(false)
+const skipLayout = ref(false)
 const positionCache = new Map<string, { x: number; y: number }>()
 const draggedNodes = new Set<string>()
 let generation = 0
@@ -387,7 +388,10 @@ async function realizeScene(): Promise<void> {
         realizing.value = false
         return
       }
-      layoutMeasuredNodes()
+      // Skip layout when in incremental merge mode (nodes already positioned)
+      if (!skipLayout.value) {
+        layoutMeasuredNodes()
+      }
       routeEdges()
       if (current !== generation || !pendingCamera.value) {
         realizing.value = false
@@ -573,6 +577,8 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
   void loadPreviews(newBlocks, incident, generation)
 
   // Layout only new nodes around existing graph, then focus camera
+  // Set skipLayout to prevent realizeScene from re-layouting all nodes
+  skipLayout.value = true
   setTimeout(() => {
     layoutNewNodes(newBlocks.map(b => b.id))
     updateNodeInternals(nodes.value.map((n) => n.id))
@@ -582,6 +588,10 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
       if (newFocalBlock !== null) {
         focusCameraOnNode(newFocalBlock)
       }
+      // Reset skipLayout after a delay to allow watcher to fire
+      setTimeout(() => {
+        skipLayout.value = false
+      }, 200)
     })
   }, 100)
 }
