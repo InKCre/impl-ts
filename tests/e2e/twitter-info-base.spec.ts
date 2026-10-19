@@ -86,6 +86,12 @@ async function expectPostSearchResult(
 }
 
 test.beforeEach(async ({ page }) => {
+  // The acceptance network maps hosted preview DNS into a local-address range.
+  // Match the browser's explicit Local Network Access grant without changing
+  // TLS, CORS, or the real service endpoints used by this end-to-end test.
+  await page.context().grantPermissions(['local-network-access'], {
+    origin: new URL(process.env.INKCRE_E2E_WEB_URL!).origin,
+  })
   await page.addInitScript(
     ({ postgrestUrl, jwtSecret }) => {
       localStorage.setItem(
