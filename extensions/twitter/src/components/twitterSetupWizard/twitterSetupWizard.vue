@@ -392,20 +392,6 @@ onBeforeUnmount(() => {
           />
           <InkButton v-else text="Retry" theme="subtle" @click="initialize" />
         </div>
-        <section v-if="status?.x_monkey_base_url" class="twitter-setup__x-monkey">
-          <h3>Connect x-monkey storage</h3>
-          <p class="twitter-setup__hint">
-            This connects the selected Core to x-monkey with a fresh InKCre Peer credential. It is
-            separate from X bookmark authorization.
-          </p>
-          <InkButton
-            text="Connect x-monkey"
-            theme="subtle"
-            :is-loading="pending === 'connect-x-monkey'"
-            :disabled="busy"
-            @click="connectXMonkey"
-          />
-        </section>
       </div>
       <div v-else-if="currentStep === 1" class="twitter-setup__panel">
         <h3>Connect an X account</h3>
@@ -557,6 +543,23 @@ onBeforeUnmount(() => {
           />
         </div>
       </div>
+      <section v-if="status?.x_monkey_base_url" class="twitter-setup__x-monkey">
+        <h3>Connect x-monkey storage</h3>
+        <p class="twitter-setup__hint">
+          This connects the selected Core to x-monkey with a fresh InKCre Peer credential. It is
+          separate from X bookmark authorization.
+        </p>
+        <p class="twitter-setup__hint">
+          x-monkey service address: <code>{{ status.x_monkey_base_url }}</code>
+        </p>
+        <InkButton
+          text="Connect x-monkey"
+          theme="subtle"
+          :is-loading="pending === 'connect-x-monkey'"
+          :disabled="busy"
+          @click="connectXMonkey"
+        />
+      </section>
     </template>
     <div class="twitter-setup__toolbar">
       <InkButton text="Close" theme="subtle" :disabled="busy" @click="close" />

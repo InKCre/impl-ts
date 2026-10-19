@@ -117,20 +117,57 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   const imageUrl = 'https://pbs.twimg.com/media/inkcre-acceptance-no-fetch.jpg'
   const failedImageUrl = 'https://pbs.twimg.com/media/inkcre-acceptance-controlled-failure.jpg'
 
-  const twitterRemoteEntry = page.waitForResponse((response) => {
+  const twitterRemoteEntries: import('@playwright/test').Response[] = []
+  page.on('response', (response) => {
     const url = new URL(response.url())
-    return (
+    if (
       url.pathname.includes('/extensions/inkcre/twitter/') &&
       url.pathname.endsWith('/remoteEntry.js')
     )
+      twitterRemoteEntries.push(response)
   })
+  await page.goto('/peers')
+  const currentPeerCard = page.locator('.peer-card').filter({ hasText: 'This browser' })
+  await expect(currentPeerCard).toBeVisible({ timeout: 30_000 })
+  await currentPeerCard.getByRole('button', { name: 'Edit Config', exact: true }).click()
+  const peerConfig = page.getByRole('dialog', { name: 'Edit Config', exact: true })
+  const registryOrigin = peerConfig.getByLabel('Extension registry URL')
+  if ((await registryOrigin.inputValue()) !== webOrigin) {
+    await registryOrigin.fill(webOrigin)
+    await peerConfig.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(peerConfig).toBeHidden()
+  } else {
+    await peerConfig.getByRole('button', { name: 'Cancel', exact: true }).click()
+  }
   await page.goto('/extensions')
-  const remoteEntry = await twitterRemoteEntry
+  const twitter = page.locator('.extension-card[aria-label="Twitter"]')
+  await expect(twitter).toBeVisible({ timeout: 30_000 })
+  const currentPeer = twitter
+    .locator('.extension-card__peer-row')
+    .filter({ hasText: 'This browser' })
+  const install = currentPeer.getByRole('button', { name: 'Install', exact: true })
+  const enable = currentPeer.getByRole('button', { name: 'Enable', exact: true })
+  if (await install.count()) {
+    await install.click()
+    const versionDialog = page.getByRole('dialog', { name: 'Install', exact: true })
+    await expect(versionDialog.getByRole('button', { name: 'Save', exact: true })).toBeEnabled({
+      timeout: 30_000,
+    })
+    await versionDialog.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(versionDialog).toBeHidden({ timeout: 30_000 })
+    await expect(enable).toBeVisible({ timeout: 30_000 })
+  }
+  if (await enable.count()) await enable.click()
+  await expect(currentPeer.getByText(/Running/)).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => twitterRemoteEntries.length, { timeout: 30_000 }).toBeGreaterThan(0)
+  const remoteEntry = twitterRemoteEntries.at(-1)!
   expect(remoteEntry.ok()).toBe(true)
   expect(new URL(remoteEntry.url()).origin).toBe(webOrigin)
-  const twitter = page.locator('.extension-card[aria-label="Twitter"]')
-  await expect(twitter).toBeVisible()
   await twitter.getByRole('button', { name: 'Setup' }).click()
+  await expect(page.getByRole('button', { name: 'Connect x-monkey' })).toBeVisible()
+  await expect(page.getByText(/x-monkey service address:/)).toContainText(
+    new URL('twitter/x-monkey', coreBase()).toString()
+  )
   const connectRequest = page.waitForRequest(
     (request) => request.url().endsWith('/twitter/x-monkey/session') && request.method() === 'POST'
   )
