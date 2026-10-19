@@ -969,7 +969,6 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
           :aria-label="t('infoBase.graph.inspectRelation', { relation: focalRelation })"
           @click="inspectRelation(focalRelation)"
         />
-        <InkButton :text="t('infoBase.graph.search')" theme="subtle" @click="openRecallSearch" />
         <details v-if="focalBlock !== null" class="graph-view__options">
           <summary class="graph-view__options-summary">{{ t('infoBase.graph.viewOptions') }}</summary>
           <InkForm layout="col">
