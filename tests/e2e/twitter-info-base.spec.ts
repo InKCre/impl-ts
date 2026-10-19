@@ -120,8 +120,15 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   const replyId = `${stamp}04`
   const mediaId = `${stamp}05`
   const failedMediaId = `${stamp}07`
+  const videoId = `${stamp}08`
+  const unsafeMediaId = `${stamp}09`
   const imageUrl = 'https://pbs.twimg.com/media/inkcre-acceptance-no-fetch.jpg'
   const failedImageUrl = 'https://pbs.twimg.com/media/inkcre-acceptance-controlled-failure.jpg'
+  const videoCoverUrl = 'https://pbs.twimg.com/media/inkcre-acceptance-video-cover.jpg'
+  const unsafeImageUrl = 'https://pbs.twimg.com.evil.invalid/inkcre-unsafe.jpg'
+  const lowVideoUrl = 'https://video.twimg.com/inkcre-acceptance-low.mp4'
+  const highVideoUrl = 'https://video.twimg.com/inkcre-acceptance-high.mp4'
+  const playlistUrl = 'https://video.twimg.com/inkcre-acceptance.m3u8'
 
   const twitterRemoteEntries: import('@playwright/test').Response[] = []
   page.on('response', (response) => {
@@ -227,7 +234,7 @@ test('Core cookie authorization writes native records that the real Twitter MF c
           },
           replyTo: { postId: replyId, userId, handle: `acceptance_${stamp}` },
           quote: { postId: quoteId, url: `https://x.com/${stamp}/status/${quoteId}` },
-          mediaIds: [mediaId, failedMediaId],
+          mediaIds: [mediaId, failedMediaId, videoId, unsafeMediaId],
           article: {
             id: `${stamp}06`,
             title: 'Long-form archive article title',
@@ -244,6 +251,21 @@ test('Core cookie authorization writes native records that the real Twitter MF c
           url: failedImageUrl,
           alt: 'Controlled failure image metadata',
         },
+        {
+          id: videoId,
+          type: 'video',
+          url: videoCoverUrl,
+          alt: 'Acceptance video metadata',
+          video: {
+            durationMs: 1200,
+            variants: [
+              { url: lowVideoUrl, type: 'video/mp4', bitrate: 128000 },
+              { url: playlistUrl, type: 'application/x-mpegURL', bitrate: 900000 },
+              { url: highVideoUrl, type: 'video/mp4', bitrate: 256000 },
+            ],
+          },
+        },
+        { id: unsafeMediaId, type: 'photo', url: unsafeImageUrl, alt: 'Unsafe source metadata' },
       ],
     },
   })
@@ -252,11 +274,15 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   const submitted = JSON.parse(submitBody) as {
     summary: { accepted: number; failed: number; total: number }
   }
-  expect(submitted.summary).toMatchObject({ accepted: 6, failed: 0, total: 6 })
+  expect(submitted.summary).toMatchObject({ accepted: 8, failed: 0, total: 8 })
 
   const query = await page.request.post(new URL('api/v1/archive/query', archiveBase).toString(), {
     headers: { 'x-tweet-db-client': 'x-monkey' },
-    data: { users: [userId], posts: [postId], media: [mediaId, failedMediaId] },
+    data: {
+      users: [userId],
+      posts: [postId],
+      media: [mediaId, failedMediaId, videoId, unsafeMediaId],
+    },
   })
   expect(query.status()).toBe(200)
   const queried = (await query.json()) as {
@@ -290,6 +316,14 @@ test('Core cookie authorization writes native records that the real Twitter MF c
     (row) => (JSON.parse(row.content) as { id?: string }).id === failedMediaId
   )
   expect(failedMediaBlock).toBeDefined()
+  const videoBlock = mediaBlocks.find(
+    (row) => (JSON.parse(row.content) as { id?: string }).id === videoId
+  )
+  expect(videoBlock).toBeDefined()
+  const unsafeMediaBlock = mediaBlocks.find(
+    (row) => (JSON.parse(row.content) as { id?: string }).id === unsafeMediaId
+  )
+  expect(unsafeMediaBlock).toBeDefined()
   const relations = await databaseRows<RelationRow>(
     `relations?select=from_,to_,content&from_=eq.${postBlock!.id}`
   )
@@ -299,6 +333,14 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   expect(
     relations.some(
       (row) => row.to_ === failedMediaBlock!.id && JSON.parse(row.content).type === 'media'
+    )
+  ).toBe(true)
+  expect(
+    relations.some((row) => row.to_ === videoBlock!.id && JSON.parse(row.content).type === 'media')
+  ).toBe(true)
+  expect(
+    relations.some(
+      (row) => row.to_ === unsafeMediaBlock!.id && JSON.parse(row.content).type === 'media'
     )
   ).toBe(true)
 
@@ -328,7 +370,25 @@ test('Core cookie authorization writes native records that the real Twitter MF c
       })
       return
     }
-    await route.continue()
+    controlledMediaReads.push(url)
+    await route.fulfill({ status: 502, body: 'unexpected media request' })
+  })
+  await page.route('https://video.twimg.com/**', async (route) => {
+    const url = route.request().url()
+    controlledMediaReads.push(url)
+    await route.fulfill({
+      status: url === highVideoUrl ? 200 : 502,
+      contentType: url === highVideoUrl ? 'video/mp4' : 'text/plain',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body:
+        url === highVideoUrl
+          ? Buffer.from([0, 0, 0, 24, 102, 116, 121, 112])
+          : 'unexpected variant',
+    })
+  })
+  await page.route('https://pbs.twimg.com.evil.invalid/**', async (route) => {
+    controlledMediaReads.push(route.request().url())
+    await route.fulfill({ status: 502, body: 'unsafe media request' })
   })
 
   await page.goto(`/info-base/graph/blocks/${postBlock!.id}/content`)
@@ -349,20 +409,52 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   await expect(content).toContainText(`Quoted post · ${quoteId}`)
   await expect(content).toContainText('Acceptance image metadata')
   await expect(content).toContainText('Controlled failure image metadata')
+  await expect(content).toContainText('Acceptance video metadata')
+  await expect(content).toContainText('Unsafe source metadata')
   const mediaCards = content.locator('.archive-media')
-  await expect(mediaCards).toHaveCount(2)
+  await expect(mediaCards).toHaveCount(4)
   const imageCard = mediaCards.filter({ hasText: 'Acceptance image metadata' })
   const failedMediaCard = mediaCards.filter({ hasText: 'Controlled failure image metadata' })
+  const videoCard = mediaCards.filter({ hasText: 'Acceptance video metadata' })
+  const unsafeMediaCard = mediaCards.filter({ hasText: 'Unsafe source metadata' })
   await expect(imageCard.getByRole('button', { name: 'Load media' })).toBeVisible()
   await expect(failedMediaCard.getByRole('button', { name: 'Load media' })).toBeVisible()
+  await expect(videoCard.getByRole('button', { name: 'Load media' })).toBeVisible()
+  await expect(unsafeMediaCard.getByRole('button', { name: 'Load media' })).toBeVisible()
   expect(
     await page.evaluate(
-      ({ imageUrl, failedImageUrl }) =>
+      ({
+        imageUrl,
+        failedImageUrl,
+        videoCoverUrl,
+        unsafeImageUrl,
+        lowVideoUrl,
+        highVideoUrl,
+        playlistUrl,
+      }) =>
         performance
           .getEntriesByType('resource')
           .map((entry) => entry.name)
-          .filter((name) => name === imageUrl || name === failedImageUrl),
-      { imageUrl, failedImageUrl }
+          .filter((name) =>
+            [
+              imageUrl,
+              failedImageUrl,
+              videoCoverUrl,
+              unsafeImageUrl,
+              lowVideoUrl,
+              highVideoUrl,
+              playlistUrl,
+            ].includes(name)
+          ),
+      {
+        imageUrl,
+        failedImageUrl,
+        videoCoverUrl,
+        unsafeImageUrl,
+        lowVideoUrl,
+        highVideoUrl,
+        playlistUrl,
+      }
     )
   ).toEqual([])
   expect(controlledMediaReads).toEqual([])
@@ -376,7 +468,16 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   await failedMediaCard.getByRole('button', { name: 'Load media' }).click()
   await failedImageRead
   await expect(failedMediaCard.getByRole('alert')).toContainText('HTTP 503')
-  expect(controlledMediaReads).toEqual([imageUrl, failedImageUrl])
+  const videoRead = page.waitForRequest((request) => request.url() === highVideoUrl)
+  await videoCard.getByRole('button', { name: 'Load media' }).click()
+  await videoRead
+  await expect(videoCard.locator('video')).toBeVisible()
+  expect(await videoCard.locator('video').getAttribute('src')).toMatch(/^blob:/)
+  await unsafeMediaCard.getByRole('button', { name: 'Load media' }).click()
+  await expect(unsafeMediaCard).toContainText(
+    'Media bytes are not available; metadata is preserved.'
+  )
+  expect(controlledMediaReads).toEqual([imageUrl, failedImageUrl, highVideoUrl])
 
   await content.getByRole('button', { name: `View reply ${replyId}` }).click()
   await expect(page).toHaveURL(
@@ -402,4 +503,5 @@ test('Core cookie authorization writes native records that the real Twitter MF c
   await expect(page.locator('.solved-content-popup')).toContainText(
     'Rich text survives with its author and context.'
   )
+  await page.screenshot({ path: 'test-results/playwright/twitter-x-monkey-final.png', fullPage: true })
 })

@@ -16,6 +16,7 @@ import {
   Block,
   Resolver,
   ResolverCache,
+  HttpStorage,
   type ImageSolvedContent,
   type ProjectionOptions,
   type VideoSolvedContent,
@@ -266,6 +267,7 @@ export class ArchiveMediaResolver extends Resolver<string, MediaRecord> {
   static readonly type = 'extensions.twitter.media.v1'
   static readonly previewRenderer = markRaw(ArchiveMediaPreview)
   static readonly solvedContentRenderer = markRaw(ArchiveMediaContent)
+  private objectUrl: string | null = null
 
   protected async _getSolvedContent(options: ProjectionOptions): Promise<MediaRecord> {
     return MediaRecordSchema.parse(parseJson(await this.getRawContent(options)))
@@ -279,32 +281,95 @@ export class ArchiveMediaResolver extends Resolver<string, MediaRecord> {
       .join('\n')
   }
 
-  async loadContent(options: ProjectionOptions = {}): Promise<ArchiveMediaContentModel> {
-    const media = await this.getSolvedContent(options)
+  async loadContent(_options: ProjectionOptions = {}): Promise<ArchiveMediaContentModel> {
+    const media = await this.getSolvedContent(_options)
     if (!isMedia(media)) return { media, content: null }
-    const relations = await this.getRelations({
-      // Graph previews may seed ResolverCache with only the visible incident
-      // edges, which can omit a media block's hidden byte-content pointer.
-      refresh: true,
-      includeOut: true,
-      includeIn: false,
+    const source =
+      media.type === 'photo' ? safeCdnUrl(media.url, 'pbs.twimg.com') : bestVideoUrl(media)
+    if (!source) return { media, content: null }
+
+    const bytes = await new HttpStorage({
+      type: 'http',
+      config: { follow_redirects: false },
+    }).getRawContent({
+      id: this.block.id,
+      storage: null,
+      content: source.toString(),
     })
-    const pointer = relations.find((relation) => relation.content === 'content')
-    if (!pointer) return { media, content: null }
-    const block = await Block.get(pointer.to_)
-    const resolver = await ResolverCache.getResolver(block)
-    if (block.resolver === 'core.image.v1') {
-      return {
-        media,
-        content: (await resolver.getSolvedContent(options)) as ImageSolvedContent,
-      }
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
+    const mediaType = media.type === 'photo' ? imageMediaType(source) : 'video/mp4'
+    this.objectUrl = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mediaType }))
+    const byteContent = {
+      content: bytes,
+      byte_size: bytes.byteLength,
+      detected_media_type: null,
+      objectUrl: this.objectUrl,
     }
-    if (block.resolver === 'core.video.v1') {
-      return {
-        media,
-        content: (await resolver.getSolvedContent(options)) as VideoSolvedContent,
-      }
-    }
-    return { media, content: null }
+    return media.type === 'photo'
+      ? {
+          media,
+          content: {
+            ...byteContent,
+            format: null,
+            width: media.width ?? null,
+            height: media.height ?? null,
+            frame_count: null,
+          } satisfies ImageSolvedContent,
+        }
+      : {
+          media,
+          content: {
+            ...byteContent,
+            container: 'mp4',
+            video_codec: null,
+            duration_ms: media.video?.durationMs ?? null,
+            width: media.width ?? null,
+            height: media.height ?? null,
+            frame_rate: null,
+          } satisfies VideoSolvedContent,
+        }
   }
+
+  async dispose(): Promise<void> {
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
+    this.objectUrl = null
+  }
+}
+
+function safeCdnUrl(value: string, hostname: 'pbs.twimg.com' | 'video.twimg.com'): URL | null {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' &&
+      url.hostname === hostname &&
+      (!url.port || url.port === '443') &&
+      !url.username &&
+      !url.password
+      ? url
+      : null
+  } catch {
+    return null
+  }
+}
+
+function bestVideoUrl(media: Media): URL | null {
+  const variants = [...(media.video?.variants ?? [])]
+    .filter((variant) => variant.type === 'video/mp4')
+    .sort((left, right) => (right.bitrate ?? -1) - (left.bitrate ?? -1))
+  for (const variant of variants) {
+    const url = safeCdnUrl(variant.url, 'video.twimg.com')
+    if (url) return url
+  }
+  return null
+}
+
+function imageMediaType(url: URL): string {
+  const format = (
+    url.searchParams.get('format') ??
+    url.pathname.split('.').at(-1) ??
+    ''
+  ).toLowerCase()
+  if (format === 'png') return 'image/png'
+  if (format === 'webp') return 'image/webp'
+  if (format === 'gif') return 'image/gif'
+  return 'image/jpeg'
 }
