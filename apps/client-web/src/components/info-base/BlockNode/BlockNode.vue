@@ -42,6 +42,7 @@ const inspect = () => emit('inspect', props.data.block.id)
       'block-node--focal': data.focal,
       'block-node--muted': data.muted,
       'block-node--focusing': data.focusing,
+      'block-node--selected': selected,
     }"
   >
     <div
@@ -75,4 +76,4 @@ const inspect = () => emit('inspect', props.data.block.id)
   </div>
 </template>
 
-<style lang="scss" scoped src="./BlockNode.scss" />
+<style lang="scss" src="./BlockNode.scss" />

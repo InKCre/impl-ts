@@ -13,6 +13,18 @@
   border: 1px solid sys-var(color, border, base);
   border-radius: 0;
   position: relative;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: sys-var(color, border, strong);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  &--selected {
+    border-color: sys-var(color, border, strong);
+    box-shadow: 0 0 0 2px sys-var(color, border, subtle);
+  }
+
   &--focal {
     outline: 1px solid sys-var(color, border, strong);
     border-color: sys-var(color, border, strong);

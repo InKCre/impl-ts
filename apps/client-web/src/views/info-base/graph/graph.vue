@@ -55,6 +55,7 @@ const pendingCamera = ref(false)
 const transitioning = ref(false)
 const realizing = ref(false)
 const skipLayout = ref(false)
+const selectedBlock = ref<number | null>(null)
 const positionCache = new Map<string, { x: number; y: number }>()
 const draggedNodes = new Set<string>()
 let generation = 0
@@ -585,6 +586,7 @@ function setNodeFocusing(blockId: number | null): void {
 
 function focusBlock(block: number): void {
   transitioning.value = true
+  selectedBlock.value = block
   setNodeFocusing(block)
   if (expansionMode.value === 'incremental') {
     // Incremental: load new neighborhood and merge into existing graph.
@@ -824,11 +826,23 @@ function layoutNewNodes(newBlockIds: number[]): void {
 }
 
 function inspectBlock(block: number): void {
+  selectedBlock.value = block
   void infoBaseRouter.push({ name: 'block', block })
 }
 
 function inspectRelation(relation: number): void {
+  selectedBlock.value = null
   void infoBaseRouter.push({ name: 'relation', relation })
+}
+
+// Check if side panel is open (block or relation detail)
+const isSidePanelOpen = computed(() => {
+  return currentRoute.value?.name === 'block' || currentRoute.value?.name === 'relation'
+})
+
+function closeSidePanel(): void {
+  selectedBlock.value = null
+  void infoBaseRouter.back()
 }
 
 function onNodeDragStart(event: NodeDragEvent): void {
@@ -972,7 +986,12 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
       @nodeDragStop="onNodeDragStop"
     >
       <template #node-block="nodeProps">
-        <BlockNodeComponent v-bind="nodeProps" @focus="focusBlock" @inspect="inspectBlock" />
+        <BlockNodeComponent
+          v-bind="nodeProps"
+          :selected="nodeProps.data.block.id === selectedBlock"
+          @focus="focusBlock"
+          @inspect="inspectBlock"
+        />
       </template>
       <template #edge-relation="edgeProps">
         <RelationEdgeComponent v-bind="edgeProps" @focus="focusRelation" />
@@ -1001,6 +1020,13 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
         />
       </div>
     </VueFlow>
+
+    <!-- Transparent scrim for side panels -->
+    <div
+      v-if="isSidePanelOpen"
+      class="graph-view__scrim"
+      @click="closeSidePanel"
+    />
 
     <BlockInspectorPopup
       v-if="isRoute(currentRoute, 'block') && currentRoute?.name === 'block'"
