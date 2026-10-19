@@ -509,7 +509,7 @@ test('Core cookie authorization writes native records that the real Twitter MF c
     'Rich text survives with its author and context.'
   )
   await page.screenshot({
-    path: 'test-results/playwright/twitter-x-monkey-final.png',
+    path: 'test-results/twitter-acceptance/twitter-x-monkey-final.png',
     fullPage: true,
   })
 })

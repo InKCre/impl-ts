@@ -28,15 +28,6 @@ export default defineConfig({
       },
     },
     {
-      name: 'twitter-info-base',
-      testMatch: 'twitter-info-base.spec.ts',
-      use: {
-        baseURL: process.env.INKCRE_E2E_WEB_URL,
-        // The explicit form POST carries a Peer JWT; Playwright traces persist request bodies.
-        trace: 'off',
-      },
-    },
-    {
       name: 'browser-extension',
       testMatch: 'browser-extension.spec.ts',
     },

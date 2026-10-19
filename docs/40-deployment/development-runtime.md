@@ -131,3 +131,16 @@ pnpm db:reset
 pnpm contract:sync
 pnpm test:e2e
 ```
+
+Twitter 与本地 Core 镜像的候选验收保存在 `scripts/tests/`，不加入默认 `check`、`test:e2e` 或 CI 门禁。可独立执行：
+
+```bash
+pnpm verify:core-release
+pnpm verify:twitter --list
+pnpm verify:twitter
+```
+
+Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter MF 产物，并设置
+`INKCRE_E2E_CORE_URL`、`INKCRE_E2E_POSTGREST_URL`、`INKCRE_E2E_WEB_URL`、
+`INKCRE_E2E_JWT_SECRET`。它会安装或启用浏览器 Peer 的 Twitter 扩展、写入测试数据并提交词法索引 Job，
+不会自动清理数据；应使用独立验收信息库。截图保存在 `test-results/twitter-acceptance/`。

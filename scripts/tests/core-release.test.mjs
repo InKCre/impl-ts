@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { inspectCoreRelease, validateCoreReleaseConfig } from '../../scripts/core-release-lib.mjs'
+import { inspectCoreRelease, validateCoreReleaseConfig } from '../core-release-lib.mjs'
 
 const imageId = `sha256:${'a'.repeat(64)}`
 const digest = `ghcr.io/inkcre/impl-py@${imageId}`
