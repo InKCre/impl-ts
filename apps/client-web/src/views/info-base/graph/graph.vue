@@ -377,7 +377,6 @@ function layoutRadial(): void {
   const nodeHeight = 122
   const centerX = 0
   const centerY = 0
-  const ringSpacing = 350
 
   // Build adjacency from edges
   const adjacency = new Map<string, string[]>()
@@ -432,6 +431,37 @@ function layoutRadial(): void {
     rings.get(depth)!.push(node.id)
   }
 
+  // Calculate minimum radius for each ring to avoid overlap
+  // Use diagonal distance to account for rotation
+  const nodeDiagonal = Math.sqrt(nodeWidth * nodeWidth + nodeHeight * nodeHeight)
+  const padding = 50 // Extra space between nodes
+
+  const ringRadii = new Map<number, number>()
+  let maxDepth = 0
+  for (const depth of rings.keys()) {
+    maxDepth = Math.max(maxDepth, depth)
+  }
+
+  // Calculate radius for each ring
+  for (const [depth, nodeIds] of rings) {
+    if (depth === 0) continue
+
+    const nodeCount = nodeIds.length
+    const angleStep = (2 * Math.PI) / nodeCount
+
+    // Minimum radius to fit nodes around the circle without overlap
+    // Using chord length: chord = 2 * r * sin(angleStep / 2)
+    // We need chord >= nodeDiagonal + padding
+    const chord = nodeDiagonal + padding
+    const minRadiusByAngle = chord / (2 * Math.sin(angleStep / 2))
+
+    // Also ensure radius grows with depth
+    const minRadiusByDepth = depth * (nodeHeight + padding)
+
+    const radius = Math.max(minRadiusByAngle, minRadiusByDepth, 200)
+    ringRadii.set(depth, radius)
+  }
+
   // Position nodes
   const positions = new Map<string, { x: number; y: number }>()
 
@@ -444,7 +474,7 @@ function layoutRadial(): void {
   for (const [depth, nodeIds] of rings) {
     if (depth === 0) continue // focal already placed
 
-    const radius = depth * ringSpacing
+    const radius = ringRadii.get(depth)!
     const angleStep = (2 * Math.PI) / nodeIds.length
 
     nodeIds.forEach((nodeId, index) => {
