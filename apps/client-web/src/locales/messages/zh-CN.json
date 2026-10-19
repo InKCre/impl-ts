@@ -368,6 +368,11 @@
         "smooth": "平滑过渡",
         "incremental": "增量展开"
       },
+      "layoutAlgorithm": "布局算法",
+      "layout": {
+        "radial": "径向（圆）",
+        "hierarchical": "层次（树）"
+      },
       "community": {
         "all": "所有分组",
         "searchPlaceholder": "搜索分组...",

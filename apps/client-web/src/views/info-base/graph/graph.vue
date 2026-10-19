@@ -29,9 +29,11 @@ import { openRecallSearch } from '@/components/recall/recall-search'
 type SceneScale = 'compact' | 'standard' | 'broad'
 type SceneStatus = 'loading' | 'ready' | 'empty' | 'missing' | 'not-found' | 'limit' | 'error'
 type ExpansionMode = 'smooth' | 'incremental'
+type LayoutAlgorithm = 'hierarchical' | 'radial'
 
 const SCALE_LIMITS: Record<SceneScale, number> = { compact: 8, standard: 20, broad: 50 }
 const EXPANSION_MODE_KEY = 'inkcre.graph.expansionMode'
+const LAYOUT_KEY = 'inkcre.graph.layout'
 const container = ref<HTMLElement | null>(null)
 const infoBaseRouter = getInfoBaseRouter()
 const { t } = useI18n()
@@ -45,6 +47,9 @@ const direction = ref<GraphDirection>('both')
 const expansionMode = ref<ExpansionMode>(
   (localStorage.getItem(EXPANSION_MODE_KEY) as ExpansionMode) || 'smooth'
 )
+const layoutAlgorithm = ref<LayoutAlgorithm>(
+  (localStorage.getItem(LAYOUT_KEY) as LayoutAlgorithm) || 'radial'
+)
 const previewReady = ref(false)
 const pendingCamera = ref(false)
 const transitioning = ref(false)
@@ -57,6 +62,10 @@ let realizationRequested = false
 
 watch(expansionMode, (mode) => {
   localStorage.setItem(EXPANSION_MODE_KEY, mode)
+})
+
+watch(layoutAlgorithm, (algo) => {
+  localStorage.setItem(LAYOUT_KEY, algo)
 })
 
 const { fitView, zoomIn, zoomOut, getNodes, onMoveStart, updateNodeInternals, setCenter, setViewport, getViewport } = useVueFlow()
@@ -118,6 +127,10 @@ const directionOptions = computed(() => [
 const expansionModeOptions = computed(() => [
   { value: 'smooth', label: t('infoBase.graph.expansion.smooth') },
   { value: 'incremental', label: t('infoBase.graph.expansion.incremental') },
+])
+const layoutAlgorithmOptions = computed(() => [
+  { value: 'radial', label: t('infoBase.graph.layout.radial') },
+  { value: 'hierarchical', label: t('infoBase.graph.layout.hierarchical') },
 ])
 
 function activeRelation(relation: Relation): boolean {
@@ -292,6 +305,14 @@ async function loadScene(): Promise<void> {
 }
 
 function layoutMeasuredNodes(): void {
+  if (layoutAlgorithm.value === 'radial') {
+    layoutRadial()
+  } else {
+    layoutHierarchical()
+  }
+}
+
+function layoutHierarchical(): void {
   const measured = getNodes.value
   if (measured.length === 0) return
   const byId = new Map(measured.map((node) => [node.id, node]))
@@ -331,6 +352,111 @@ function layoutMeasuredNodes(): void {
     }
   }
   // Keep dragged nodes at their current positions.
+  for (const node of nodes.value) {
+    if (dragged.has(node.id)) {
+      const current = byId.get(node.id)?.position
+      if (current) positions.set(node.id, current)
+    }
+  }
+
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    position: positions.get(node.id) ?? node.position,
+  }))
+}
+
+// Radial layout: focal node at center, others arranged in concentric rings by BFS depth
+function layoutRadial(): void {
+  const measured = getNodes.value
+  if (measured.length === 0) return
+  const byId = new Map(measured.map((node) => [node.id, node]))
+  const dragged = new Set(draggedNodes)
+
+  const nodeWidth = 182
+  const nodeHeight = 122
+  const centerX = 0
+  const centerY = 0
+  const ringSpacing = 350
+
+  // Build adjacency from edges
+  const adjacency = new Map<string, string[]>()
+  for (const edge of edges.value) {
+    if (!adjacency.has(edge.source)) adjacency.set(edge.source, [])
+    if (!adjacency.has(edge.target)) adjacency.set(edge.target, [])
+    adjacency.get(edge.source)!.push(edge.target)
+    adjacency.get(edge.target)!.push(edge.source)
+  }
+
+  // BFS from focal node to assign ring depths
+  const focalId = focalBlock.value !== null ? String(focalBlock.value) : null
+  const ringDepth = new Map<string, number>()
+  const visited = new Set<string>()
+
+  if (focalId) {
+    // BFS starting from focal
+    const queue: Array<[string, number]> = [[focalId, 0]]
+    visited.add(focalId)
+    ringDepth.set(focalId, 0)
+
+    while (queue.length > 0) {
+      const [current, depth] = queue.shift()!
+      const neighbors = adjacency.get(current) ?? []
+      for (const neighbor of neighbors) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor)
+          ringDepth.set(neighbor, depth + 1)
+          queue.push([neighbor, depth + 1])
+        }
+      }
+    }
+    // Any unvisited nodes (disconnected) go to the outermost ring
+    const maxDepth = Math.max(...ringDepth.values(), 0)
+    for (const node of nodes.value) {
+      if (!ringDepth.has(node.id)) {
+        ringDepth.set(node.id, maxDepth + 1)
+      }
+    }
+  } else {
+    // No focal, all nodes in one ring
+    for (const node of nodes.value) {
+      ringDepth.set(node.id, 1)
+    }
+  }
+
+  // Group nodes by ring
+  const rings = new Map<number, string[]>()
+  for (const node of nodes.value) {
+    const depth = ringDepth.get(node.id) ?? 1
+    if (!rings.has(depth)) rings.set(depth, [])
+    rings.get(depth)!.push(node.id)
+  }
+
+  // Position nodes
+  const positions = new Map<string, { x: number; y: number }>()
+
+  // Focal node at center
+  if (focalId && ringDepth.get(focalId) === 0) {
+    positions.set(focalId, { x: centerX, y: centerY })
+  }
+
+  // Arrange each ring
+  for (const [depth, nodeIds] of rings) {
+    if (depth === 0) continue // focal already placed
+
+    const radius = depth * ringSpacing
+    const angleStep = (2 * Math.PI) / nodeIds.length
+
+    nodeIds.forEach((nodeId, index) => {
+      // Stagger starting angle per ring for visual variety
+      const ringOffset = (depth * Math.PI) / 4
+      const angle = angleStep * index + ringOffset
+      const x = centerX + radius * Math.cos(angle) - nodeWidth / 2
+      const y = centerY + radius * Math.sin(angle) - nodeHeight / 2
+      positions.set(nodeId, { x, y })
+    })
+  }
+
+  // Keep dragged nodes at their current positions
   for (const node of nodes.value) {
     if (dragged.has(node.id)) {
       const current = byId.get(node.id)?.position
@@ -429,6 +555,11 @@ watch([sceneKey, scale], () => {
   void loadScene()
 }, { immediate: true })
 watch(direction, applyPresentation)
+watch(layoutAlgorithm, () => {
+  // Re-layout when algorithm changes
+  layoutMeasuredNodes()
+  void nextTick(() => routeEdges())
+})
 watch(
   [
     nodesInitialized,
@@ -768,6 +899,11 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
               v-model="expansionMode"
               :label="t('infoBase.graph.expansionMode')"
               :options="expansionModeOptions"
+            />
+            <InkDropdown
+              v-model="layoutAlgorithm"
+              :label="t('infoBase.graph.layoutAlgorithm')"
+              :options="layoutAlgorithmOptions"
             />
           </InkForm>
         </details>

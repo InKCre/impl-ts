@@ -367,6 +367,11 @@
         "smooth": "Smooth transition",
         "incremental": "Incremental expansion"
       },
+      "layoutAlgorithm": "Layout algorithm",
+      "layout": {
+        "radial": "Radial (circle)",
+        "hierarchical": "Hierarchical (tree)"
+      },
       "community": {
         "all": "All groups",
         "searchPlaceholder": "Search groups...",
