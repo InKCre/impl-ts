@@ -61,7 +61,10 @@ test('Core cookie authorization writes native records that the real Twitter MF c
 
   const twitterRemoteEntry = page.waitForResponse((response) => {
     const url = new URL(response.url())
-    return url.pathname.endsWith('/twitter/client-web/remoteEntry.js')
+    return (
+      url.pathname.includes('/extensions/inkcre/twitter/') &&
+      url.pathname.endsWith('/remoteEntry.js')
+    )
   })
   await page.goto('/extensions')
   const remoteEntry = await twitterRemoteEntry
