@@ -614,7 +614,7 @@ function focusCameraOnNode(blockId: number): void {
   })
 }
 
-// Layout only new nodes, positioning them around existing nodes
+// Layout only new nodes, positioning them near their connected existing nodes
 function layoutNewNodes(newBlockIds: number[]): void {
   if (newBlockIds.length === 0) return
 
@@ -628,37 +628,57 @@ function layoutNewNodes(newBlockIds: number[]): void {
     return
   }
 
-  // Calculate bounding box of existing nodes
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  // Build a map of existing node positions
+  const existingPositions = new Map<string, { x: number; y: number }>()
   for (const node of existingNodes) {
-    const graphNode = getNodes.value.find(n => n.id === node.id)
-    const width = graphNode?.dimensions?.width ?? 180
-    const height = graphNode?.dimensions?.height ?? 80
-    minX = Math.min(minX, node.position.x)
-    maxX = Math.max(maxX, node.position.x + width)
-    minY = Math.min(minY, node.position.y)
-    maxY = Math.max(maxY, node.position.y + height)
+    existingPositions.set(node.id, node.position)
   }
 
-  const existingWidth = maxX - minX
-  const existingHeight = maxY - minY
-  const centerX = (minX + maxX) / 2
-  const centerY = (minY + maxY) / 2
-
-  // Position new nodes in a circle around existing nodes
-  const radius = Math.max(existingWidth, existingHeight) / 2 + 200
-  const angleStep = (2 * Math.PI) / newNodes.length
+  // For each new node, find its connected existing nodes and position near them
+  const nodeWidth = 182
+  const nodeHeight = 122
+  const spacing = 250 // Distance from connected node
 
   const positions = new Map<string, { x: number; y: number }>()
-  newNodes.forEach((node, index) => {
-    const graphNode = getNodes.value.find(n => n.id === node.id)
-    const width = graphNode?.dimensions?.width ?? 180
-    const height = graphNode?.dimensions?.height ?? 80
-    const angle = angleStep * index - Math.PI / 2 // Start from top
-    const x = centerX + radius * Math.cos(angle) - width / 2
-    const y = centerY + radius * Math.sin(angle) - height / 2
-    positions.set(node.id, { x, y })
-  })
+  const connectionCount = new Map<string, number>() // Track how many new nodes connect to each existing node
+
+  for (const newNode of newNodes) {
+    // Find edges connecting this new node to existing nodes
+    const connectedEdges = edges.value.filter(
+      e => (e.source === newNode.id && existingPositions.has(e.target)) ||
+           (e.target === newNode.id && existingPositions.has(e.source))
+    )
+
+    if (connectedEdges.length > 0) {
+      // Position near the first connected node
+      const firstEdge = connectedEdges[0]
+      const connectedNodeId = firstEdge.source === newNode.id ? firstEdge.target : firstEdge.source
+      const connectedPos = existingPositions.get(connectedNodeId)
+
+      if (connectedPos) {
+        // Get offset index for this connection
+        const offsetIndex = connectionCount.get(connectedNodeId) ?? 0
+        connectionCount.set(connectedNodeId, offsetIndex + 1)
+
+        // Position in a fan pattern to the right of the connected node
+        const x = connectedPos.x + nodeWidth + spacing
+        const y = connectedPos.y + offsetIndex * (nodeHeight + 50)
+        positions.set(newNode.id, { x, y })
+        continue
+      }
+    }
+
+    // No connected edges, position near center of existing nodes
+    let sumX = 0, sumY = 0
+    for (const pos of existingPositions.values()) {
+      sumX += pos.x
+      sumY += pos.y
+    }
+    const centerX = sumX / existingPositions.size
+    const centerY = sumY / existingPositions.size
+    const fallbackIndex = newNodes.indexOf(newNode)
+    positions.set(newNode.id, { x: centerX + nodeWidth + spacing, y: centerY + fallbackIndex * (nodeHeight + 50) })
+  }
 
   // Apply positions to new nodes only
   nodes.value = nodes.value.map((node) => {
