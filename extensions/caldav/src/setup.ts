@@ -6,7 +6,6 @@ import {
   PeerManager,
   PeerProtocolResponseSchema,
   type ExtensionRuntimeStatus,
-  type InstalledExtension,
   type Peer,
 } from '@inkcre/core'
 import {
@@ -17,40 +16,18 @@ import {
   sortPublishedReleases,
 } from '@inkcre/extension-runtime-client-web'
 
+import {
+  generatePassword,
+  runtimeFailed,
+  runtimeReady,
+  savedPassword,
+  waitingForRuntime,
+} from './setup-state'
+
 export const extensionName = 'inkcre/caldav'
 export interface Candidate {
   peer: Peer
   status: ExtensionRuntimeStatus | null
-}
-
-export function savedPassword(extension: InstalledExtension): string | null {
-  const value = extension.config.password
-  if (value == null) return null
-  if (typeof value !== 'string' || Array.from(value).length < 32 || Array.from(value).length > 128)
-    throw new Error('Invalid DAV password configuration.')
-  return value
-}
-
-export function generatePassword(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
-    byte.toString(16).padStart(2, '0')
-  ).join('')
-}
-
-export function waitingForRuntime(status: ExtensionRuntimeStatus | null): boolean {
-  return !!status && (status.restart_required || !!status.operation)
-}
-
-export function runtimeReady(status: ExtensionRuntimeStatus | null): boolean {
-  return (
-    !!status &&
-    status.enabled &&
-    status.running &&
-    !waitingForRuntime(status) &&
-    !!status.version &&
-    status.loaded_version === status.version &&
-    !status.error
-  )
 }
 
 export async function readCandidates(): Promise<{ candidates: Candidate[]; unavailable: number }> {
@@ -112,6 +89,7 @@ export async function prepareConnection(peer: Peer): Promise<ExtensionRuntimeSta
   if (!observed.supported_distributions.includes('python'))
     throw new Error('Python is not supported.')
   let status = observed.extensions.find((row) => row.name === extensionName) ?? null
+  if (runtimeFailed(status)) throw new Error('Recover the failed Peer operation before continuing.')
   if (waitingForRuntime(status)) return status!
   if (!status?.version) {
     const peerConfig = PeerConfigSchema.parse(peer.config)
@@ -132,7 +110,7 @@ export async function prepareConnection(peer: Peer): Promise<ExtensionRuntimeSta
       distribution: 'python',
       version: release.version,
     })
-    if (waitingForRuntime(status)) return status
+    if (runtimeFailed(status) || waitingForRuntime(status)) return status
   }
   if (status.distribution !== 'python') throw new Error('The selected distribution is not Python.')
   const extension = await ExtensionModel.get(extensionName)
@@ -147,7 +125,7 @@ export async function prepareConnection(peer: Peer): Promise<ExtensionRuntimeSta
     const saved = await ExtensionModel.get(extensionName)
     if (!saved || savedPassword(saved) !== password)
       throw new Error('Password save could not be confirmed.')
-    if (waitingForRuntime(status)) return status
+    if (runtimeFailed(status) || waitingForRuntime(status)) return status
   }
   if (!runtimeReady(status)) {
     status = await manageExtensionOnPeer(peer.id, { action: 'enable', extension: extensionName })

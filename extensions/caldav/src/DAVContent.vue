@@ -53,8 +53,7 @@ function status(value: string) {
         <header>
           <p class="muted">
             {{ item.kind === 'vtodo' ? tr('Task', '任务') : tr('Event', '日程')
-            }}<span v-if="item.recurrenceId">
-              · {{ tr('Single occurrence exception', '单次重复例外') }}</span
+            }}<span v-if="item.recurrenceId"> · {{ tr('Recurrence exception', '重复例外') }}</span
             ><span v-else-if="item.recurrence.length">
               · {{ tr('Recurring series', '重复系列') }}</span
             >
@@ -109,23 +108,33 @@ function status(value: string) {
           >
           <template v-if="item.recurrence.length"
             ><dt>{{ tr('Recurrence rule', '重复规则') }}</dt>
-            <dd v-for="rule in item.recurrence" :key="rule">{{ rule }}</dd></template
+            <dd>
+              <div v-for="rule in item.recurrence" :key="rule">{{ rule }}</div>
+            </dd></template
           >
           <template v-if="item.excluded.length"
             ><dt>{{ tr('Excluded dates', '排除日期') }}</dt>
-            <dd v-for="value in item.excluded" :key="value">{{ value }}</dd></template
+            <dd>
+              <div v-for="value in item.excluded" :key="value">{{ value }}</div>
+            </dd></template
           >
           <template v-if="item.added.length"
             ><dt>{{ tr('Additional dates', '补充日期') }}</dt>
-            <dd v-for="value in item.added" :key="value">{{ value }}</dd></template
+            <dd>
+              <div v-for="value in item.added" :key="value">{{ value }}</div>
+            </dd></template
           >
           <template v-if="item.alarms.length"
             ><dt>{{ tr('Reminders', '提醒') }}</dt>
-            <dd v-for="value in item.alarms" :key="value">{{ value }}</dd></template
+            <dd>
+              <div v-for="value in item.alarms" :key="value">{{ value }}</div>
+            </dd></template
           >
           <template v-if="item.parents.length"
             ><dt>{{ tr('Related task UID', '关联任务 UID') }}</dt>
-            <dd v-for="value in item.parents" :key="value">{{ value }}</dd></template
+            <dd>
+              <div v-for="value in item.parents" :key="value">{{ value }}</div>
+            </dd></template
           >
         </dl>
         <p v-if="item.description" class="description">{{ item.description }}</p>

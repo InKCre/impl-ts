@@ -8,11 +8,9 @@ import {
   prepareConnection,
   readCandidates,
   readConnection,
-  runtimeReady,
-  savedPassword,
-  waitingForRuntime,
   type Candidate,
 } from './setup'
+import { runtimeFailed, runtimeReady, savedPassword, waitingForRuntime } from './setup-state'
 import { useText } from './locale'
 
 const emit = defineEmits<{ close: [] }>()
@@ -38,6 +36,7 @@ onUnmounted(() => {
 
 const candidate = computed(() => candidates.value.find((value) => value.peer.id === selected.value))
 const waiting = computed(() => waitingForRuntime(candidate.value?.status ?? null))
+const failed = computed(() => runtimeFailed(candidate.value?.status ?? null))
 const ready = computed(
   () => runtimeReady(candidate.value?.status ?? null) && !!connection.value && !!password.value
 )
@@ -138,8 +137,8 @@ async function prepare() {
     password.value = extension ? savedPassword(extension) : null
     if (waitingForRuntime(status)) {
       notice.value = tr(
-        'Installation is restarting the Peer. Refresh its status before continuing.',
-        '安装正在重启此 Peer。请刷新状态，重启结束后继续准备连接。'
+        'Installation or restart is in progress. Refresh its status before continuing.',
+        '此 Peer 正在安装或重启。请刷新状态，完成后继续准备连接。'
       )
     } else if (!runtimeReady(status)) {
       notice.value = tr(
@@ -212,11 +211,21 @@ onMounted(refresh)
         <p v-if="candidate?.status?.version" class="muted">
           Python {{ candidate.status.version }} ·
           {{
-            runtimeReady(candidate.status)
-              ? tr('Running', '运行中')
-              : waiting
-                ? tr('Restarting', '正在重启')
-                : tr('Not running', '未运行')
+            failed
+              ? tr('Failed', '失败')
+              : runtimeReady(candidate.status)
+                ? tr('Running', '运行中')
+                : waiting
+                  ? tr('Installing or restarting', '正在安装或重启')
+                  : tr('Not running', '未运行')
+          }}
+        </p>
+        <p v-if="failed" role="alert" class="error">
+          {{
+            tr(
+              'Installation or startup failed. Check this Peer in the extension card, then refresh.',
+              '安装或启动失败，请在扩展卡片中检查此 Peer，再刷新状态。'
+            )
           }}
         </p>
         <template v-if="!ready">
@@ -232,7 +241,7 @@ onMounted(refresh)
             native-type="submit"
             theme="primary"
             :text="tr('Prepare connection', '准备连接')"
-            :disabled="!candidate || !!busy || waiting || requiresRefresh"
+            :disabled="!candidate || !!busy || waiting || failed || requiresRefresh"
             :is-loading="busy === 'prepare'"
           />
         </template>

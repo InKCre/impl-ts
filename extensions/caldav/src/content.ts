@@ -116,8 +116,8 @@ function calendarItem(component: ICAL.Component): CalendarItem {
     completed: date(component, 'completed'),
     recurrenceId: date(component, 'recurrence-id'),
     recurrence: values(component, 'rrule'),
-    excluded: values(component, 'exdate'),
-    added: values(component, 'rdate'),
+    excluded: component.getAllProperties('exdate').map((property) => property.toICALString()),
+    added: component.getAllProperties('rdate').map((property) => property.toICALString()),
     duration: propertyText(component, 'duration'),
     alarms: component.getAllSubcomponents('valarm').map((alarm) =>
       ['trigger', 'action', 'description']

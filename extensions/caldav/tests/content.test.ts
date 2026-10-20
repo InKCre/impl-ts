@@ -54,8 +54,8 @@ test('floating and unknown TZID wall times are not converted; folded text and re
     ' continuation',
     'DTSTART;TZID=Custom/Zone:20261020T103000',
     'DTEND:20261020T113000',
-    'EXDATE:20261021T103000',
-    'RDATE:20261022T103000',
+    'EXDATE;VALUE=DATE:20261021',
+    'RDATE;TZID=America/New_York:20261022T103000',
     'DESCRIPTION:<script>alert(1)</script>\\nSecond line',
     'X-EXTRA:preserved',
     'END:VEVENT',
@@ -72,8 +72,8 @@ test('floating and unknown TZID wall times are not converted; folded text and re
     dateOnly: false,
   })
   assert.equal(item.end?.zone, 'floating')
-  assert.deepEqual(item.excluded, ['2026-10-21T10:30:00'])
-  assert.deepEqual(item.added, ['2026-10-22T10:30:00'])
+  assert.deepEqual(item.excluded, ['EXDATE;VALUE=DATE:20261021'])
+  assert.deepEqual(item.added, ['RDATE;TZID=America/New_York:20261022T103000'])
   assert.equal(item.description, '<script>alert(1)</script>\nSecond line')
   assert.equal(result.text, text)
 })
