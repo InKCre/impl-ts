@@ -83,6 +83,10 @@ configuration, authorization state, Sources or info-base content. Another Peer's
 `inkcre/caldav` 的 Web setup contribution 按选定 Python Peer 的实际运行状态准备连接。
 没有选择时才从该 Peer 自己的 Registry 选择发行版；安装返回重启状态后停止后续写入，
 要求刷新观察原目标。已有密码保持不变，缺失时才使用浏览器密码学随机数生成专用密码。
+首次发现发行版只接受目标 Peer override 或共享部署 Registry。Python override 可以是
+`null`，不能按 Web Peer 的完整配置 schema 校验；两处均未配置时要求明确设置目标地址，
+因为浏览器无法读取远程进程的环境默认，不能用自己的产品默认替代。下载期间阻止再次
+安装；`failed` 优先于待重启标志，恢复失败的 Peer 后才能继续。
 完成条件包括 `running`、与 selection 一致的 `loaded_version`，以及
 `caldav.connection.v1` 返回合法服务地址。启用意图不能替代运行事实。未知写入结果锁定
 原目标直到刷新成功，不重放请求；关闭后的回调不能更新向导状态。
