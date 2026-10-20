@@ -8,6 +8,7 @@ import {
   InkLoading,
   type JsonEditorValidation,
 } from '@inkcre/ui-web'
+import { toast } from '@/components/toast/toast'
 import { getExtensionHost, getExtensionRegistry, getExtensionSetupContribution } from '@/core'
 import { configStore, ExtensionRegistryOriginResolver, type Peer } from '@inkcre/core'
 import {
@@ -250,6 +251,7 @@ const onUninstall = async () => {
     await getExtensionHost().uninstall(props.extension.name)
     managementOpen.value = false
     emit('uninstalled')
+    toast.success(t('extension.uninstallSuccess'))
   } catch (error) {
     operationError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -259,20 +261,21 @@ const onUninstall = async () => {
 </script>
 
 <template>
-  <div class="extension-card">
-    <div class="extension-card__header">
-      <div class="flex flex-col">
-        <div class="flex flex-row items-center gap-2">
-          <span class="extension-card__id">{{ extension.name }}</span>
-          <span class="extension-card__version">v{{ extension.version }}</span>
-        </div>
-        <span v-if="extension.nickname" class="extension-card__nickname">
-          {{ extension.nickname }}
-        </span>
+  <article class="entity-card extension-card">
+    <header class="entity-card__header">
+      <div class="entity-card__title-group">
+        <h3 class="entity-card__title extension-card__title">
+          {{ extension.nickname ?? extension.name }}
+        </h3>
       </div>
+    </header>
+    <div class="entity-card__meta">
+      <code>{{ extension.name }}</code>
+      <span>v{{ extension.version }}</span>
+      <span>{{ t('extension.enabledPeerCount', { count: extension.enabled.length }) }}</span>
     </div>
 
-    <div class="extension-card__actions">
+    <div class="entity-card__actions extension-card__actions--primary">
       <InkButton
         :text="t('extension.enableOnPeers')"
         size="sm"
@@ -289,14 +292,21 @@ const onUninstall = async () => {
         "
         @click="openPeerDialog('disable')"
       />
+    </div>
+    <div class="entity-card__actions extension-card__actions--secondary">
       <InkButton
         v-if="setupContribution"
         :text="t('extension.setup')"
-        theme="primary"
         size="sm"
+        theme="subtle"
         @click="onSetupClick"
       />
-      <InkButton @click="onEditConfigClick" :text="t('extension.editConfig')" size="sm" />
+      <InkButton
+        @click="onEditConfigClick"
+        :text="t('extension.editConfig')"
+        size="sm"
+        theme="subtle"
+      />
       <InkButton
         :text="t('extension.versionAndRemoval')"
         size="sm"
@@ -304,9 +314,6 @@ const onUninstall = async () => {
         @click="openManagement"
       />
     </div>
-    <p class="extension-card__hint">
-      {{ t('extension.enabledPeerCount', { count: extension.enabled.length }) }}
-    </p>
     <InkDialog
       v-model="managementOpen"
       :title="t('extension.versionAndRemoval')"
@@ -497,7 +504,7 @@ const onUninstall = async () => {
       />
       <p v-if="operationError" role="alert" class="extension-card__error">{{ operationError }}</p>
     </InkDialog>
-  </div>
+  </article>
 </template>
 
 <style lang="scss" scoped src="./extensionCard.scss" />

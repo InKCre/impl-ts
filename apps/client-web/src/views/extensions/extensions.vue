@@ -290,10 +290,14 @@ onMounted(() => {
           v-else-if="extensionError && !extensions.length"
           state="error"
           :title="t('extension.installedUnavailable')"
-          :description="extensionError"
+          :description="t('extension.errorDescription')"
         >
           <template #actions>
             <InkButton :text="t('common.retry')" @click="refreshExtensions" />
+            <details class="extensions-view__error-details">
+              <summary>{{ t('common.errorDetails') }}</summary>
+              <code>{{ extensionError }}</code>
+            </details>
           </template>
         </InkPlaceholder>
         <InkPlaceholder

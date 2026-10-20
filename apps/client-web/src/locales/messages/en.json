@@ -218,6 +218,7 @@
     "desiredStateBrief": "Takes effect on next sync",
     "peerListUnavailable": "Unable to load the device list: {error}",
     "installedUnavailable": "Unable to load installed Extensions",
+    "errorDescription": "Failed to load the extension list. You can retry or view technical details.",
     "noneInstalled": "No Extensions installed",
     "noneInstalledDescription": "Browse the Registry to add an Extension.",
     "enabledPeerCount": "Enabled on {count} device(s).",

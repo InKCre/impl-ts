@@ -223,6 +223,7 @@
     "desiredStateBrief": "下次同步时生效",
     "peerListUnavailable": "无法读取设备列表：{error}",
     "installedUnavailable": "无法读取已安装扩展",
+    "errorDescription": "读取扩展列表时出错。你可以重试，或查看技术详情。",
     "noneInstalled": "还没有安装扩展",
     "noneInstalledDescription": "浏览扩展库，选择要安装的扩展。",
     "enabledPeerCount": "已在 {count} 台设备上启用。",
