@@ -54,9 +54,6 @@ export {
   PeerRequestNotExecuted,
   PEER_EXECUTION_HEADER,
   PEER_HTTP_PROTOCOL,
-  PEER_BROWSER_FORM_PROTOCOL,
-  PeerBrowserFormInboundParametersSchema,
-  type PeerBrowserFormInboundParameters,
   type CapabilityID,
   type JsonValue,
   type PeerProtocolRequest,
@@ -250,7 +247,6 @@ export {
 
 // Authentication
 export { authStore } from './auth'
-export { PeerAuth } from './auth/peer-browser-handoff'
 
 // Utils
 export {

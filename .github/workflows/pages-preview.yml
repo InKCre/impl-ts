@@ -98,31 +98,21 @@ jobs:
           cache: true
           cache-dependency-path: candidate/pdm.lock
 
-      - name: Prepare isolated Changesets preview candidate
-        id: prepared
+      - name: Install frozen preview toolchains
+        working-directory: candidate
         run: |
-          node controller/scripts/prepare-preview-versioned-candidate.mjs \
-            --source candidate \
-            --source-sha "${{ needs.identity.outputs.head_sha }}" \
-            --output "$RUNNER_TEMP/pages-preview-versioned-candidate" \
-            --metadata "$RUNNER_TEMP/pages-preview-versioned-candidate.json" \
-            --github-output "$GITHUB_OUTPUT"
+          pnpm install --frozen-lockfile
+          pdm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PDM_CHECK_UPDATE: 'false'
 
-      - name: Install frozen Python preview toolchain
-        working-directory: ${{ steps.prepared.outputs.candidate_path }}
-        run: pdm install --frozen-lockfile
-        env:
-          PDM_CHECK_UPDATE: 'false'
-
-      - name: Build the version-prepared preview SPA and Module Federation snapshots
-        working-directory: ${{ steps.prepared.outputs.candidate_path }}
+      - name: Build the exact-head SPA and Module Federation snapshots
+        working-directory: candidate
         run: pnpm build
 
       - name: Build the same-origin Preview Registry facade
-        working-directory: ${{ steps.prepared.outputs.candidate_path }}
+        working-directory: candidate
         env:
           PREVIEW_ORIGIN: https://preview-client-web-pr-${{ needs.identity.outputs.pull_number }}.${{ vars.CLOUDFLARE_PAGES_PROJECT }}.pages.dev
         run: |
@@ -141,21 +131,13 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           packageManager: pnpm
           wranglerVersion: 4.114.0
-          workingDirectory: ${{ steps.prepared.outputs.candidate_path }}
+          workingDirectory: candidate
           command: >-
-            pages deploy "${{ github.workspace }}/.pages-preview"
+            pages deploy ../.pages-preview
             --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }}
             --branch=${{ needs.identity.outputs.branch }}
             --commit-hash=${{ needs.identity.outputs.head_sha }}
-            --commit-dirty=true
-
-      - name: Record derived Changesets candidate provenance
-        run: |
-          {
-            echo '## Isolated version-prepared candidate'
-            echo
-            cat "$RUNNER_TEMP/pages-preview-versioned-candidate.json"
-          } >> "$GITHUB_STEP_SUMMARY"
+            --commit-dirty=false
 
       - name: Report preview links
         run: node controller/scripts/report-pages-preview.mjs

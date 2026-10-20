@@ -265,12 +265,6 @@ async function beginOAuth(): Promise<void> {
     void pollTransaction(transaction.value.id)
   })
 }
-async function connectXMonkey(): Promise<void> {
-  if (!api.value || !selectedCandidate.value?.xMonkeySessionAvailable) return
-  await run('connect-x-monkey', async () => {
-    await api.value!.connectXMonkey()
-  })
-}
 async function disconnect(): Promise<void> {
   if (!api.value) return
   await run('disconnect', async () => {
@@ -526,20 +520,15 @@ onBeforeUnmount(() => {
       <section v-if="status?.x_monkey_base_url" class="twitter-setup__x-monkey">
         <h3>Connect x-monkey storage</h3>
         <p class="twitter-setup__hint">
-          This connects the selected Core to x-monkey with a fresh InKCre Peer credential. It is
-          separate from X bookmark authorization.
+          Open the selected Core's x-monkey account page to connect this browser. This is separate
+          from X bookmark authorization.
         </p>
         <p v-if="status?.x_monkey_base_url" class="twitter-setup__hint">
           x-monkey service address: <code>{{ status.x_monkey_base_url }}</code>
         </p>
-        <InkButton
-          v-if="selectedCandidate?.xMonkeySessionAvailable"
-          text="Connect x-monkey"
-          theme="subtle"
-          :is-loading="pending === 'connect-x-monkey'"
-          :disabled="busy"
-          @click="connectXMonkey"
-        />
+        <a :href="`${status.x_monkey_base_url}/account`" target="_blank" rel="noopener noreferrer"
+          >Open x-monkey account</a
+        >
       </section>
     </template>
     <div class="twitter-setup__toolbar">

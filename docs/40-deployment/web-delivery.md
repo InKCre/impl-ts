@@ -111,10 +111,8 @@ identity; never substitute the current controller SHA or overwrite an existing t
 [`.github/workflows/pages-preview.yml`](../../.github/workflows/pages-preview.yml) owns previews for
 open, same-repository pull requests targeting `main`; fork pull requests are ineligible. The
 `pull_request_target` controller checks out its trusted default-branch revision separately from the
-exact candidate head, exports that exact commit to a runner-temporary directory, prepares an isolated
-versioned candidate with the frozen pnpm and PDM environments, builds its SPA and selected Module
-Federation snapshots, and uses
-`inkcre-ext preview build` with the explicit
+exact candidate head, installs the candidate's frozen pnpm and PDM environments, builds its SPA and
+selected Module Federation snapshots, and uses `inkcre-ext preview build` with the explicit
 `.github/preview/extensions.json` inventory to add a same-origin static Registry facade. The
 current inventory includes the Twitter and Mail Module Federation distributions. Before
 deployment it revalidates that the PR is still open and its identity and head SHA have not changed.
@@ -130,34 +128,6 @@ Because `pull_request_target` uses the trusted base workflow, reporting changes 
 they reach `main`; they cannot rewrite summaries of completed runs. It does not turn edge propagation,
 deep route traversal, cache behavior, or byte comparison into synchronous delivery gates; consumer
 acceptance is a separate black-box activity.
-
-Before building, Pages preview exports the exact candidate commit with `git archive` to a
-runner-temporary directory and runs the existing `pnpm install --frozen-lockfile` and
-`pnpm release:version` commands there. Uncommitted and untracked checkout files are excluded. This
-isolated Changesets preparation lets the preview validate coupled Host and Module Federation version
-ranges from pending changesets (for example, a Twitter MF requiring Core 0.4.1). It does not modify
-the pull-request checkout, create a Version PR, publish a Registry Release, or change the formal
-release workflow. The job summary records the source SHA, a digest and filenames of the pending
-changeset inputs, the preparation commands, and the generated package versions. The deployed bytes
-are therefore a derived preview candidate based on the exact PR head, not bytes built directly from
-that commit; Wrangler marks the deployment dirty while retaining the PR source SHA for association.
-
-This workflow is `pull_request_target`: its YAML and controller script are loaded from the trusted
-base revision, not from the PR being previewed. A PR that changes this preparation behavior must
-first land in the trusted base before its new behavior can run. To reproduce a preview locally, run
-the following from the trusted controller checkout, then build the SPA, producer and facade from the
-reported candidate directory:
-
-```sh
-node scripts/prepare-preview-versioned-candidate.mjs \
-  --source <clean-checkout> \
-  --source-sha <full-sha> \
-  --output <new-temp-directory> \
-  --metadata <metadata.json>
-```
-
-The command accepts the same source SHA the workflow resolved and never writes package versions or
-generated changelogs back into that checkout.
 
 When an eligible internal PR closes, [`.github/workflows/pages-cleanup.yml`](../../.github/workflows/pages-cleanup.yml)
 replaces only that exact preview alias with a closed-page tombstone. Manual cleanup accepts an

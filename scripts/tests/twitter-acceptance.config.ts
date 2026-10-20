@@ -11,7 +11,8 @@ export default defineConfig({
       testMatch: 'twitter-info-base.spec.ts',
       use: {
         baseURL: process.env.INKCRE_E2E_WEB_URL,
-        // The explicit form POST carries a Peer JWT; traces persist request bodies.
+        storageState: { cookies: [], origins: [] },
+        // Connection inputs and signed credentials must not enter trace artifacts.
         trace: 'off',
       },
     },
