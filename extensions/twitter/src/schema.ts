@@ -1,15 +1,15 @@
 import { z } from 'zod'
 
 /**
- * X 归档模型（v2）。
+ * inkcre/twitter 的共同持久模型。
  *
- * 同一份结构同时用作 x-monkey 内存库记录、提交给 tweet-db 的线上格式，
- * 以及 tweet-db 原样保存的 source object。设计说明见 `design/x-archive-model.md`。
+ * Python 与 Module Federation Distribution 使用相同的 User、Post、Media 内容及引用结构。
+ * 采集适配器负责将外部协议转成这些记录；读取端不依赖采集工具的 DTO 或响应结构。
  *
  * 约定：
  * 1. 只有 `User`、`Post`、`Media` 三类独立实体，跨实体只用 ID 引用。
- * 2. 字段缺省表示“未知”：不写 `null`，不写空数组；合并时有值覆盖、缺省保留，数组整体替换。
- * 3. 文本区间为 Unicode 码点的半开区间 `[start, end)`。
+ * 2. 字段缺省表示“未知”：不写 `null`，不写空数组；只知 ID 的引用可存为身份占位记录。
+ * 3. RichText 区间为 Unicode 码点半开区间 `[start, end)`；文章区间单独使用偏移和长度。
  * 4. 时间为 UTC ISO-8601；X 提供的时间为秒精度，计数采集时间保留毫秒；ID 为十进制字符串。
  * 5. 只存事实：不存观察者状态、UI 开关和可由其他字段推出的数据。
  */
@@ -96,7 +96,7 @@ export const UserCountsObservedAtSchema = strictObject({
 })
 export type UserCountsObservedAt = z.infer<typeof UserCountsObservedAtSchema>
 
-/** 账号标签，来源 `affiliates_highlighted_label.label`。 */
+/** 账号的机构或自动化运营者标签。 */
 export const AffiliationSchema = strictObject({
   name: z.string(),
   url: z.string().optional(),
@@ -125,7 +125,7 @@ export const UserSchema = strictObject({
   sensitive: z.boolean().optional(),
   /** 打开主页前的警示页类型，样本值 `sensitive_media`。 */
   interstitial: z.string().optional(),
-  /** 账号被限制显示的国家或地区代码（`withheld_in_countries`），样本值 `SA`、`AE`。 */
+  /** 账号被限制显示的国家或地区代码，样本值 `SA`、`AE`。 */
   withheldIn: z.array(z.string()).min(1).optional(),
   verified: strictObject({
     blue: z.boolean().optional(),
@@ -160,9 +160,9 @@ export const MediaSchema = strictObject({
   width: count.optional(),
   height: count.optional(),
   alt: z.string().optional(),
-  /** 平台给出的裁切建议框，来源 `original_info.focus_rects`。 */
+  /** 原图尺寸下的平台裁切建议框。 */
   crops: z.array(RectSchema).min(1).optional(),
-  /** 原图尺寸下的人脸框，来源 `features.orig.faces`。 */
+  /** 原图尺寸下的人脸框。 */
   faces: z.array(RectSchema).min(1).optional(),
   tags: z
     .array(strictObject({ userId: IdSchema, handle: z.string().optional() }))
@@ -178,11 +178,10 @@ export const MediaSchema = strictObject({
   /** `adult_content`、`graphic_violence`、`other`。 */
   sensitive: z.array(z.string()).min(1).optional(),
   /**
-   * `ext_media_availability` 不为 `Available` 时记录：有原因时为原因（样本值 `Geoblocked`，
-   * 即采集时所在地区不可用），否则为状态。
+   * 媒体不可用时的原因或状态，如 `Geoblocked` 表示采集时所在地区不可用。
    */
   unavailable: z.string().optional(),
-  /** 发布方视频的标题、描述与跳转链接，来源 `additional_media_info`。 */
+  /** 发布方视频的标题、描述与跳转链接。 */
   title: z.string().optional(),
   description: z.string().optional(),
   link: z.string().optional(),
@@ -194,7 +193,7 @@ export const PollSchema = strictObject({
   endsAt: InstantSchema.optional(),
   /** 票数是否为最终结果。 */
   final: z.boolean().optional(),
-  /** X 给出的票数更新时间（`last_updated_datetime_utc`），不是采集时间。 */
+  /** 平台给出的票数更新时间，不是采集时间。 */
   updatedAt: InstantSchema.optional(),
 })
 export type Poll = z.infer<typeof PollSchema>
@@ -223,14 +222,14 @@ export const CardSchema = strictObject({
     width: count.optional(),
     height: count.optional(),
   }).optional(),
-  /** 仅 `poll2choice_text_only`、`poll4choice_text_only` 解析；其他投票模板的值留在 `extra`。 */
+  /** 已建模的投票选项和结果。 */
   poll: PollSchema.optional(),
-  /** 其余未建模的字符串与布尔绑定值（如 `app_*`、`unified_card`），保证信息不丢。 */
+  /** 尚未建模的卡片附加文本和布尔元数据。 */
   extra: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
 })
 export type Card = z.infer<typeof CardSchema>
 
-/** Draft.js 区间 `[offset, length, value]`，单位与 X 原始数据一致。 */
+/** 文章区间 `[offset, length, value]`，偏移和长度保留文章正文的原始编码单位。 */
 const ArticleSpanSchema = <T extends z.ZodType>(value: T) => z.tuple([count, count, value])
 
 export const ArticleBlockSchema = strictObject({
@@ -251,9 +250,9 @@ export const ArticleSchema = strictObject({
   coverMediaId: IdSchema.optional(),
   publishedAt: InstantSchema.optional(),
   modifiedAt: InstantSchema.optional(),
-  /** 正文，仅推文详情响应提供。 */
+  /** 已采集的文章正文；缺省表示尚未取得。 */
   blocks: z.array(ArticleBlockSchema).min(1).optional(),
-  /** Draft.js entityMap：`LINK`、`MEDIA`、`MARKDOWN`、`TWEMOJI` 等。 */
+  /** 文章实体，如 `LINK`、`MEDIA`、`MARKDOWN`、`TWEMOJI`。 */
   entities: z
     .array(strictObject({ type: z.string(), data: z.record(z.string(), z.unknown()) }))
     .min(1)
@@ -342,7 +341,7 @@ export const PostSchema = strictObject({
     url: z.string().optional(),
   }).optional(),
   sensitive: z.boolean().optional(),
-  /** 媒体或卡片前的内容警告（`mediaVisibilityResults.blurred_image_interstitial`）。 */
+  /** 媒体或卡片前的内容警告。 */
   contentWarning: strictObject({
     /** 如 `Content warning: Sensitive content`。 */
     title: z.string(),
@@ -364,13 +363,6 @@ export const PostSchema = strictObject({
   }).optional(),
 })
 export type Post = z.infer<typeof PostSchema>
-
-/** 一次采集或提交的实体集合。 */
-export interface ArchiveBatch {
-  users: User[]
-  posts: Post[]
-  media: Media[]
-}
 
 /** Legacy records stay readable after new captures move to the native v2 shape. */
 export const TweetSchema = z.object({

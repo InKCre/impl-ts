@@ -16,6 +16,7 @@ import {
   PeerManager,
   PeerProtocolRequestSchema,
   PeerProtocolResponseSchema,
+  PeerAuth,
   Source,
   SourceForm,
   type InstalledExtension,
@@ -27,6 +28,7 @@ import { z } from 'zod'
 const EXTENSION_NAME = 'inkcre/twitter'
 const EXTENSION_MANAGEMENT_CAPABILITY = 'core.extension.management.v2'
 const TWITTER_SETUP_STATUS_CAPABILITY = 'inkcre.twitter.setup.status.v1'
+const TWITTER_X_MONKEY_SESSION_CAPABILITY = 'inkcre.twitter.x-monkey.session.v1'
 const TWITTER_OAUTH_APP_CONFIGURE_CAPABILITY = 'inkcre.twitter.oauth-app.configure.v1'
 const TWITTER_OAUTH_BEGIN_CAPABILITY = 'inkcre.twitter.oauth.begin.v1'
 const TWITTER_OAUTH_TRANSACTION_READ_CAPABILITY = 'inkcre.twitter.oauth.transaction.read.v1'
@@ -90,6 +92,7 @@ export interface CorePeerCandidate {
   extension: InstalledExtension
   enabled: boolean
   setupAvailable: boolean
+  xMonkeySessionAvailable: boolean
 }
 
 function advertises(peer: Peer, capability: string): boolean {
@@ -127,6 +130,7 @@ export async function discoverCoreCandidates(signal?: AbortSignal): Promise<Core
         (row) => row.name === EXTENSION_NAME && row.peer_id === peer.id && row.enabled
       ),
       setupAvailable: advertises(peer, TWITTER_SETUP_STATUS_CAPABILITY),
+      xMonkeySessionAvailable: advertises(peer, TWITTER_X_MONKEY_SESSION_CAPABILITY),
     }))
 }
 
@@ -217,6 +221,10 @@ export class TwitterSetupAPI {
       TwitterSetupStatusSchema,
       signal
     )
+  }
+
+  connectXMonkey() {
+    return PeerAuth.navigateWithCredential(this.peer.id, TWITTER_X_MONKEY_SESSION_CAPABILITY)
   }
 }
 

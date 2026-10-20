@@ -24,6 +24,7 @@ export type CapabilityID = string
 export type PeerProtocolID = string
 
 export const PEER_HTTP_PROTOCOL = 'core.peer.protocol.http.v1'
+export const PEER_BROWSER_FORM_PROTOCOL = 'core.peer.protocol.browser-form.v1'
 export const PEER_EXECUTION_HEADER = 'InkCre-Peer-Execution'
 export const PEER_NOT_EXECUTED = 'not-executed'
 
@@ -53,6 +54,34 @@ export const PeerCapabilitySnapshotSchema = z
   })
 
 export type PeerCapabilityAdvertisement = z.infer<typeof PeerCapabilityAdvertisementSchema>
+
+/** A capability the Host can invoke through a top-level browser form POST. */
+export const PeerBrowserFormInboundParametersSchema = z
+  .object({
+    method: z.literal('POST'),
+    path: z
+      .string()
+      .max(2048)
+      .regex(/^(?:\/[A-Za-z0-9_-]+)+$/),
+    credential_field: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+  })
+  .strict()
+  .superRefine(({ credential_field }, context) => {
+    if (
+      new Set(['action', 'enctype', 'method', 'requestSubmit', 'submit', 'target']).has(
+        credential_field
+      )
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Credential field cannot shadow browser form controls',
+      })
+    }
+  })
+
+export type PeerBrowserFormInboundParameters = z.infer<
+  typeof PeerBrowserFormInboundParametersSchema
+>
 
 const NormalizedMultimapSchema = z
   .record(z.string().min(1), z.array(z.string()))

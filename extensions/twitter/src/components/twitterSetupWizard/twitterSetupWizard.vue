@@ -10,7 +10,7 @@ import {
   InkPicker,
   type DropdownOption,
 } from '@inkcre/ui-web'
-import { authStore, type Cron, type Source } from '@inkcre/core'
+import { type Cron, type Source } from '@inkcre/core'
 import {
   discoverCoreCandidates,
   readTwitterOAuthAppConfig,
@@ -266,29 +266,9 @@ async function beginOAuth(): Promise<void> {
   })
 }
 async function connectXMonkey(): Promise<void> {
-  const base = status.value?.x_monkey_base_url
-  if (!base) return
+  if (!api.value || !selectedCandidate.value?.xMonkeySessionAvailable) return
   await run('connect-x-monkey', async () => {
-    // Explicit user action mints a fresh Peer JWT, then sends it only in a
-    // top-level form POST so Core can set its own HttpOnly session cookie.
-    const token = await authStore.refreshToken()
-    const target = new URL(base)
-    const basePath = target.pathname.replace(/\/+$/, '')
-    target.pathname = `${basePath}/session`
-    target.search = ''
-    target.hash = ''
-    const form = document.createElement('form')
-    form.method = 'post'
-    form.enctype = 'application/x-www-form-urlencoded'
-    form.action = target.toString()
-    const tokenField = document.createElement('input')
-    tokenField.type = 'hidden'
-    tokenField.name = 'token'
-    tokenField.value = token
-    form.append(tokenField)
-    document.body.append(form)
-    form.submit()
-    form.remove()
+    await api.value!.connectXMonkey()
   })
 }
 async function disconnect(): Promise<void> {
@@ -549,10 +529,11 @@ onBeforeUnmount(() => {
           This connects the selected Core to x-monkey with a fresh InKCre Peer credential. It is
           separate from X bookmark authorization.
         </p>
-        <p class="twitter-setup__hint">
+        <p v-if="status?.x_monkey_base_url" class="twitter-setup__hint">
           x-monkey service address: <code>{{ status.x_monkey_base_url }}</code>
         </p>
         <InkButton
+          v-if="selectedCandidate?.xMonkeySessionAvailable"
           text="Connect x-monkey"
           theme="subtle"
           :is-loading="pending === 'connect-x-monkey'"

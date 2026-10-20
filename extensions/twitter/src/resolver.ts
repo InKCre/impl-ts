@@ -284,20 +284,16 @@ export class ArchiveMediaResolver extends Resolver<string, MediaRecord> {
   async loadContent(_options: ProjectionOptions = {}): Promise<ArchiveMediaContentModel> {
     const media = await this.getSolvedContent(_options)
     if (!isMedia(media)) return { media, content: null }
-    const source =
-      media.type === 'photo' ? safeCdnUrl(media.url, 'pbs.twimg.com') : bestVideoUrl(media)
+    const source = media.type === 'photo' ? media.url : bestVideoUrl(media)
     if (!source) return { media, content: null }
 
-    const bytes = await new HttpStorage({
-      type: 'http',
-      config: { follow_redirects: false },
-    }).getRawContent({
+    const bytes = await new HttpStorage({ type: 'http', config: {} }).getRawContent({
       id: this.block.id,
       storage: null,
-      content: source.toString(),
+      content: source,
     })
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
-    const mediaType = media.type === 'photo' ? imageMediaType(source) : 'video/mp4'
+    const mediaType = media.type === 'photo' ? imageMediaType(new URL(source)) : 'video/mp4'
     this.objectUrl = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mediaType }))
     const byteContent = {
       content: bytes,
@@ -336,30 +332,11 @@ export class ArchiveMediaResolver extends Resolver<string, MediaRecord> {
   }
 }
 
-function safeCdnUrl(value: string, hostname: 'pbs.twimg.com' | 'video.twimg.com'): URL | null {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' &&
-      url.hostname === hostname &&
-      (!url.port || url.port === '443') &&
-      !url.username &&
-      !url.password
-      ? url
-      : null
-  } catch {
-    return null
-  }
-}
-
-function bestVideoUrl(media: Media): URL | null {
+function bestVideoUrl(media: Media): string | null {
   const variants = [...(media.video?.variants ?? [])]
-    .filter((variant) => variant.type === 'video/mp4')
+    .filter((variant) => variant.type === 'video/mp4' && variant.url.trim().length > 0)
     .sort((left, right) => (right.bitrate ?? -1) - (left.bitrate ?? -1))
-  for (const variant of variants) {
-    const url = safeCdnUrl(variant.url, 'video.twimg.com')
-    if (url) return url
-  }
-  return null
+  return variants[0]?.url ?? null
 }
 
 function imageMediaType(url: URL): string {

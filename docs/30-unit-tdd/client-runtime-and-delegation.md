@@ -124,7 +124,16 @@ against the original database connection.
 
 The browser signer backdates `iat` by five seconds and derives `exp` from that adjusted value. This
 absorbs ordinary sub-second or small deployment clock skew at the authentication boundary without
-increasing the shared maximum lifetime or leaking retries into PostgREST/domain callers.
+moving retries into PostgREST/domain callers. The lifetime is the browser signer's policy;
+database admission does not impose a shared maximum lifetime.
+
+## 浏览器凭据交接
+
+`PeerAuth.navigateWithCredential(peerRef, capabilityId)` 是 Host/Auth 拥有的显式导航入口，遵循共享的 [browser-form 协议](../_shared/20-product-tdd/semantic-retrieval-and-peer-capabilities.md#浏览器凭据交接协议-v1)。它按精确所选 Peer 的数据库 live lease 与 capability advertisement 查找 `core.peer.protocol.browser-form.v1`，不换 Peer、不自动重试，也不通过 `PeerManager.delegate` 的 HTTP 请求／响应 envelope 传输凭据。
+
+Host 校验 descriptor 的 `method="POST"`、受限路由 `path` 和 `credential_field`，从该 Peer 的 `config.http_public_base_url` 取 HTTPS origin 及路径前缀，排除 userinfo/query/fragment 后追加广告路径。调用者不传任意目标 URL 或原始 token。Host 在这个显式动作内部调用 `authStore.refreshToken()`，以 URL-encoded、`target=_top` 表单投递新鲜 JWT；凭据只进入表单 body，不返回 UI 或进入 URL。
+
+返回的 `initiated` 只表示表单导航已发起，不是远端已连接或操作成功。Twitter Setup 只提交所选 Peer 与 `inkcre.twitter.x-monkey.session.v1` 的意图；setup 状态里的 `x_monkey_base_url` 只供用户复制，连接按钮独立按所选 Peer 的精确能力广告显示。Twitter 的接收路由仍拥有 7 天默认会话、Cookie 和续签，实际结果由它的账户页及脚本会话检测确认。此 Host API 随 `@inkcre/core` SDK `0.4.1` 提供，需要它的分发须声明相应最低兼容版本。
 
 ## Browser Background Participation
 

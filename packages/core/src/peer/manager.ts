@@ -8,6 +8,7 @@ import {
   DuplicatePeerRegistrationError,
   type JsonValue,
   type PeerOutbound,
+  type PeerCapabilityAdvertisement,
   PeerOutcomeUnknown,
   PeerProtocolConfigurationError,
   PeerRequestNotExecuted,
@@ -98,6 +99,34 @@ export class PeerManager {
       .order('name', { ascending: true })
     if (result.error) throw new APIError(result.error.message, result.status, result.error)
     return (result.data ?? []).map((row) => Peer.parse(row))
+  }
+
+  /** Resolve one exact, currently leased Peer capability without candidate fallback. */
+  static async resolveLiveCapability(
+    peerRef: PeerRef,
+    capability: CapabilityID
+  ): Promise<{ peer: Peer; advertisement: PeerCapabilityAdvertisement }> {
+    const result = await Peer.dbApi
+      .from()
+      .select()
+      .eq('id', peerRef)
+      .gt('lease_expires_at', 'now')
+      .maybeSingle()
+    if (result.error) throw new APIError(result.error.message, result.status, result.error)
+    if (!result.data) {
+      throw new CapabilityDelegationUnavailable(`Selected Peer ${peerRef} is not live`)
+    }
+    const peer = Peer.parse(result.data)
+    if (peer.id === PeerManager.getCurrentPeerRef()) {
+      throw new CapabilityDelegationUnavailable('Browser handoff must target a remote Peer')
+    }
+    const advertisement = peer.capabilitySnapshot().find(({ id }) => id === capability)
+    if (!advertisement) {
+      throw new CapabilityDelegationUnavailable(
+        `Selected Peer ${peerRef} does not advertise capability ${capability}`
+      )
+    }
+    return { peer, advertisement }
   }
 
   private static async candidates(
