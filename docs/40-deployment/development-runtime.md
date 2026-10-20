@@ -110,6 +110,11 @@ which proves the checked client remains compatible with current delivery. A brea
 revision requires the coordinated producer-first migration defined by the shared contract.
 Pull-request evidence does not establish source-branch or migration equality between repositories.
 
+尚未发布的候选 Core 可用 `pnpm contract:sync --image sha256:<完整的本地镜像 ID>` 生成投影，再用相同参数追加
+`--check` 核对。镜像必须已存在于所选 local/ssh Docker daemon，工具核对 ID 并使用同一不可变镜像创建、清理
+独占的 typegen 数据库，不接受可移动 tag，也不会拉取本地 ID。此入口不支持 external provider；需选择构建候选的
+同一 provider。`contracts/core-release.json` 仍只接纳已发布的 GHCR digest，本地生成不能代替发布产物验收。
+
 ## Operator Commands
 
 Run these from the repository root; [`package.json`](../../package.json) owns their exact carriers.
@@ -126,3 +131,16 @@ pnpm db:reset
 pnpm contract:sync
 pnpm test:e2e
 ```
+
+Twitter 与本地 Core 镜像的候选验收保存在 `scripts/tests/`，不加入默认 `check`、`test:e2e` 或 CI 门禁。可独立执行：
+
+```bash
+pnpm verify:core-release
+pnpm verify:twitter --list
+pnpm verify:twitter
+```
+
+Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter MF 产物，并设置
+`INKCRE_E2E_CORE_URL`、`INKCRE_E2E_POSTGREST_URL`、`INKCRE_E2E_WEB_URL`、
+`INKCRE_E2E_JWT_SECRET`。它会安装或启用浏览器 Peer 的 Twitter 扩展、写入测试数据并提交词法索引 Job，
+不会自动清理数据；应使用独立验收信息库。截图保存在 `test-results/twitter-acceptance/`。

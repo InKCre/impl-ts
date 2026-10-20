@@ -138,3 +138,7 @@ Producers emit exact, versioned Resolver IDs; keep protocol/source identity and 
 in canonical metadata/root Blocks; put actual media or document bytes in a semantic content Block;
 and represent associations with Relations. They never encode attachment identity into root
 content or choose a semantic Storage type. Storage remains bytes-only mechanics.
+
+只捕获媒体元数据的归档不需要预建持久语义内容 Block。`inkcre/twitter` 保存共同模型的 Media 记录，不建立 Media-to-content Relation；列表、文本投影和索引只读取已有元数据。用户明确展开后，Twitter Resolver 选择图片 URL 或最高码率的可用 MP4，再交给现有 `HttpStorage` 按通用 HTTP(S)、超时、字节上限和重定向规则读取。它不另设 CDN、端口或重定向政策，读取也不持久化媒体字节。
+
+媒体显示使用运行态 Object URL，随 Resolver 刷新、释放和缓存替换撤销。协议 DTO、provider 响应及共同信息模型的转换属于 Twitter 适配器，不能让客户端协议字段集变成 info-base 或 Resolver 的持久数据权威。

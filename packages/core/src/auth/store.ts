@@ -4,6 +4,7 @@ import { configStore } from '../config'
 import { peerJwtContract } from '../database'
 
 const JWT_CLOCK_SKEW_SECONDS = 5
+const WEB_PEER_JWT_DEFAULT_LIFETIME_SECONDS = 86_400
 
 export async function signDatabaseToken(jwtSecret: string): Promise<string> {
   if (!jwtSecret) throw new Error('JWT_SECRET not configured')
@@ -14,7 +15,7 @@ export async function signDatabaseToken(jwtSecret: string): Promise<string> {
   return new SignJWT({ role: peerJwtContract.role })
     .setProtectedHeader({ alg: peerJwtContract.algorithm })
     .setIssuedAt(issuedAt)
-    .setExpirationTime(issuedAt + peerJwtContract.maximum_lifetime_seconds)
+    .setExpirationTime(issuedAt + WEB_PEER_JWT_DEFAULT_LIFETIME_SECONDS)
     .setIssuer(peerJwtContract.issuer)
     .setAudience(peerJwtContract.audience)
     .sign(secret)

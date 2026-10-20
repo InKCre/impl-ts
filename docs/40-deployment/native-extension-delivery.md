@@ -45,6 +45,18 @@ The Web workflow does not read Core source or a Core version plan. Python public
 selects nor waits for MF, and MF publication neither selects nor waits for Python. Host SDK ranges
 remain native loading requirements; they do not describe cross-distribution business compatibility.
 
+Pages pull-request previews are the deliberate exception to building directly from pending package
+versions: the trusted preview controller runs the existing Changesets version command in an isolated
+copy so the preview can load a mutually compatible Host and MF when a change raises the MF's minimum
+Host SDK. This produces temporary derived versions for preview only. It neither consumes the pending
+changesets in the PR nor replaces the normal Version PR and protected-main release lifecycle.
+
+The Workspace contract check applies the same preparation after `pnpm check` has validated the
+original checkout. It builds the isolated candidate Host and MF before inspecting the native
+snapshot, and records the exact checked-out commit SHA in the job summary. For pull requests that
+SHA can be GitHub's synthetic merge commit; it identifies the source actually exported by
+`git archive`, while static, typed, and package checks still run on the original checkout first.
+
 A plugin owns compatibility of its shared configuration, state, Source/Job parameters and stored
 information. Changesets record MF changes even when no Python change is necessary. Published native
 coordinates and saved candidate bytes are immutable; repairs require a new native version.

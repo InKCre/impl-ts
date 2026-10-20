@@ -228,7 +228,7 @@ export async function runtimeState(instance, { create = false } = {}) {
   )
   const runDocker = (args, options) => runDatabaseDocker(provider, args, options)
   const release = process.env.INKCRE_CORE_IMAGE
-    ? inspectCoreRelease(runDocker, process.env.INKCRE_CORE_IMAGE)
+    ? inspectCoreRelease(runDocker, process.env.INKCRE_CORE_IMAGE, { allowLocalImage: true })
     : resolveConfiguredCoreRelease(runDocker, releaseConfig)
   const localPorts = {
     postgres: await availablePort(),

@@ -10,7 +10,7 @@ import {
   InkPicker,
   type DropdownOption,
 } from '@inkcre/ui-web'
-import type { Cron, Source } from '@inkcre/core'
+import { type Cron, type Source } from '@inkcre/core'
 import {
   discoverCoreCandidates,
   readTwitterOAuthAppConfig,
@@ -517,6 +517,19 @@ onBeforeUnmount(() => {
           />
         </div>
       </div>
+      <section v-if="status?.x_monkey_base_url" class="twitter-setup__x-monkey">
+        <h3>Connect x-monkey storage</h3>
+        <p class="twitter-setup__hint">
+          Open the selected Core's x-monkey account page to connect this browser. This is separate
+          from X bookmark authorization.
+        </p>
+        <p v-if="status?.x_monkey_base_url" class="twitter-setup__hint">
+          x-monkey service address: <code>{{ status.x_monkey_base_url }}</code>
+        </p>
+        <a :href="`${status.x_monkey_base_url}/account`" target="_blank" rel="noopener noreferrer"
+          >Open x-monkey account</a
+        >
+      </section>
     </template>
     <div class="twitter-setup__toolbar">
       <InkButton text="Close" theme="subtle" :disabled="busy" @click="close" />

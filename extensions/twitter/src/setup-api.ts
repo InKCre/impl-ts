@@ -8,11 +8,11 @@ import {
 import {
   ExtensionParticipationModel,
   ExtensionRegistryOriginResolver,
-  configStore,
   Cron,
   CronForm,
   ExtensionModel,
   Peer,
+  PeerConfigSchema,
   PeerManager,
   PeerProtocolRequestSchema,
   PeerProtocolResponseSchema,
@@ -53,6 +53,7 @@ const HttpsUrlSchema = z
 
 export const TwitterSetupStatusSchema = z.object({
   callback_url: HttpUrlSchema,
+  x_monkey_base_url: HttpsUrlSchema.nullable().optional(),
   connected: z.boolean(),
   user_id: z.string().nullable(),
   handle: z.string().nullable(),
@@ -135,8 +136,9 @@ export class TwitterSetupAPI {
   async enableCore(signal?: AbortSignal): Promise<ExtensionRuntimeStatus> {
     const existing = await ExtensionParticipationModel.get(this.peer.id, EXTENSION_NAME)
     if (!existing) {
+      const peerConfig = PeerConfigSchema.parse(this.peer.config)
       const origin = await new ExtensionRegistryOriginResolver(
-        () => configStore.peerConfig.extension_registry_url
+        () => peerConfig.extension_registry_url
       ).resolve()
       const reader = new RegistryReleaseReader({
         registryOrigin: origin,

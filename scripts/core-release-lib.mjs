@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 
 const stableImagePattern = /^ghcr\.io\/inkcre\/impl-py:stable$/
 const digestPattern = /^ghcr\.io\/inkcre\/impl-py@sha256:[0-9a-f]{64}$/
+const localImageIdPattern = /^sha256:[0-9a-f]{64}$/
 const sourceRevisionPattern = /^[0-9a-f]{40}$/
 const sha256Pattern = /^[0-9a-f]{64}$/
 
@@ -194,9 +195,14 @@ export function resolveCoreRelease(runDocker, stableImage) {
   return inspectCoreRelease(runDocker, image)
 }
 
-export function inspectCoreRelease(runDocker, image) {
-  if (!digestPattern.test(image)) {
+export function inspectCoreRelease(runDocker, image, { allowLocalImage = false } = {}) {
+  const localImage = allowLocalImage && localImageIdPattern.test(image)
+  if (!digestPattern.test(image) && !localImage) {
     throw new Error(`core release must be digest-pinned: ${image}`)
+  }
+  if (localImage) {
+    const actualId = runDocker(['image', 'inspect', '--format={{.Id}}', image]).trim()
+    if (actualId !== image) throw new Error('local Core image identity does not match')
   }
   const manifest = validateSchemaManifest(
     JSON.parse(
