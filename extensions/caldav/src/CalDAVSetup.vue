@@ -10,7 +10,13 @@ import {
   readConnection,
   type Candidate,
 } from './setup'
-import { runtimeFailed, runtimeReady, savedPassword, waitingForRuntime } from './setup-state'
+import {
+  RegistryConfigurationError,
+  runtimeFailed,
+  runtimeReady,
+  savedPassword,
+  waitingForRuntime,
+} from './setup-state'
 import { useText } from './locale'
 
 const emit = defineEmits<{ close: [] }>()
@@ -151,15 +157,20 @@ async function prepare() {
     if (!mounted || epoch !== generation) return
     requiresRefresh.value = true
     error.value =
-      cause instanceof PeerOutcomeUnknown
+      cause instanceof RegistryConfigurationError
         ? tr(
-            'The request outcome is unknown. Refresh this Peer before continuing; the request will not be repeated automatically.',
-            '请求结果未知。请先刷新此 Peer 的状态；不会自动重复发送请求。'
+            'This Peer’s extension Registry is not configured for discovery. Set its Registry URL in Peers → Edit Config, then refresh.',
+            '无法确定此 Peer 使用的扩展 Registry。请在 Peer → 编辑配置中填写该 Peer 的 Registry 地址，再刷新。'
           )
-        : tr(
-            'Connection preparation did not finish. Saved settings are preserved. Refresh this Peer before retrying.',
-            '连接准备未完成，已保存的设置仍保留。请刷新此 Peer 后重试。'
-          )
+        : cause instanceof PeerOutcomeUnknown
+          ? tr(
+              'The request outcome is unknown. Refresh this Peer before continuing; the request will not be repeated automatically.',
+              '请求结果未知。请先刷新此 Peer 的状态；不会自动重复发送请求。'
+            )
+          : tr(
+              'Connection preparation did not finish. Saved settings are preserved. Refresh this Peer before retrying.',
+              '连接准备未完成，已保存的设置仍保留。请刷新此 Peer 后重试。'
+            )
   } finally {
     if (mounted && epoch === generation) busy.value = null
   }

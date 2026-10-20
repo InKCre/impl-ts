@@ -1,5 +1,25 @@
 import type { ExtensionRuntimeStatus, InstalledExtension } from '@inkcre/core'
 
+export class RegistryConfigurationError extends Error {}
+
+export function configuredRegistry(
+  peerOverride: unknown,
+  deployment: { schema: string; value: unknown } | null
+): string {
+  let value = peerOverride
+  if (value == null || value === '') {
+    if (deployment && deployment.schema !== 'extension.registry.config.v1')
+      throw new RegistryConfigurationError()
+    value =
+      deployment?.value && typeof deployment.value === 'object'
+        ? (deployment.value as Record<string, unknown>).extension_registry_url
+        : null
+  }
+  if (typeof value !== 'string' || !value.trim()) throw new RegistryConfigurationError()
+  // A remote Python Peer's process-level default is not observable from the browser.
+  return value
+}
+
 export function savedPassword(extension: InstalledExtension): string | null {
   const value = extension.config.password
   if (value == null) return null

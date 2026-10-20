@@ -3,6 +3,8 @@ import { test } from 'node:test'
 import type { ExtensionRuntimeStatus } from '@inkcre/core'
 import {
   generatePassword,
+  configuredRegistry,
+  RegistryConfigurationError,
   runtimeFailed,
   runtimeReady,
   savedPassword,
@@ -23,6 +25,22 @@ const running: ExtensionRuntimeStatus = {
   operation: null,
   error: null,
 }
+
+test('a Python nullable Registry override uses shared configuration without guessing a process default', () => {
+  const shared = {
+    schema: 'extension.registry.config.v1',
+    value: { extension_registry_url: 'https://deployment.example' },
+  }
+  assert.equal(configuredRegistry(null, shared), 'https://deployment.example')
+  assert.equal(configuredRegistry(undefined, shared), 'https://deployment.example')
+  assert.equal(configuredRegistry('https://peer.example', shared), 'https://peer.example')
+  assert.throws(() => configuredRegistry(null, null), RegistryConfigurationError)
+  assert.throws(
+    () => configuredRegistry(null, { ...shared, value: { extension_registry_url: null } }),
+    RegistryConfigurationError
+  )
+  assert.throws(() => configuredRegistry(123, shared), RegistryConfigurationError)
+})
 
 test('readiness requires the selected version to be actually running', () => {
   assert.equal(runtimeReady(running), true)

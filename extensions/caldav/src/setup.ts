@@ -2,7 +2,7 @@ import corePackage from '../../../packages/core/package.json'
 import {
   ExtensionModel,
   ExtensionRegistryOriginResolver,
-  PeerConfigSchema,
+  DBAPIClient,
   PeerManager,
   PeerProtocolResponseSchema,
   type ExtensionRuntimeStatus,
@@ -17,6 +17,7 @@ import {
 } from '@inkcre/extension-runtime-client-web'
 
 import {
+  configuredRegistry,
   generatePassword,
   runtimeFailed,
   runtimeReady,
@@ -92,10 +93,19 @@ export async function prepareConnection(peer: Peer): Promise<ExtensionRuntimeSta
   if (runtimeFailed(status)) throw new Error('Recover the failed Peer operation before continuing.')
   if (waitingForRuntime(status)) return status!
   if (!status?.version) {
-    const peerConfig = PeerConfigSchema.parse(peer.config)
-    const registryOrigin = await new ExtensionRegistryOriginResolver(
-      () => peerConfig.extension_registry_url
-    ).resolve()
+    const override = peer.config.extension_registry_url
+    let deployment = null
+    if (override == null || override === '') {
+      const result = await new DBAPIClient<'configs'>('configs')
+        .from()
+        .select('schema,value')
+        .eq('key', 'extension.registry')
+        .maybeSingle()
+      if (result.error) throw new Error('Unable to read deployment Registry configuration.')
+      deployment = result.data
+    }
+    const configured = configuredRegistry(override, deployment)
+    const registryOrigin = await new ExtensionRegistryOriginResolver(() => configured).resolve()
     const reader = new RegistryReleaseReader({
       registryOrigin,
       hostSdk: { name: '@inkcre/core', version: corePackage.version },
