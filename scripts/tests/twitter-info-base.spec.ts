@@ -124,6 +124,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     JSON.stringify(jwtSecret).slice(1, -1),
   ]
   page.on('request', (request) => {
+    // Fulfilled media routes may never deliver extra headers; audit these synchronously.
     const payload = [request.url(), JSON.stringify(request.headers()), request.postData() ?? '']
     secretTransmitted ||= payload.some((value) =>
       secretRepresentations.some((secret) => value.includes(secret))
@@ -153,9 +154,13 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   const connect = await connectResponse
   expect(connect.ok()).toBe(true)
   const connectRequest = connect.request()
+  const connectHeaders = await connectRequest.allHeaders()
+  secretTransmitted ||= secretRepresentations.some((secret) =>
+    JSON.stringify(connectHeaders).includes(secret)
+  )
   expect(new URL(connectRequest.url()).search).toBe('')
-  expect(connectRequest.headers().origin).toBe(archiveBase.origin)
-  expect(Boolean(connectRequest.headers().authorization?.startsWith('Bearer '))).toBe(true)
+  expect(connectHeaders.origin).toBe(archiveBase.origin)
+  expect(Boolean(connectHeaders.authorization?.startsWith('Bearer '))).toBe(true)
   await expect(page.getByText('Connected', { exact: true })).toBeVisible()
   const session = await page.request.get(new URL('api/v1/session', archiveBase).toString(), {
     headers: { 'x-tweet-db-client': 'x-monkey' },
