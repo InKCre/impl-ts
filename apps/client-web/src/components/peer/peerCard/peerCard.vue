@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { InkButton, InkDialog, InkInput, type JsonEditorValidation } from '@inkcre/ui-web'
+import { toast } from '@/components/toast/toast'
 import SchemaConfigEditor from '@/components/schemaConfigEditor/schemaConfigEditor.vue'
 import { configStore, ExtensionModel, Peer, PeerConfigSchema, PeerManager } from '@inkcre/core'
 import { peerCardEmits, peerCardProps } from './peerCard'
@@ -47,14 +48,19 @@ function openConfig() {
   configPopupOpen.value = true
 }
 
+const saveError = ref('')
+
 const savePeer = async () => {
+  saveError.value = ''
   try {
     await props.peer.save()
     if (props.current) currentWebPeer.value = { id: props.peer.id, name: props.peer.name }
     emit('updated')
+    toast.success(t('peer.saveSuccess'))
   } catch (error) {
     console.error('Failed to update Peer:', error)
-    alert(t('common.saveFailed'))
+    saveError.value = error instanceof Error ? error.message : t('common.saveFailed')
+    toast.error(t('common.saveFailed'))
   }
 }
 
@@ -94,6 +100,7 @@ const onConfirmDelete = async () => {
     await props.peer.delete()
     deleteOpen.value = false
     emit('updated')
+    toast.success(t('peer.deleteSuccess'))
   } catch (error) {
     deleteError.value = error instanceof Error ? error.message : t('peer.deleteFailed')
   } finally {
@@ -112,19 +119,20 @@ const getStatusText = (status: 'online' | 'offline' | 'unknown') => {
 </script>
 
 <template>
-  <div class="peer-card">
-    <div class="peer-card__item-info">
-      <div class="peer-card__heading">
-        <InkInput v-model="peer.name" type="inline" @confirm="savePeer" />
-        <span :class="['peer-card__item-status', `peer-card__item-status--${status}`]">
+  <article class="entity-card peer-card">
+    <header class="entity-card__header">
+      <div class="entity-card__title-group">
+        <h3 class="entity-card__title peer-card__title">
+          <InkInput v-model="peer.name" type="inline" @confirm="savePeer" />
+        </h3>
+        <span :class="['entity-card__status', `peer-card__status--${status}`]">
           {{ getStatusText(status) }}
         </span>
-        <span class="peer-card__version">
-          {{ peer.application_version ? `v${peer.application_version}` : t('peer.versionUnknown') }}
-        </span>
-        <span v-if="current" class="peer-card__current">{{ t('peer.current') }}</span>
+        <span v-if="current" class="entity-card__status peer-card__status--current">{{
+          t('peer.current')
+        }}</span>
       </div>
-      <div class="peer-card__actions">
+      <div class="entity-card__actions peer-card__actions">
         <InkButton :text="t('peer.editConfig')" size="sm" @click="openConfig" />
         <InkButton
           v-if="!current"
@@ -135,6 +143,14 @@ const getStatusText = (status: 'online' | 'offline' | 'unknown') => {
           @click="openDelete"
         />
       </div>
+    </header>
+    <div class="entity-card__meta">
+      <span>{{ peer.application_version ? `v${peer.application_version}` : t('peer.versionUnknown') }}</span>
+    </div>
+    <p v-if="saveError" role="alert" class="peer-card__save-error text-feedback-error">
+      {{ saveError }}
+    </p>
+    <div class="peer-card__item-info">
       <section v-if="diagnostics" class="peer-card__readiness" :aria-label="t('peer.readiness')">
         <p>
           <strong>{{ t(`peer.readinessStatus.${diagnostics.status}`) }}</strong> ·
@@ -198,7 +214,7 @@ const getStatusText = (status: 'online' | 'offline' | 'unknown') => {
       <p>{{ t('peer.deleteConfirm') }}</p>
       <p v-if="deleteError" role="alert" class="text-feedback-error">{{ deleteError }}</p>
     </InkDialog>
-  </div>
+  </article>
 </template>
 
 <style lang="scss" scoped src="./peerCard.scss" />

@@ -280,6 +280,7 @@
     "statusUnknown": "未知",
     "empty": "暂无已注册的设备",
     "listFailed": "无法加载设备列表",
+    "errorDescription": "读取设备列表时出错。你可以重试，或查看技术详情。",
     "editConfig": "编辑配置",
     "delete": "删除设备",
     "deleteConfirm": "这会从你的 InKCre 移除该设备及其扩展启用记录。若它重新连接，可能会再次注册。",

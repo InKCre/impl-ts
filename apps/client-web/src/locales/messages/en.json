@@ -275,6 +275,7 @@
     "statusUnknown": "Unknown",
     "empty": "No devices registered",
     "listFailed": "Unable to load devices",
+    "errorDescription": "Failed to load the device list. You can retry or view technical details.",
     "editConfig": "Edit Config",
     "delete": "Delete device",
     "deleteConfirm": "This removes the device and its extension enablement from your InKCre. A running device may register again when it reconnects.",

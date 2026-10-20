@@ -1,36 +1,47 @@
 .peer-card {
-  display: flex;
-  flex-wrap: wrap;
-  gap: sys-var(space, sm);
-  overflow-wrap: anywhere;
-  justify-content: space-between;
-  align-items: center;
-  padding: sys-var(space, md);
-  background-color: sys-var(color, surface, subtle);
+  // Inherits .entity-card pattern (global stylesheet).
+
+  &__title {
+    // Title is an inline-edit InkInput, not plain text — remove its default
+    // h3-adjacent margins that conflict with the inline input's own layout.
+    display: flex;
+    align-items: center;
+    min-inline-size: 0;
+  }
+
+  // Status badges: distinguish peer states visually while staying neutral.
+  &__status--online {
+    color: sys-var(color, text, base);
+    background-color: sys-var(color, surface, raised);
+  }
+
+  &__status--offline {
+    color: sys-var(color, text, subtle);
+    background-color: sys-var(color, surface, subtle);
+  }
+
+  &__status--unknown {
+    color: sys-var(color, text, subtle);
+    background-color: sys-var(color, surface, subtle);
+  }
+
+  &__status--current {
+    color: sys-var(color, text, base);
+    background-color: sys-var(color, surface, raised);
+    font-weight: 500;
+  }
 
   &__item-info {
-    min-width: 0;
+    min-inline-size: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: sys-var(space, xs);
   }
 
-  &__heading {
-    display: flex;
-    align-items: center;
-    gap: sys-var(space, sm);
-    flex-wrap: wrap;
-  }
-
-  &__version,
-  &__current {
-    @include apply-font(label-md);
-    color: sys-var(color, text, subtle);
-  }
-
-  &__current {
-    white-space: nowrap;
+  &__save-error {
+    @include apply-font(body-sm);
+    margin: 0;
   }
 
   &__item-id {
@@ -38,32 +49,21 @@
     color: sys-var(color, text, subtle);
   }
 
-  &__item-capabilities {
-    @include apply-font(body-sm);
-    color: sys-var(color, text, subtle);
-  }
-
-  &__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: sys-var(space, xs);
-  }
-
   &__readiness {
     @include apply-font(body-sm);
-    max-width: 100%;
+    max-inline-size: 100%;
     p {
       margin: sys-var(space, xs) 0;
     }
     ul {
       margin: sys-var(space, xs) 0;
-      padding-left: sys-var(space, md);
+      padding-inline-start: sys-var(space, md);
     }
   }
 
   &__details {
     @include apply-font(body-sm);
-    max-width: 100%;
+    max-inline-size: 100%;
     summary {
       cursor: pointer;
     }
@@ -71,17 +71,8 @@
       margin: sys-var(space, xs) 0;
     }
     pre {
-      max-width: 100%;
+      max-inline-size: 100%;
       overflow-x: auto;
     }
-  }
-
-  &__item-status {
-    @include apply-font(label-md);
-    padding: sys-var(space, xs) sys-var(space, sm);
-    border-radius: sys-var(radius, none);
-
-    background-color: sys-var(color, surface, subtle);
-    color: sys-var(color, text, subtle);
   }
 }
