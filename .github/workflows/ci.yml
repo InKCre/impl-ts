@@ -117,12 +117,43 @@ jobs:
       - name: Verify static, typed, and package contracts
         run: pnpm check
 
+      - name: Prepare exact-checkout Changesets candidate for native MF validation
+        id: twitter_candidate
+        run: |
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          node scripts/prepare-preview-versioned-candidate.mjs \
+            --source . \
+            --source-sha "$SOURCE_SHA" \
+            --output "$RUNNER_TEMP/native-twitter-versioned-candidate" \
+            --metadata "$RUNNER_TEMP/native-twitter-versioned-candidate.json" \
+            --github-output "$GITHUB_OUTPUT"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the exact-checkout versioned Host and Twitter MF
+        working-directory: ${{ steps.twitter_candidate.outputs.candidate_path }}
+        run: |
+          pnpm --filter @inkcre/core build
+          pnpm --filter @inkcre/ext-twitter build
+
       - name: Validate the native Twitter Module Federation snapshot
+        working-directory: ${{ steps.twitter_candidate.outputs.candidate_path }}
         run: >-
           node scripts/verify-native-extension-distribution.mjs inspect-local
           --package extensions/twitter/package.json
           --core-package packages/core/package.json
           --artifact-directory extensions/twitter/dist/client-web
+
+      - name: Record native Twitter compatibility candidate provenance
+        run: |
+          {
+            echo '## Native Twitter Module Federation compatibility candidate'
+            echo
+            echo "- CI checkout commit: \`${{ steps.twitter_candidate.outputs.source_sha }}\`"
+            echo
+            cat "$RUNNER_TEMP/native-twitter-versioned-candidate.json"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify independent MF publication
         run: node --test scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs
