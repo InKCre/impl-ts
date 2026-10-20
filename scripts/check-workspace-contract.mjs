@@ -6,6 +6,12 @@ const jsonOutput = process.argv.includes('--json')
 
 const workspaces = [
   {
+    path: 'extensions/caldav',
+    name: '@inkcre/ext-caldav',
+    requiredScripts: ['build', 'dev', 'type-check'],
+    builder: 'vite',
+  },
+  {
     path: 'packages/core',
     name: '@inkcre/core',
     requiredScripts: ['build', 'dev', 'type-check'],

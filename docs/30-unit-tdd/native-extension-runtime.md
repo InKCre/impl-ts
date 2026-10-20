@@ -78,7 +78,21 @@ Host resolves its own native format. A missing release requires an explicit repl
 Removing a participation requires it to be disabled and does not remove the plugin's shared identity,
 configuration, authorization state, Sources or info-base content. Another Peer's selection is unchanged.
 
-## Documentation and Memos Connection
+## Documentation and Connection Setup
+
+`inkcre/caldav` 的 Web setup contribution 按选定 Python Peer 的实际运行状态准备连接。
+没有选择时才从该 Peer 自己的 Registry 选择发行版；安装返回重启状态后停止后续写入，
+要求刷新观察原目标。已有密码保持不变，缺失时才使用浏览器密码学随机数生成专用密码。
+完成条件包括 `running`、与 selection 一致的 `loaded_version`，以及
+`caldav.connection.v1` 返回合法服务地址。启用意图不能替代运行事实。未知写入结果锁定
+原目标直到刷新成功，不重放请求；关闭后的回调不能更新向导状态。
+
+CalDAV 的三个 resolver 注册 `extensions.caldav.collection.v1`、
+`extensions.caldav.calendar.v1` 和 `extensions.caldav.contact.v1`。ical.js 解析原生
+iCalendar/vCard 为只读内存投影；calendar 同时承载 VEVENT 与 VTODO。内容视图不展开
+重复规则、不隐式转换源时区，也不把展示字段写回另一份模型。集合成员只从 outgoing
+`member` Relations 读取。嵌入式照片仅渲染常见栅格类型，远程照片保留显式链接。
+解析失败保留原文；dispose 只注销当前模块自己注册的 resolver 类。
 
 Extension cards discover documentation independently of executable preflight or enablement.
 They resolve the existing Registry origin and read documentation for the exact installed name and

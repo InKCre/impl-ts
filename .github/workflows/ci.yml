@@ -117,6 +117,9 @@ jobs:
       - name: Verify static, typed, and package contracts
         run: pnpm check
 
+      - name: Verify CalDAV native content projections
+        run: pnpm --filter @inkcre/ext-caldav test
+
       - name: Validate the native Twitter Module Federation snapshot
         run: >-
           node scripts/verify-native-extension-distribution.mjs inspect-local

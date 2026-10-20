@@ -293,6 +293,58 @@ importers:
         specifier: ^0.20.6
         version: 0.20.27(@rspack/core@2.1.5)(@types/node@22.17.2)(eslint@9.39.5(jiti@2.7.0))(jiti@2.7.0)(lightningcss@1.33.0)(oxc-parser@0.131.0)(rolldown@1.2.0)(rollup@4.59.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)
 
+  extensions/caldav:
+    dependencies:
+      '@inkcre/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@inkcre/extension-runtime-client-web':
+        specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz
+        version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)
+      '@vueuse/core':
+        specifier: ^14.0.0
+        version: 14.4.0(vue@3.5.40(typescript@5.9.3))
+      ical.js:
+        specifier: 2.2.1
+        version: 2.2.1
+      pinia:
+        specifier: ^3.0.0
+        version: 3.0.3(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      vue:
+        specifier: ^3.5.25
+        version: 3.5.40(typescript@5.9.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.5.1(vue@3.5.40(typescript@5.9.3))
+      zod:
+        specifier: ^4.1.0
+        version: 4.4.3
+    devDependencies:
+      '@inkcre/ext-dev-utils':
+        specifier: workspace:*
+        version: link:../../packages/ext-dev-utils
+      '@inkcre/ui-web':
+        specifier: 2.2.1
+        version: 2.2.1(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+      '@module-federation/vite':
+        specifier: ^1.1.0
+        version: 1.7.1(rollup@4.59.0)
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.1
+        version: 6.0.3(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))(vue@3.5.40(typescript@5.9.3))
+      '@vue/tsconfig':
+        specifier: ^0.7.0
+        version: 0.7.0(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: ^7.0.6
+        version: 7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 3.3.8(typescript@5.9.3)
+
   extensions/github:
     dependencies:
       '@inkcre/core':
@@ -4387,6 +4439,9 @@ packages:
   human-signals@8.0.1:
     resolution: {integrity: sha512-eKCa6bwnJhvxj14kZk5NCPc6Hb6BdsU9DZcOnmQKSnO1VKrfV0zCvtttPZUsBvjmNDn8rpcJfpwSYnHBjc95MQ==}
     engines: {node: '>=18.18.0'}
+
+  ical.js@2.2.1:
+    resolution: {integrity: sha512-yK/UlPbEs316igb/tjRgbFA8ZV75rCsBJp/hWOatpyaPNlgw0dGDmU+FoicOcwX4xXkeXOkYiOmCqNPFpNPkQg==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -10145,6 +10200,8 @@ snapshots:
   human-id@4.2.0: {}
 
   human-signals@8.0.1: {}
+
+  ical.js@2.2.1: {}
 
   ieee754@1.2.1: {}
 
