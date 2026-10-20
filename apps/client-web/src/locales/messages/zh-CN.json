@@ -151,7 +151,29 @@
     "typesLoading": "正在读取数据源类型…",
     "typesFailed": "无法读取数据源类型。取得对应配置规则后才能保存。",
     "typeUnavailable": "当前数据源类型不可用，请检查已安装的扩展或选择可用类型。",
-    "backToSources": "返回数据源"
+    "backToSources": "返回数据源",
+    "created": "创建时间",
+    "updated": "更新时间",
+    "actions": "操作",
+    "view": "查看",
+    "tab": {
+      "overview": "概览",
+      "config": "配置",
+      "schedules": "调度",
+      "jobs": "作业"
+    },
+    "info": "基本信息",
+    "lastRun": "上次运行",
+    "nextRun": "下次运行",
+    "lastRunAt": "运行时间",
+    "cronHuman": {
+      "everyMinute": "每分钟",
+      "everyHour": "每小时",
+      "everyDay": "每天",
+      "everyWeek": "每周",
+      "everyMonth": "每月",
+      "custom": "自定义"
+    }
   },
   "extension": {
     "lead": "为你的 InKCre 添加新的数据源类型和界面能力。",
@@ -226,7 +248,14 @@
     "notAvailable": "不可用",
     "notFound": "未找到任务",
     "sourceNotFound": "未找到数据源",
-    "openDiagnostics": "打开诊断入口（使用 Job ID 查询）"
+    "openDiagnostics": "打开诊断入口（使用 Job ID 查询）",
+    "status": {
+      "pending": "等待中",
+      "running": "运行中",
+      "success": "成功",
+      "failed": "失败",
+      "cancelled": "已取消"
+    }
   },
   "logs": {
     "loading": "正在读取日志…",

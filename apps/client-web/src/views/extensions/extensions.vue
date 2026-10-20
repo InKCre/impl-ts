@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { InkButton, InkSkeleton, InkPlaceholder } from '@inkcre/ui-web'
+import { toast } from '@/components/toast/toast'
 import { usePageObjectTitle } from '@/composables/use-page-object-title'
 import { configStore, Peer, PeerManager, type InstalledExtension } from '@inkcre/core'
 import type { ReleaseRecord } from '@inkcre/extension-runtime-client-web'
@@ -145,6 +146,7 @@ async function installReleaseInDeployment(): Promise<void> {
     updateExtension(
       await getExtensionHost().install({ name: release.name, version: release.version })
     )
+    toast.success(t('extension.installSuccess'))
     await router.replace('/extensions')
   } catch (error) {
     installError.value = error instanceof Error ? error.message : String(error)
@@ -173,7 +175,8 @@ onMounted(() => {
 
 <template>
   <main class="extensions-view" :aria-label="t('extension.title')">
-    <header class="extensions-view__page-header">
+    <h1 class="sr-only">{{ t('extension.title') }}</h1>
+    <div class="extensions-view__actions">
       <a v-if="browseUrl" :href="browseUrl" class="extensions-view__browse-link">
         {{ t('extension.browseRegistry') }} ↗
       </a>
@@ -182,9 +185,10 @@ onMounted(() => {
         :text="t('common.refresh')"
         size="sm"
         :is-loading="extensionsLoading || peersLoading"
+        :disabled="extensionsLoading || peersLoading"
         @click="refreshAll"
       />
-    </header>
+    </div>
     <p v-if="browseError" role="alert" class="extensions-view__error">
       {{ t('extension.registryUnavailable') }}: {{ browseError }}
     </p>

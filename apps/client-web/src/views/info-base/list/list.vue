@@ -2,18 +2,22 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { InkButton, InkSkeleton } from '@inkcre/ui-web'
+import { InkButton, InkPlaceholder, InkSkeleton } from '@inkcre/ui-web'
 import {
   CapabilityDelegationUnavailable,
   getInfoBaseRouter,
   LexicalRetrievalManager,
+  presentLexicalMatches,
+  type RecallGroup,
   type LexicalRetrievalMatch,
 } from '@inkcre/core'
 
 import router from '@/router'
+import { extensionHostRestoreState } from '@/core'
 import BlockInspectorPopup from '@/components/info-base/BlockInspectorPopup/BlockInspectorPopup.vue'
 import SolvedContentPopup from '@/components/info-base/SolvedContentPopup/SolvedContentPopup.vue'
 import RelationInspectorPopup from '@/components/info-base/RelationInspectorPopup/RelationInspectorPopup.vue'
+import InfoBaseViewTabs from '@/components/info-base/InfoBaseViewTabs.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -21,7 +25,7 @@ const infoBaseRouter = getInfoBaseRouter()
 
 const input = ref('')
 const status = ref<'idle' | 'loading' | 'success' | 'error'>('idle')
-const matches = shallowRef<LexicalRetrievalMatch[]>([])
+const matches = shallowRef<RecallGroup[]>([])
 const error = shallowRef<Error | null>(null)
 const delegationUnavailable = computed(() => error.value instanceof CapabilityDelegationUnavailable)
 let generation = 0
@@ -43,8 +47,9 @@ async function retrieve(query: string): Promise<void> {
   status.value = 'loading'
   try {
     const result = await LexicalRetrievalManager.retrieve({ query, limit: 20 })
+    const presented = await presentLexicalMatches(result.matches)
     if (current !== generation) return
-    matches.value = result.matches
+    matches.value = presented
     status.value = 'success'
   } catch (cause) {
     if (current !== generation) return
@@ -62,6 +67,11 @@ watch(
   { immediate: true }
 )
 
+// A direct URL can retrieve before its extension Resolvers finish registering.
+watch(extensionHostRestoreState, (state) => {
+  if (['restored', 'failed'].includes(state) && routeQuery.value) void retrieve(routeQuery.value)
+})
+
 function search(): void {
   const query = input.value.trim()
   void router.push({ name: 'InfoBaseListOverview', query: query ? { q: query } : {} })
@@ -69,6 +79,13 @@ function search(): void {
 
 function inspect(match: LexicalRetrievalMatch): void {
   void infoBaseRouter.push({ name: 'block', block: match.block.id })
+}
+
+function openResult(group: RecallGroup): void {
+  void infoBaseRouter.push({
+    name: group.readable ? 'solved-content' : 'block',
+    block: group.block.id,
+  })
 }
 
 function formatRank(rank: number): string {
@@ -82,6 +99,13 @@ function refresh(): void {
 
 <template>
   <main class="info-base-list-view">
+    <!-- 首页（无 block/relation 参数）是搜索入口，不显示视图切换 tabs -->
+    <div
+      v-if="route.params.block || route.params.relation"
+      class="info-base-list-view__view-switch"
+    >
+      <InfoBaseViewTabs />
+    </div>
     <header class="info-base-list-view__hero">
       <h1>{{ t('infoBase.list.title') }}</h1>
       <form class="info-base-list-view__search" @submit.prevent="search">
@@ -97,6 +121,7 @@ function refresh(): void {
           theme="primary"
           native-type="submit"
           :is-loading="status === 'loading'"
+          :disabled="status === 'loading'"
         />
       </form>
       <p class="info-base-list-view__help">{{ t('infoBase.list.idle') }}</p>
@@ -117,35 +142,44 @@ function refresh(): void {
           <InkSkeleton style="width: 40%" /><InkSkeleton style="width: 80%" />
         </div>
       </div>
-      <div v-else-if="status === 'error'" class="info-base-list-view__state">
-        <p>{{ t(delegationUnavailable ? 'infoBase.list.unavailable' : 'infoBase.list.error') }}</p>
-        <details>
-          <summary>{{ t('common.errorDetails') }}</summary>
-          {{ error?.message }}
-        </details>
-        <InkButton :text="t('infoBase.list.retry')" theme="subtle" @click="refresh" />
-      </div>
-      <div
-        v-else-if="status === 'success' && matches.length === 0"
-        class="info-base-list-view__state"
+      <InkPlaceholder
+        v-else-if="status === 'error'"
+        state="error"
+        :title="t(delegationUnavailable ? 'infoBase.list.unavailable' : 'infoBase.list.error')"
+        :description="error?.message"
       >
-        <p>{{ t('infoBase.list.empty', { query: routeQuery }) }}</p>
-      </div>
+        <template #actions>
+          <InkButton :text="t('infoBase.list.retry')" theme="subtle" @click="refresh" />
+        </template>
+      </InkPlaceholder>
+      <InkPlaceholder
+        v-else-if="status === 'success' && matches.length === 0"
+        :title="t('infoBase.list.empty', { query: routeQuery })"
+      />
       <ol v-else-if="matches.length" class="info-base-list-view__matches">
         <li v-for="match in matches" :key="match.block.id">
-          <button type="button" class="info-base-list-view__match" @click="inspect(match)">
+          <button type="button" class="info-base-list-view__match" @click="openResult(match)">
             <span class="info-base-list-view__match-heading">
               <strong>{{ match.label }}</strong>
             </span>
+            <span v-if="match.description" class="info-base-list-view__evidence">{{
+              match.description
+            }}</span>
             <span class="info-base-list-view__excerpt">{{ match.excerpt }}</span>
             <span class="info-base-list-view__evidence">
-              <span>{{ t(`infoBase.list.evidence.${match.evidence}`) }}</span>
+              <span>{{ t(`infoBase.list.evidence.${match.matches[0]!.evidence}`) }}</span>
             </span>
           </button>
           <details class="info-base-list-view__match-details">
             <summary>{{ t('common.details') }}</summary>
-            <span>#{{ match.block.id }} · </span><code>{{ match.block.resolver }}</code
-            ><span> · {{ formatRank(match.rank) }}</span>
+            <div v-for="evidence in match.matches" :key="evidence.block.id">
+              <InkButton theme="subtle" size="sm" @click="inspect(evidence)">
+                #{{ evidence.block.id }} · {{ t(`infoBase.list.evidence.${evidence.evidence}`) }}
+              </InkButton>
+              <p>{{ evidence.excerpt }}</p>
+              <code>{{ evidence.block.resolver }}</code>
+              <span> · {{ formatRank(evidence.rank) }}</span>
+            </div>
           </details>
         </li>
       </ol>

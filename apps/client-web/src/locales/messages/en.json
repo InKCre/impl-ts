@@ -150,7 +150,25 @@
     "typesLoading": "Loading source types…",
     "typesFailed": "Unable to load source types. Configuration cannot be saved until its schema is available.",
     "typeUnavailable": "This source type is unavailable. Check installed extensions or choose an available type.",
-    "backToSources": "Back to Sources"
+    "backToSources": "Back to Sources",
+    "tab": {
+      "overview": "Overview",
+      "config": "Config",
+      "schedules": "Schedules",
+      "jobs": "Jobs"
+    },
+    "info": "Basic Info",
+    "lastRun": "Last Run",
+    "nextRun": "Next Run",
+    "lastRunAt": "Ran At",
+    "cronHuman": {
+      "everyMinute": "Every minute",
+      "everyHour": "Every hour",
+      "everyDay": "Every day",
+      "everyWeek": "Every week",
+      "everyMonth": "Every month",
+      "custom": "Custom"
+    }
   },
   "extension": {
     "lead": "Add new source types and interface capabilities to your InKCre.",
@@ -225,7 +243,14 @@
     "notAvailable": "N/A",
     "notFound": "Job not found",
     "sourceNotFound": "Source not found",
-    "openDiagnostics": "Open diagnostics (search by Job ID)"
+    "openDiagnostics": "Open diagnostics (search by Job ID)",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
   },
   "logs": {
     "loading": "Loading logs…",

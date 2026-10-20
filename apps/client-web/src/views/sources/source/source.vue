@@ -17,13 +17,17 @@ import {
   InkDropdown,
   InkInput,
   InkForm,
+  InkTabs,
   type JsonEditorValidation,
 } from '@inkcre/ui-web'
 import SourceForm from '@/components/source/sourceForm/sourceForm.vue'
 import SchemaConfigEditor from '@/components/schemaConfigEditor/schemaConfigEditor.vue'
 import JobCard from '@/components/job/JobCard/JobCard.vue'
-import { Cron, CronForm, Job, JobManager, Source } from '@inkcre/core'
+import { humanizeCron } from '@/utils/cron'
+import { Cron, CronForm, Job, JobManager, JobStatus, Source } from '@inkcre/core'
 import { usePageObjectTitle } from '@/composables/use-page-object-title'
+
+type TabId = 'overview' | 'config' | 'schedules' | 'jobs'
 
 const route = useRoute()
 const router = useRouter()
@@ -54,6 +58,19 @@ const cronsError = ref(false)
 let sourceRequest = 0
 let jobsRequest = 0
 let cronsRequest = 0
+
+// Tabs state
+const activeTab = ref<TabId>('overview')
+const tabs = computed(() => [
+  { value: 'overview' as TabId, label: t('source.tab.overview') },
+  { value: 'config' as TabId, label: t('source.tab.config') },
+  { value: 'schedules' as TabId, label: t('source.tab.schedules') },
+  { value: 'jobs' as TabId, label: t('source.tab.jobs') },
+])
+
+function setTab(tab: string) {
+  activeTab.value = tab as TabId
+}
 
 // Each region loads independently; late responses must not replace another source's context.
 async function loadSource() {
@@ -98,50 +115,76 @@ async function loadCrons() {
   }
 }
 
-const newJobOpen = ref(false)
+watch(
+  sourceId,
+  () => {
+    void loadSource()
+    void loadJobs()
+    void loadCrons()
+  },
+  { immediate: true }
+)
+
+const busy = computed(
+  () =>
+    sourceLoading.value ||
+    sourceSaving.value ||
+    sourceDeleting.value ||
+    jobsLoading.value ||
+    cronsLoading.value ||
+    jobSaving.value ||
+    cronSaving.value ||
+    Boolean(jobAction.value) ||
+    Boolean(cronAction.value)
+)
+
+// Create/edit state
 const jobKind = ref<'ordinary' | 'backfill'>('ordinary')
 const jobConfig = ref('{}')
 const jobValidation = ref<JsonEditorValidation>()
-const jobSaving = ref(false)
 const jobError = ref('')
-const sourceType = computed(() =>
-  editor.value?.sourceTypes.find((type) => type.id === source.value?.type)
-)
-const jobSchema = computed(() =>
-  jobKind.value === 'ordinary'
-    ? sourceType.value?.collect_config_schema
-    : sourceType.value?.backfill_config_schema
-)
+const jobSaving = ref(false)
+const jobAction = ref<{ id: number; kind: 'run' | 'delete' } | null>(null)
+const newJobOpen = ref(false)
 const canCreateJob = computed(
-  () =>
-    Boolean(jobSchema.value) &&
-    jobValidation.value?.status === 'valid' &&
-    jobValidation.value.text === jobConfig.value
+  () => jobConfig.value.trim() !== '' && (!jobValidation.value || jobValidation.value.valid)
 )
-watch(
-  jobSchema,
-  () => {
-    jobValidation.value = undefined
-  },
-  { flush: 'sync' }
-)
-
-const newCronOpen = ref(false)
 const cronSchedule = ref('0 * * * *')
+const cronCreateError = ref('')
 const cronSaving = ref(false)
 const cronAction = ref<{ id: number; kind: 'run' | 'delete' } | null>(null)
+const newCronOpen = ref(false)
 const cronToDelete = ref<Cron | null>(null)
 const cronError = ref('')
-const cronCreateError = ref('')
-const busy = computed(
-  () =>
-    sourceSaving.value ||
-    sourceDeleting.value ||
-    jobSaving.value ||
-    cronSaving.value ||
-    Boolean(cronAction.value)
+
+// Derived values for display
+const sourceTypeFull = computed(() => source.value?.type || '')
+
+// Overview tab data
+const lastJob = computed(() => {
+  if (!jobs.value.length) return null
+  return jobs.value[0]
+})
+
+const lastJobStatus = computed(() => {
+  if (!lastJob.value) return null
+  return lastJob.value.status
+})
+
+const lastJobTime = computed(() => {
+  if (!lastJob.value) return null
+  return lastJob.value.created_at
+})
+
+const runningJob = computed(() =>
+  jobs.value.find((job) => job.status === JobStatus.PENDING || job.status === JobStatus.RUNNING)
 )
-function canLeave() {
+
+const cronCount = computed(() => crons.value.length)
+const enabledCronCount = computed(() => crons.value.filter((c) => c.enabled).length)
+const jobCount = computed(() => jobs.value.length)
+
+function canLeave(): boolean {
   const dirty =
     Boolean(draft.value && editor.value?.isDirty) ||
     (newJobOpen.value && jobConfig.value !== '{}') ||
@@ -150,51 +193,28 @@ function canLeave() {
 }
 onBeforeRouteLeave(canLeave)
 onBeforeRouteUpdate((to) => to.params.id === route.params.id || canLeave())
-watch(
-  sourceId,
-  () => {
-    source.value = null
-    draft.value = null
-    jobs.value = []
-    crons.value = []
-    sourceSaved.value = false
-    sourceError.value = ''
-    deleteError.value = ''
-    cronError.value = ''
-    deleteOpen.value = false
-    newJobOpen.value = false
-    newCronOpen.value = false
-    void loadSource()
-    void loadJobs()
-    void loadCrons()
-  },
-  { immediate: true }
-)
 
 async function onSaveSource() {
-  if (busy.value || !draft.value || !editor.value?.canSave) return
+  if (busy.value || !draft.value || !editor.value) return
+  if (!editor.value.canSave) return
   sourceSaving.value = true
   sourceError.value = ''
   sourceSaved.value = false
   try {
-    const candidate = Source.parse({ ...draft.value, config: editor.value.readConfig() })
-    const updated = await candidate.save()
-    source.value = updated
-    draft.value = Source.parse(updated)
+    const saved = await draft.value.save()
+    if (source.value) source.value = Source.parse(saved)
+    draft.value = Source.parse(saved)
     sourceSaved.value = true
   } catch {
-    sourceError.value = t('common.saveFailed')
+    sourceError.value = t('source.saveFailed')
   } finally {
     sourceSaving.value = false
   }
 }
 function onRequestDeleteSource() {
+  if (busy.value) return
   deleteError.value = ''
   deleteOpen.value = true
-}
-function onRequestDeleteCron(cron: Cron) {
-  cronError.value = ''
-  cronToDelete.value = cron
 }
 async function onDeleteSource() {
   if (busy.value || !source.value) return
@@ -255,7 +275,7 @@ function onCloseCron() {
   newCronOpen.value = false
 }
 async function onCreateCron() {
-  if (busy.value || !cronSchedule.value.trim()) return
+  if (busy.value) return
   cronSaving.value = true
   cronCreateError.value = ''
   try {
@@ -263,7 +283,7 @@ async function onCreateCron() {
       schedule: cronSchedule.value,
       enabled: true,
       job_type: 'core.source.collect.v1',
-      job_parameters: { source: sourceId.value, config: {} },
+      job_parameters: { source: sourceId.value },
       job_timeout_seconds: null,
     }).create()
     crons.value = [...crons.value, created]
@@ -278,23 +298,23 @@ async function onRunCron(cron: Cron) {
   if (busy.value) return
   cronAction.value = { id: cron.id, kind: 'run' }
   cronError.value = ''
-  let created: Job
   try {
-    created = await cron.runNow()
-    jobs.value = [created, ...jobs.value]
+    await cron.runNow()
   } catch {
     cronError.value = t('source.runFailed')
-    return
   } finally {
     cronAction.value = null
   }
-  await router.push(`/jobs/${created.id}`)
+}
+function onRequestDeleteCron(cron: Cron) {
+  if (busy.value) return
+  cronError.value = ''
+  cronToDelete.value = cron
 }
 async function onDeleteCron() {
   if (busy.value || !cronToDelete.value) return
   const cron = cronToDelete.value
   cronAction.value = { id: cron.id, kind: 'delete' }
-  cronError.value = ''
   try {
     await cron.delete()
     crons.value = crons.value.filter((item) => item.id !== cron.id)
@@ -330,36 +350,132 @@ async function onDeleteCron() {
       <header class="source-view__header">
         <h1>{{ source.nickname || t('source.unnamed') }}</h1>
         <div class="source-view__metadata">
-          <code>{{ source.type }}</code
-          ><span>#{{ source.id }}</span>
+          <code class="source-view__type">{{ sourceTypeFull }}</code>
+          <span class="source-view__id">#{{ source.id }}</span>
         </div>
       </header>
-      <div class="source-view__content">
-        <section class="source-view__details" :aria-label="t('source.editConfig')">
-          <h2>{{ t('source.editConfig') }}</h2>
-          <SourceForm ref="editor" :model-value="draft" :disabled="busy" @submit="onSaveSource">
-            <p v-if="sourceError" role="alert" class="text-feedback-error">{{ sourceError }}</p>
-            <p v-else-if="sourceSaved && !editor?.isDirty" role="status">{{ t('source.saved') }}</p>
-            <div class="source-view__actions">
-              <InkButton
-                :text="t('source.delete')"
-                theme="danger"
-                size="sm"
-                :disabled="busy"
-                @click="onRequestDeleteSource"
-              />
-              <InkButton
-                :text="t('common.save')"
-                theme="primary"
-                native-type="submit"
-                :is-loading="sourceSaving"
-                :disabled="!editor?.canSave || !editor?.isDirty || (busy && !sourceSaving)"
-              />
+
+      <!-- Tabs Navigation -->
+      <InkTabs
+        v-model="activeTab"
+        :tabs="tabs"
+        :label="t('source.tab.overview')"
+        class="source-view__tabs"
+        @update:model-value="setTab"
+      />
+
+      <!-- Tab Content -->
+      <div class="source-view__tab-content">
+        <!-- Overview Tab -->
+        <section v-if="activeTab === 'overview'" class="source-view__tab-panel" role="tabpanel">
+          <div class="source-view__overview-grid">
+            <div class="source-view__overview-card">
+              <h3>{{ t('source.info') }}</h3>
+              <dl class="source-view__overview-list">
+                <div>
+                  <dt>{{ t('source.nickname') }}</dt>
+                  <dd>{{ source.nickname || t('source.unnamed') }}</dd>
+                </div>
+                <div>
+                  <dt>{{ t('source.type') }}</dt>
+                  <dd>
+                    <code>{{ sourceTypeFull }}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>{{ t('source.id') }}</dt>
+                  <dd>#{{ source.id }}</dd>
+                </div>
+                <div>
+                  <dt>{{ t('source.created') }}</dt>
+                  <dd>{{ source.created_at?.toLocaleString() }}</dd>
+                </div>
+                <div>
+                  <dt>{{ t('source.updated') }}</dt>
+                  <dd>{{ source.updated_at?.toLocaleString() }}</dd>
+                </div>
+              </dl>
             </div>
-          </SourceForm>
+
+            <div class="source-view__overview-card">
+              <h3>{{ t('source.lastRun') }}</h3>
+              <div v-if="lastJob" class="source-view__last-job">
+                <div class="source-view__last-job-status">
+                  <span
+                    class="source-view__status-dot"
+                    :class="`source-view__status-dot--${lastJobStatus?.toLowerCase()}`"
+                  />
+                  <span>{{ lastJobStatus }}</span>
+                </div>
+                <div class="source-view__last-job-time">{{ lastJobTime?.toLocaleString() }}</div>
+                <RouterLink :to="`/jobs/${lastJob.id}`" class="source-view__last-job-link">
+                  {{ t('source.view') }} →
+                </RouterLink>
+              </div>
+              <p v-else class="source-view__no-data">{{ t('source.noJobs') }}</p>
+            </div>
+
+            <div class="source-view__overview-card">
+              <h3>{{ t('source.tab.schedules') }}</h3>
+              <div class="source-view__stat-row">
+                <span class="source-view__stat-value">{{ cronCount }}</span>
+                <span class="source-view__stat-label">{{ t('source.schedules') }}</span>
+              </div>
+              <div class="source-view__stat-row">
+                <span class="source-view__stat-value">{{ enabledCronCount }}</span>
+                <span class="source-view__stat-label">{{ t('source.enabled') }}</span>
+              </div>
+              <div v-if="crons.length" class="source-view__cron-preview">
+                <code>{{ crons[0].schedule }}</code>
+                <span>({{ t(`source.cronHuman.${humanizeCron(crons[0].schedule)}`) }})</span>
+              </div>
+            </div>
+
+            <div class="source-view__overview-card">
+              <h3>{{ t('source.tab.jobs') }}</h3>
+              <div class="source-view__stat-row">
+                <span class="source-view__stat-value">{{ jobCount }}</span>
+                <span class="source-view__stat-label">{{ t('source.jobs') }}</span>
+              </div>
+              <div v-if="runningJob" class="source-view__running-job">
+                <span class="source-view__status-dot source-view__status-dot--running" />
+                <span>{{ t('source.checkOpenJob') }}</span>
+                <RouterLink :to="`/jobs/${runningJob.id}`">{{ t('source.view') }}</RouterLink>
+              </div>
+            </div>
+          </div>
         </section>
-        <div class="source-view__activity">
-          <section class="source-view__schedules" :aria-label="t('source.schedules')">
+
+        <!-- Config Tab -->
+        <section v-if="activeTab === 'config'" class="source-view__tab-panel" role="tabpanel">
+          <div class="source-view__config-section">
+            <h2>{{ t('source.editConfig') }}</h2>
+            <SourceForm ref="editor" :model-value="draft" :disabled="busy" @submit="onSaveSource">
+              <p v-if="sourceError" role="alert" class="text-feedback-error">{{ sourceError }}</p>
+              <p v-else-if="sourceSaved && !editor?.isDirty" role="status">{{ t('source.saved') }}</p>
+              <div class="source-view__actions">
+                <InkButton
+                  :text="t('source.delete')"
+                  theme="danger"
+                  size="sm"
+                  :disabled="busy"
+                  @click="onRequestDeleteSource"
+                />
+                <InkButton
+                  :text="t('common.save')"
+                  theme="primary"
+                  native-type="submit"
+                  :is-loading="sourceSaving"
+                  :disabled="!editor?.canSave || !editor?.isDirty || (busy && !sourceSaving)"
+                />
+              </div>
+            </SourceForm>
+          </div>
+        </section>
+
+        <!-- Schedules Tab -->
+        <section v-if="activeTab === 'schedules'" class="source-view__tab-panel" role="tabpanel">
+          <div class="source-view__schedules-section">
             <div class="source-view__section-header">
               <h2>{{ t('source.schedules') }}</h2>
               <InkButton
@@ -381,37 +497,55 @@ async function onDeleteCron() {
               <InkButton :text="t('source.retry')" theme="subtle" size="sm" @click="loadCrons" />
             </div>
             <p v-else-if="!crons.length">{{ t('source.noSchedules') }}</p>
-            <div v-for="cron in crons" :key="cron.id" class="source-view__schedule">
-              <code>{{ cron.schedule }}</code
-              ><span>{{ t(cron.enabled ? 'source.enabled' : 'source.disabled') }}</span>
-              <InkButton
-                :text="t('source.runNow')"
-                theme="subtle"
-                size="sm"
-                :is-loading="cronAction?.id === cron.id && cronAction.kind === 'run'"
-                :disabled="busy && cronAction?.id !== cron.id"
-                @click="onRunCron(cron)"
-              />
-              <InkButton
-                :text="t('source.delete')"
-                theme="subtle"
-                size="sm"
-                :disabled="busy"
-                @click="onRequestDeleteCron(cron)"
-              />
+            <div v-else class="source-view__cron-list">
+              <div v-for="cron in crons" :key="cron.id" class="source-view__cron-item">
+                <div class="source-view__cron-info">
+                  <code>{{ cron.schedule }}</code>
+                  <span class="source-view__cron-human">{{
+                    t(`source.cronHuman.${humanizeCron(cron.schedule)}`)
+                  }}</span>
+                </div>
+                <span
+                  class="source-view__cron-status"
+                  :class="{ 'source-view__cron-status--enabled': cron.enabled }"
+                >
+                  {{ t(cron.enabled ? 'source.enabled' : 'source.disabled') }}
+                </span>
+                <div class="source-view__cron-actions">
+                  <InkButton
+                    :text="t('source.runNow')"
+                    theme="subtle"
+                    size="sm"
+                    :is-loading="cronAction?.id === cron.id && cronAction.kind === 'run'"
+                    :disabled="busy && cronAction?.id !== cron.id"
+                    @click="onRunCron(cron)"
+                  />
+                  <InkButton
+                    :text="t('source.delete')"
+                    theme="subtle"
+                    size="sm"
+                    :disabled="busy"
+                    @click="onRequestDeleteCron(cron)"
+                  />
+                </div>
+              </div>
             </div>
             <p v-if="cronError && !cronToDelete" role="alert" class="text-feedback-error">
               {{ cronError }}
             </p>
-          </section>
-          <section class="source-view__jobs" :aria-label="t('source.jobs')">
+          </div>
+        </section>
+
+        <!-- Jobs Tab -->
+        <section v-if="activeTab === 'jobs'" class="source-view__tab-panel" role="tabpanel">
+          <div class="source-view__jobs-section">
             <div class="source-view__section-header">
               <h2>{{ t('source.jobs') }}</h2>
               <InkButton
                 :text="t('source.newJob')"
                 theme="subtle"
                 size="sm"
-                :disabled="busy || !sourceType"
+                :disabled="busy || !sourceTypeFull"
                 @click="onNewJob"
               />
             </div>
@@ -426,7 +560,7 @@ async function onDeleteCron() {
               <InkButton :text="t('source.retry')" theme="subtle" size="sm" @click="loadJobs" />
             </div>
             <p v-else-if="!jobs.length">{{ t('source.noJobs') }}</p>
-            <div class="source-view__job-list">
+            <div v-else class="source-view__job-list">
               <RouterLink
                 v-for="job in jobs"
                 :key="job.id"
@@ -435,111 +569,87 @@ async function onDeleteCron() {
                 ><JobCard :job="job"
               /></RouterLink>
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
       </div>
     </template>
-  </main>
 
-  <InkDialog
-    v-model="deleteOpen"
-    :title="t('source.deleteConfirmTitle')"
-    :confirm-text="t('source.delete')"
-    :cancel-text="t('common.cancel')"
-    :is-loading="sourceDeleting"
-    @confirm="onDeleteSource"
-  >
-    <p>{{ source?.nickname || t('source.unnamed') }} · #{{ source?.id }}</p>
-    <p>{{ t('source.deleteConfirmMessage') }}</p>
-    <p v-if="deleteError" role="alert" class="text-feedback-error">{{ deleteError }}</p>
-  </InkDialog>
-  <InkDialog
-    :model-value="Boolean(cronToDelete)"
-    :title="t('source.deleteSchedule')"
-    :confirm-text="t('source.delete')"
-    :cancel-text="t('common.cancel')"
-    :is-loading="cronAction?.kind === 'delete'"
-    @update:model-value="cronToDelete = null"
-    @confirm="onDeleteCron"
-  >
-    <p>{{ t('source.deleteScheduleMessage') }}</p>
-    <code>{{ cronToDelete?.schedule }}</code>
-    <p v-if="cronError" role="alert" class="text-feedback-error">{{ cronError }}</p>
-  </InkDialog>
-  <InkPopup
-    :open="newJobOpen"
-    position="center"
-    style="width: min(56rem, calc(100vw - 2 * var(--sys-space-md)))"
-    :aria-label="t('source.newJobTitle')"
-    :close-on-scrim="!jobSaving"
-    :close-on-escape="!jobSaving"
-    @update:open="onCloseJob"
-  >
-    <InkForm class="source-view__popup" layout="col" @submit="onCreateJob">
-      <h2>{{ t('source.newJobTitle') }}</h2>
-      <InkDropdown
-        v-model="jobKind"
-        :options="[
-          { label: t('source.ordinary'), value: 'ordinary' },
-          ...(sourceType?.backfill_config_schema
-            ? [{ label: t('source.backfill'), value: 'backfill' }]
-            : []),
-        ]"
-        :label="t('source.collectionIntent')"
-        :disabled="jobSaving"
-      />
-      <SchemaConfigEditor
-        v-model="jobConfig"
-        :schema="jobSchema ?? undefined"
-        :label="t('job.config')"
-        :disabled="jobSaving"
-        @validation="jobValidation = $event"
-      />
-      <p v-if="jobError" role="alert" class="text-feedback-error">{{ jobError }}</p>
-      <div class="source-view__actions">
-        <InkButton
-          :text="t('common.cancel')"
-          theme="subtle"
-          :disabled="jobSaving"
-          @click="onCloseJob"
-        /><InkButton
-          :text="t('source.createJob')"
-          theme="primary"
-          native-type="submit"
-          :disabled="!canCreateJob"
-          :is-loading="jobSaving"
+    <!-- Dialogs and Popups -->
+    <InkDialog
+      v-model="deleteOpen"
+      :title="t('source.deleteConfirmTitle')"
+      :confirm-text="t('source.delete')"
+      :cancel-text="t('common.cancel')"
+      :is-loading="sourceDeleting"
+      @confirm="onDeleteSource"
+    >
+      <p>{{ t('source.deleteConfirmMessage') }}</p>
+      <p v-if="deleteError" role="alert" class="text-feedback-error">{{ deleteError }}</p>
+    </InkDialog>
+
+    <InkPopup v-model="newJobOpen" :title="t('source.newJobTitle')" @close="onCloseJob">
+      <InkForm @submit="onCreateJob">
+        <p class="source-view__popup-description">{{ t('source.newJobDescription') }}</p>
+        <InkDropdown
+          v-model="jobKind"
+          :label="t('source.collectionIntent')"
+          :options="[
+            { value: 'ordinary', label: t('source.ordinary') },
+            { value: 'backfill', label: t('source.backfill') },
+          ]"
         />
-      </div>
-    </InkForm>
-  </InkPopup>
-  <InkPopup
-    :open="newCronOpen"
-    position="center"
-    :aria-label="t('source.addSchedule')"
-    :close-on-scrim="!cronSaving"
-    :close-on-escape="!cronSaving"
-    @update:open="onCloseCron"
-  >
-    <InkForm class="source-view__popup" layout="col" @submit="onCreateCron">
-      <h2>{{ t('source.addSchedule') }}</h2>
-      <InkInput v-model="cronSchedule" :label="t('source.cronSchedule')" :disabled="cronSaving" />
-      <p v-if="cronCreateError" role="alert" class="text-feedback-error">{{ cronCreateError }}</p>
-      <div class="source-view__actions">
-        <InkButton
-          :text="t('common.cancel')"
-          theme="subtle"
-          :disabled="cronSaving"
-          @click="onCloseCron"
-        /><InkButton
-          :text="t('source.addSchedule')"
-          theme="primary"
-          native-type="submit"
-          :disabled="!cronSchedule.trim()"
-          :is-loading="cronSaving"
+        <SchemaConfigEditor
+          v-model="jobConfig"
+          :label="t('source.config')"
+          @validation="jobValidation = $event"
         />
-      </div>
-    </InkForm>
-  </InkPopup>
+        <p v-if="jobError" role="alert" class="text-feedback-error">{{ jobError }}</p>
+        <div class="source-view__popup-actions">
+          <InkButton :text="t('common.cancel')" theme="subtle" @click="onCloseJob" />
+          <InkButton
+            :text="t('source.createJob')"
+            theme="primary"
+            native-type="submit"
+            :is-loading="jobSaving"
+            :disabled="!canCreateJob || busy"
+          />
+        </div>
+      </InkForm>
+    </InkPopup>
+
+    <InkPopup v-model="newCronOpen" :title="t('source.addSchedule')" @close="onCloseCron">
+      <InkForm @submit="onCreateCron">
+        <InkInput
+          v-model="cronSchedule"
+          :label="t('source.cronSchedule')"
+          placeholder="0 * * * *"
+        />
+        <p v-if="cronCreateError" role="alert" class="text-feedback-error">{{ cronCreateError }}</p>
+        <div class="source-view__popup-actions">
+          <InkButton :text="t('common.cancel')" theme="subtle" @click="onCloseCron" />
+          <InkButton
+            :text="t('source.addSchedule')"
+            theme="primary"
+            native-type="submit"
+            :is-loading="cronSaving"
+            :disabled="busy"
+          />
+        </div>
+      </InkForm>
+    </InkPopup>
+
+    <InkDialog
+      :model-value="cronToDelete !== null"
+      :title="t('source.deleteSchedule')"
+      :confirm-text="t('source.delete')"
+      :cancel-text="t('common.cancel')"
+      @confirm="onDeleteCron"
+      @update:model-value="cronToDelete = null"
+    >
+      <p>{{ t('source.deleteScheduleMessage') }}</p>
+      <p v-if="cronError" role="alert" class="text-feedback-error">{{ cronError }}</p>
+    </InkDialog>
+  </main>
 </template>
 
 <style lang="scss" scoped src="./source.scss" />

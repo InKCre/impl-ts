@@ -8,14 +8,13 @@
   padding: clamp(1rem, 4vw, 2rem);
   overflow-y: auto;
   box-sizing: border-box;
-  background: sys-var(color, surface, base);
 
-  &__page-header {
+  &__actions {
     display: flex;
     flex-wrap: wrap;
-    align-items: end;
-    justify-content: space-between;
-    gap: sys-var(space, md);
+    align-items: center;
+    justify-content: flex-end;
+    gap: sys-var(space, sm);
   }
 
   &__browse-link {
