@@ -8,6 +8,11 @@
     },
     {
       "kind": "module_federation",
+      "producer": "../../extensions/capture/package.json",
+      "artifact": "../../extensions/capture/dist/client-web"
+    },
+    {
+      "kind": "module_federation",
       "producer": "../../extensions/twitter/package.json",
       "artifact": "../../extensions/twitter/dist/client-web"
     },
