@@ -96,3 +96,5 @@ TZID／UTC，未指定时区的时间会明确标注，不按浏览器时区隐�
 本文截图使用 Web PR #142 与 Python PR #146 的 preview 和专用测试数据。浏览器通过本机
 限定 preview 域名的 CONNECT 转发访问服务，HTTPS 证书校验保持启用；这一网络条件不属于
 插件部署要求。手机同步沿用 Python 教程中记录的 USB 转发条件。
+
+开发排查脚本保留在扩展的 `scripts/tests/`，可按需运行 `pnpm --filter @inkcre/ext-caldav verify`。这些脚本不纳入默认测试或 CI 门槛，不能替代上述 preview 与真机验收。

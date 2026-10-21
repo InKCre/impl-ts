@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseCollection, parseResource, safeHttpUrl } from '../src/content.ts'
+import { parseCollection, parseResource, safeHttpUrl } from '../../src/content.ts'
 
 const resource = (text: string) => JSON.stringify({ href: 'test.ics', text })
 const fixture = (name: string) =>

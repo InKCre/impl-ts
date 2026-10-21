@@ -7,8 +7,8 @@ import {
   propertyLinkSchema,
   resourceUid,
   type GraphProperty,
-} from '../src/graph-content.ts'
-import { parseResource } from '../src/content.ts'
+} from '../../src/graph-content.ts'
+import { parseResource } from '../../src/content.ts'
 
 const samples = JSON.parse(
   readFileSync(new URL('./fixtures/semantic-graph.json', import.meta.url), 'utf8')

@@ -9,7 +9,7 @@ import {
   runtimeReady,
   savedPassword,
   waitingForRuntime,
-} from '../src/setup-state.ts'
+} from '../../src/setup-state.ts'
 
 const running: ExtensionRuntimeStatus = {
   name: 'inkcre/caldav',
