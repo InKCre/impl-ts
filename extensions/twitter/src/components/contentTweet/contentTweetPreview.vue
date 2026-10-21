@@ -1,49 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { SolvedContentRendererProps } from '@inkcre/core'
-
 import type { Tweet } from '../../schema'
+import { legacyText } from './presentation'
+import TweetPreview from './tweetPreview.vue'
 
-const props = defineProps<SolvedContentRendererProps<Tweet>>()
-const text = computed(() => {
-  const plain = props.solvedContent.text
-    .replace(/\[(?:photo|video|link)\]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return plain.length > 180 ? `${plain.slice(0, 180)}…` : plain
-})
+defineProps<SolvedContentRendererProps<Tweet>>()
 </script>
 
 <template>
-  <article class="tweet-preview">
-    <span>@{{ solvedContent.user_id ?? 'unknown' }}</span>
-    <p>{{ text }}</p>
-    <img v-if="solvedContent.attachments?.[0]" :src="solvedContent.attachments[0]" alt="" />
-  </article>
+  <TweetPreview
+    :text="legacyText(solvedContent.text)"
+    :media-count="solvedContent.attachments?.length"
+    :context="solvedContent.quote ? 'Includes a quoted post' : undefined"
+  />
 </template>
-
-<style scoped lang="scss">
-.tweet-preview {
-  display: grid;
-  gap: 8px;
-  min-width: 180px;
-  max-width: 340px;
-
-  span {
-    color: var(--sys-color-text-subtle);
-    @include apply-font(label-md);
-  }
-
-  p {
-    margin: 0;
-    @include apply-font(body-sm);
-    overflow-wrap: anywhere;
-  }
-
-  img {
-    width: 100%;
-    max-height: 180px;
-    object-fit: cover;
-  }
-}
-</style>

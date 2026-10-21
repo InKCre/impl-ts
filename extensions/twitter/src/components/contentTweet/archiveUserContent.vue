@@ -3,19 +3,9 @@ import type { SolvedContentRendererProps } from '@inkcre/core'
 import { computed } from 'vue'
 import type { UserRecord } from '../../schema'
 import RichTextView from './richTextView.vue'
+import { safeUrl } from './presentation'
 
 const props = defineProps<SolvedContentRendererProps<UserRecord>>()
-function safeUrl(value: string | undefined): string | undefined {
-  if (!value) return undefined
-  try {
-    const parsed = new URL(value)
-    return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password
-      ? parsed.toString()
-      : undefined
-  } catch {
-    return undefined
-  }
-}
 const website = computed(() =>
   'handle' in props.solvedContent ? safeUrl(props.solvedContent.website) : undefined
 )

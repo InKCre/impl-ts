@@ -2,6 +2,9 @@
 import { computed } from 'vue'
 import { getInfoBaseRouter, type SolvedContentRendererProps } from '@inkcre/core'
 import type { ArchivePostContentModel } from '../../resolver'
+import { compactCount, postDate, safeUrl } from './presentation'
+import TweetIdentity from './tweetIdentity.vue'
+import TweetIcon from './tweetIcon.vue'
 import RichTextView from './richTextView.vue'
 import ArchiveMediaContent from './archiveMediaContent.vue'
 import ArticleBlockView from './articleBlockView.vue'
@@ -10,47 +13,102 @@ const props = defineProps<SolvedContentRendererProps<ArchivePostContentModel>>()
 const router = getInfoBaseRouter()
 const post = computed(() => props.solvedContent.post)
 const fullPost = computed(() => ('authorId' in post.value ? post.value : null))
-const author = computed(() => props.solvedContent.author)
-const linked = computed(() =>
-  props.solvedContent.references.filter(({ reference }) => reference.type !== 'media')
-)
 const media = computed(() =>
   props.solvedContent.references
     .filter(({ reference }) => reference.type === 'media')
-    .sort((left, right) => {
-      if (left.reference.type !== 'media' || right.reference.type !== 'media') return 0
-      return left.reference.position - right.reference.position
+    .sort((a, b) =>
+      a.reference.type === 'media' && b.reference.type === 'media'
+        ? a.reference.position - b.reference.position
+        : 0
+    )
+)
+const reply = computed(() =>
+  props.solvedContent.references.find(({ reference }) => reference.type === 'reply')
+)
+const authorBlock = computed(() =>
+  props.solvedContent.references.find(({ reference }) => reference.type === 'author')
+)
+const contextPosts = computed(() =>
+  [
+    {
+      kind: 'quote',
+      id: fullPost.value?.quote?.postId,
+      label: 'Quoted post',
+      tombstone: fullPost.value?.quote?.tombstone,
+    },
+    { kind: 'repost', id: fullPost.value?.repostOf, label: 'Reposted post', tombstone: undefined },
+  ]
+    .filter((item) => item.id)
+    .map((item) => {
+      const reference = props.solvedContent.references.find(
+        ({ reference }) => reference.type === item.kind
+      )
+      return {
+        ...item,
+        blockId: reference?.blockId,
+        post: reference?.record && 'authorId' in reference.record ? reference.record : null,
+      }
     })
 )
+const countLabels = {
+  replies: 'Replies',
+  reposts: 'Reposts',
+  quotes: 'Quotes',
+  likes: 'Likes',
+  bookmarks: 'Bookmarks',
+  views: 'Views',
+} as const
+const cardHost = computed(() => {
+  const url = safeUrl(fullPost.value?.card?.url)
+  return url ? new URL(url).hostname : ''
+})
+const counts = computed(() =>
+  (Object.keys(countLabels) as (keyof typeof countLabels)[]).flatMap((key) => {
+    const value = fullPost.value?.counts?.[key]
+    return value === undefined ? [] : [{ key, value, label: countLabels[key] }]
+  })
+)
 function navigate(block: number): void {
-  void router.push({ name: 'block', block })
+  void router.push({ name: 'solved-content', block })
 }
 </script>
 
 <template>
-  <article class="archive-post">
-    <header>
-      <strong v-if="author && 'handle' in author"
-        >{{ author.name }} <span>@{{ author.handle }}</span></strong
-      >
-      <span v-else>Unknown author · {{ fullPost?.authorId || post.id }}</span>
-      <time v-if="fullPost">{{ fullPost.createdAt }}</time>
+  <article class="content-tweet">
+    <header class="content-tweet__header">
+      <TweetIdentity :author="solvedContent.author" />
       <a
-        v-if="fullPost"
-        :href="`https://x.com/i/status/${fullPost.id}`"
+        class="content-tweet__source"
+        :href="`https://x.com/i/status/${post.id}`"
         target="_blank"
         rel="noopener noreferrer"
-      >
-        Original post · {{ fullPost.id }}
-      </a>
+        aria-label="View original post on X"
+        title="Open original post on X"
+        ><span>View original post</span><TweetIcon name="external"
+      /></a>
     </header>
-    <p v-if="fullPost?.contentWarning" class="warning">
-      {{ fullPost.contentWarning.title }} {{ fullPost.contentWarning.text }}
+    <div v-if="fullPost?.replyTo" class="content-tweet__context">
+      <button v-if="reply" type="button" @click="navigate(reply.blockId)">
+        Replying to {{ fullPost.replyTo.handle ? `@${fullPost.replyTo.handle}` : 'a post' }}
+      </button>
+      <span v-else
+        >Replying to {{ fullPost.replyTo.handle ? `@${fullPost.replyTo.handle}` : 'a post' }}</span
+      >
+      <p v-if="fullPost.replyTo.tombstone">{{ fullPost.replyTo.tombstone }}</p>
+    </div>
+    <p v-if="!fullPost" class="content-tweet__notice">
+      This post has not been captured yet. Open the original post on X to read it.
     </p>
-    <RichTextView v-if="fullPost?.text" :value="fullPost.text" />
-    <section v-if="fullPost?.article" class="article">
+    <p v-if="fullPost?.contentWarning" class="content-tweet__notice">
+      <strong>{{ fullPost.contentWarning.title }}</strong> {{ fullPost.contentWarning.text }}
+    </p>
+    <RichTextView v-if="fullPost?.text" class="content-tweet__text" :value="fullPost.text" />
+    <section v-if="fullPost?.article" class="content-tweet__article">
+      <span class="content-tweet__eyebrow">Article</span>
       <h2>{{ fullPost.article.title }}</h2>
-      <p v-if="fullPost.article.preview" class="preview">{{ fullPost.article.preview }}</p>
+      <p v-if="fullPost.article.preview" class="content-tweet__subtle">
+        {{ fullPost.article.preview }}
+      </p>
       <ArticleBlockView
         v-for="(block, index) in fullPost.article.blocks"
         :key="index"
@@ -58,23 +116,12 @@ function navigate(block: number): void {
         :entities="fullPost.article.entities"
       />
     </section>
-    <blockquote v-if="fullPost?.replyTo?.tombstone">{{ fullPost.replyTo.tombstone }}</blockquote>
-    <blockquote v-if="fullPost?.quote?.tombstone">{{ fullPost.quote.tombstone }}</blockquote>
-    <p v-if="fullPost?.replyTo && !fullPost.replyTo.tombstone" class="context">
-      Reply to @{{ fullPost.replyTo.handle || fullPost.replyTo.userId || 'unknown' }} ·
-      {{ fullPost.replyTo.postId }}
-    </p>
-    <p v-if="fullPost?.quote && !fullPost.quote.tombstone" class="context">
-      Quoted post · {{ fullPost.quote.postId }}
-    </p>
-    <p v-if="fullPost?.repostOf" class="context">Repost · {{ fullPost.repostOf }}</p>
-    <dl v-if="fullPost?.counts" class="counts">
-      <template v-for="(value, key) in fullPost.counts" :key="key"
-        ><dt>{{ key }}</dt>
-        <dd>{{ value }}</dd></template
-      >
-    </dl>
-    <section v-if="media.length" class="media-list" aria-label="Post media">
+    <section
+      v-if="media.length"
+      class="tweet-media-grid"
+      :class="`tweet-media-grid--${Math.min(media.length, 4)}`"
+      aria-label="Post media"
+    >
       <ArchiveMediaContent
         v-for="item in media"
         :key="item.blockId"
@@ -82,78 +129,92 @@ function navigate(block: number): void {
         :record="item.record"
       />
     </section>
-    <ul v-if="linked.length" class="related-records" aria-label="Related Twitter records">
-      <li v-for="item in linked" :key="item.blockId">
-        <button type="button" @click="navigate(item.blockId)">
-          View {{ item.reference.type }} {{ item.record?.id ?? 'unavailable record' }}
+    <section
+      v-for="item in contextPosts"
+      :key="item.kind"
+      class="content-tweet__quote"
+      :aria-label="item.label"
+    >
+      <div class="content-tweet__quote-heading">
+        <TweetIcon :name="item.kind === 'quote' ? 'quotes' : 'reposts'" /><strong>{{
+          item.label
+        }}</strong
+        ><time v-if="item.post" :datetime="item.post.createdAt">{{
+          postDate(item.post.createdAt, true)
+        }}</time>
+      </div>
+      <p v-if="item.tombstone" class="content-tweet__subtle">{{ item.tombstone }}</p>
+      <template v-else-if="item.post">
+        <RichTextView v-if="item.post.text" :value="item.post.text" />
+        <strong v-if="item.post.article">{{ item.post.article.title }}</strong>
+        <span v-if="item.post.mediaIds?.length" class="content-tweet__subtle"
+          >{{ item.post.mediaIds.length }} attachments</span
+        >
+      </template>
+      <p v-else class="content-tweet__subtle">Post content not captured.</p>
+      <button
+        v-if="item.blockId"
+        type="button"
+        class="content-tweet__text-link"
+        @click="navigate(item.blockId)"
+      >
+        Open saved post →
+      </button>
+      <a
+        v-else
+        :href="`https://x.com/i/status/${item.id}`"
+        target="_blank"
+        rel="noopener noreferrer"
+        >View on X ↗</a
+      >
+    </section>
+    <a
+      v-if="fullPost?.card && safeUrl(fullPost.card.url)"
+      class="content-tweet__card"
+      :href="safeUrl(fullPost.card.url)"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <span class="content-tweet__subtle">{{ fullPost.card.domain || cardHost }} ↗</span>
+      <strong>{{ fullPost.card.title || fullPost.card.url }}</strong>
+      <span v-if="fullPost.card.description">{{ fullPost.card.description }}</span>
+    </a>
+    <aside v-if="fullPost?.communityNote" class="content-tweet__quote" aria-label="Community note">
+      <strong>{{ fullPost.communityNote.title || 'Readers added context' }}</strong>
+      <RichTextView :value="fullPost.communityNote.text" />
+    </aside>
+    <footer v-if="fullPost" class="content-tweet__footer">
+      <div class="content-tweet__metadata">
+        <time :datetime="fullPost.createdAt">{{ postDate(fullPost.createdAt) }}</time
+        ><span v-if="fullPost.source">· {{ fullPost.source }}</span>
+      </div>
+      <dl v-if="counts.length" class="content-tweet__counts" aria-label="Engagement at capture">
+        <div
+          v-for="item in counts"
+          :key="item.key"
+          :title="`${item.value.toLocaleString()} ${item.label.toLowerCase()}`"
+        >
+          <dt>
+            <TweetIcon :name="item.key" /><span class="content-tweet__sr-only">{{
+              item.label
+            }}</span>
+          </dt>
+          <dd>{{ compactCount(item.value) }}</dd>
+        </div>
+      </dl>
+      <div class="content-tweet__footnote">
+        <span v-if="counts.length">Counts at capture</span
+        ><button
+          v-if="authorBlock"
+          type="button"
+          class="content-tweet__text-link"
+          @click="navigate(authorBlock.blockId)"
+        >
+          Saved profile →
         </button>
-      </li>
-    </ul>
+      </div>
+    </footer>
   </article>
 </template>
 
-<style scoped>
-.archive-post {
-  display: grid;
-  gap: 1rem;
-  max-width: 52rem;
-  overflow-wrap: anywhere;
-}
-header {
-  display: grid;
-  gap: 0.25rem;
-}
-header span,
-time,
-.context,
-.counts {
-  color: var(--sys-color-text-subtle);
-}
-time,
-.context {
-  font-size: 0.875em;
-}
-.warning {
-  padding: 0.6rem;
-  border: 1px solid currentColor;
-}
-.article {
-  border-top: 1px solid var(--sys-color-border-subtle);
-  padding-top: 1rem;
-}
-.article p {
-  white-space: pre-wrap;
-}
-.preview {
-  color: var(--sys-color-text-subtle);
-}
-.counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.7rem;
-  margin: 0;
-}
-.counts dt {
-  text-transform: capitalize;
-}
-.counts dd {
-  margin: 0 0.8rem 0 0;
-}
-.related-records {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  margin: 0;
-  padding-left: 1.25rem;
-}
-.media-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.75rem;
-}
-blockquote {
-  border-left: 3px solid currentColor;
-  margin: 0;
-  padding-left: 0.75rem;
-}
-</style>
+<style lang="scss" scoped src="./contentTweet.scss" />
