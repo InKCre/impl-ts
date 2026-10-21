@@ -2,43 +2,38 @@
 import { computed } from 'vue'
 import type { SolvedContentRendererProps } from '@inkcre/core'
 import type { ArchivePostContentModel } from '../../resolver'
+import { visibleText } from './presentation'
+import TweetPreview from './tweetPreview.vue'
 
 const props = defineProps<SolvedContentRendererProps<ArchivePostContentModel>>()
 const post = computed(() =>
   'authorId' in props.solvedContent.post ? props.solvedContent.post : null
 )
-const text = computed(() => {
-  const value =
-    post.value?.text?.text ??
-    post.value?.article?.title ??
-    post.value?.repostOf ??
-    props.solvedContent.post.id
-  return typeof value === 'string' && value.length > 180 ? `${value.slice(0, 180)}…` : value
-})
-const author = computed(() => props.solvedContent.author)
+const mediaCount = computed(
+  () =>
+    props.solvedContent.references.filter(({ reference }) => reference.type === 'media').length ||
+    post.value?.mediaIds?.length
+)
+const context = computed(() =>
+  post.value?.repostOf
+    ? 'Reposted post'
+    : post.value?.replyTo
+      ? post.value.replyTo.handle
+        ? `Replying to @${post.value.replyTo.handle}`
+        : 'Replying to a post'
+      : post.value?.quote
+        ? 'Includes a quoted post'
+        : undefined
+)
 </script>
 
 <template>
-  <article class="archive-post-preview">
-    <strong v-if="author && 'handle' in author">{{ author.name }} @{{ author.handle }}</strong>
-    <p>{{ text }}</p>
-    <small v-if="post">{{ post.createdAt }}</small>
-  </article>
+  <TweetPreview
+    :author="solvedContent.author"
+    :text="visibleText(post?.text) || post?.article?.preview || ''"
+    :article-title="post?.article?.title"
+    :created-at="post?.createdAt"
+    :media-count="mediaCount"
+    :context="context"
+  />
 </template>
-
-<style scoped>
-.archive-post-preview {
-  display: grid;
-  gap: 0.4rem;
-  min-width: 12rem;
-  max-width: 24rem;
-  overflow-wrap: anywhere;
-}
-p {
-  margin: 0;
-  white-space: pre-wrap;
-}
-small {
-  color: var(--sys-color-text-subtle);
-}
-</style>

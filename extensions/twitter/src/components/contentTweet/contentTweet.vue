@@ -1,80 +1,108 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { type Tweet } from '../../schema'
+import { ref, watch } from 'vue'
+import { InkButton, InkImage } from '@inkcre/ui-web'
 import type { SolvedContentRendererProps } from '@inkcre/core'
+import type { Tweet } from '../../schema'
+import { legacyText, xUrl } from './presentation'
+import TweetIdentity from './tweetIdentity.vue'
+import TweetIcon from './tweetIcon.vue'
 
 const props = defineProps<SolvedContentRendererProps<Tweet>>()
-
-// Track failed image loads
-const failedAttachments = ref<Set<number>>(new Set())
-
-// Graph summaries belong to contentTweetPreview; this renderer opens the full tweet.
-const displayText = computed(() => {
-  if (!props.solvedContent) return ''
-  const text = props.solvedContent.text
-    .replace(/\[photo\]/g, '')
-    .replace(/\[video\]/g, '')
-    .replace(/\[link\]/g, '')
-    .trim()
-  return text
-})
-
-// Attachments from resolved content (blob URLs)
-const attachments = computed(() => {
-  return props.solvedContent?.attachments || []
-})
-
-// Limit to max 4 attachments (Twitter-like behavior)
-const displayAttachments = computed(() => {
-  return attachments.value.slice(0, 4)
-})
-
-// Count for dynamic grid class
-const attachmentCount = computed(() => {
-  return displayAttachments.value.length
-})
-
-// Handle image load errors
-const onImageError = (index: number) => {
-  failedAttachments.value.add(index)
-}
-
-// Check if attachment failed to load
-const isAttachmentFailed = (index: number) => {
-  return failedAttachments.value.has(index)
-}
+const expanded = ref(false)
+const expandedAttachment = ref<string | null>(null)
+const failed = ref(new Set<string>())
+watch(
+  () => props.solvedContent,
+  () => {
+    expanded.value = false
+    expandedAttachment.value = null
+    failed.value.clear()
+  }
+)
 </script>
 
 <template>
   <article class="content-tweet">
-    <div class="content-tweet__header">
-      <span class="content-tweet__icon">𝕏</span>
-      <span class="content-tweet__user">@{{ props.solvedContent.user_id ?? 'unknown' }}</span>
-    </div>
-    <div class="content-tweet__text">{{ displayText }}</div>
-    <div v-if="attachmentCount > 0" class="content-tweet__media">
-      <div
-        class="content-tweet__media-grid"
-        :class="`content-tweet__media-grid--${attachmentCount}`"
+    <header class="content-tweet__header">
+      <TweetIdentity /><a
+        class="content-tweet__source"
+        :href="xUrl(`/i/status/${solvedContent.id}`)"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="View original post on X"
+        ><span>View original post</span><TweetIcon name="external"
+      /></a>
+    </header>
+    <div class="content-tweet__text" dir="auto">{{ legacyText(solvedContent.text) }}</div>
+    <template v-if="solvedContent.attachments?.length">
+      <InkButton v-if="!expanded" @click="expanded = true">
+        Load {{ solvedContent.attachments.length }} attachments
+      </InkButton>
+      <section
+        v-else
+        class="tweet-media-grid tweet-media-grid--loaded"
+        :class="`tweet-media-grid--${Math.min(solvedContent.attachments.length, 4)}`"
+        aria-label="Post media"
       >
-        <div
-          v-for="(attachment, index) in displayAttachments"
-          :key="index"
-          class="content-tweet__media-item"
-        >
-          <img
-            v-if="!isAttachmentFailed(index)"
+        <div v-for="attachment in solvedContent.attachments" :key="attachment" class="legacy-media">
+          <InkImage
+            v-if="!failed.has(attachment)"
             :src="attachment"
-            :alt="`Tweet attachment ${index + 1}`"
-            @error="onImageError(index)"
+            :expanded="expandedAttachment === attachment"
+            alt="Post attachment"
+            @update:expanded="expandedAttachment = $event ? attachment : null"
+            @error="failed.add(attachment)"
           />
-          <div v-else class="content-tweet__media-error">
-            <span class="content-tweet__media-error-icon">!</span>
-          </div>
+          <button
+            v-else
+            type="button"
+            class="content-tweet__text-link"
+            @click="failed.delete(attachment)"
+          >
+            Image unavailable · Retry
+          </button>
+          <InkButton
+            v-if="!failed.has(attachment)"
+            class="tweet-media__expand"
+            size="sm"
+            aria-label="Expand image"
+            @click="expandedAttachment = attachment"
+          >
+            <template #prefix-icon><TweetIcon name="expand" /></template>
+            Expand
+          </InkButton>
         </div>
-      </div>
-    </div>
+      </section>
+    </template>
+    <p class="content-tweet__subtle">
+      Saved in the legacy format. Author profile and publication time were not captured.
+    </p>
   </article>
 </template>
 
 <style lang="scss" scoped src="./contentTweet.scss" />
+<style scoped src="./mediaControls.css" />
+<style scoped>
+.legacy-media {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--sys-color-surface-subtle);
+}
+.legacy-media :deep(.ink-image),
+.legacy-media :deep(.ink-image__thumbnail) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.legacy-media :deep(.ink-image__img) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+p {
+  margin: 0;
+  font-size: 12px;
+}
+</style>

@@ -1,20 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ArticleBlock, Article } from '../../schema'
+import { safeUrl } from './presentation'
 
 const props = defineProps<{ block: ArticleBlock; entities?: Article['entities'] }>()
-function safeUrl(data: Record<string, unknown> | undefined): string | undefined {
-  const candidate = data?.url ?? data?.href
-  if (typeof candidate !== 'string') return undefined
-  try {
-    const parsed = new URL(candidate)
-    return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password
-      ? parsed.toString()
-      : undefined
-  } catch {
-    return undefined
-  }
-}
 const segments = computed(() => {
   const boundaries = new Set([0, props.block.text.length])
   for (const [offset, length] of props.block.styles ?? []) {
@@ -36,7 +25,11 @@ const segments = computed(() => {
       ([offset, length]) => offset <= start && offset + length >= end
     )?.[2]
     const entity = entityIndex === undefined ? undefined : props.entities?.[entityIndex]
-    const href = entity?.type.toLowerCase() === 'link' ? safeUrl(entity.data) : undefined
+    const candidate = entity?.data?.url ?? entity?.data?.href
+    const href =
+      entity?.type.toLowerCase() === 'link' && typeof candidate === 'string'
+        ? safeUrl(candidate)
+        : undefined
     return [{ text: props.block.text.slice(start, end), styles: activeStyles, href }]
   })
 })
@@ -46,7 +39,7 @@ function classes(styles: string[]): string[] {
 </script>
 
 <template>
-  <p :class="`article-${block.type}`">
+  <p dir="auto" :class="`article-${block.type}`">
     <template v-for="(segment, index) in segments" :key="index"
       ><a
         v-if="segment.href"

@@ -1,121 +1,235 @@
 .content-tweet {
-  background: sys-var(color, surface, base);
-  overflow: auto;
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 600px;
+  min-width: 0;
+  margin-inline: auto;
+  color: var(--sys-color-text-base);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 
   &__header {
     display: flex;
     align-items: center;
-    gap: sys-var(space, xs);
-    margin-bottom: sys-var(space, xs);
+    justify-content: space-between;
+    gap: 16px;
   }
-
-  &__icon {
-    @include apply-icon(sm);
+  &__source {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding-block: 6px;
+    color: var(--sys-color-text-subtle);
+    font-size: 13px;
+    line-height: 1.5;
+    text-decoration: none;
+    white-space: nowrap;
   }
-
-  &__user {
-    @include apply-font(label-md);
-    color: sys-var(color, text, subtle);
+  &__source :deep(svg) {
+    width: 14px;
+    height: 14px;
   }
-
+  &__source:is(:hover, :focus-visible) {
+    color: var(--sys-color-text-base);
+  }
+  &__source:is(:hover, :focus-visible) span {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
   &__text {
-    @include apply-font(body-md);
-    color: sys-var(color, text, base);
-    overflow-wrap: anywhere;
+    font-size: 20px;
+    line-height: 1.55;
     white-space: pre-wrap;
   }
-
-  &__media {
-    margin-top: sys-var(space, sm);
+  &__context,
+  &__subtle,
+  &__metadata {
+    color: var(--sys-color-text-subtle);
   }
-
-  &__media-grid {
+  &__context {
+    font-size: 14px;
+  }
+  &__context button,
+  &__text-link {
+    color: inherit;
+    padding: 0;
+    border: 0;
+    font: inherit;
+    background: none;
+    cursor: pointer;
+    text-align: start;
+  }
+  &__context button:hover,
+  &__text-link:hover {
+    text-decoration: underline;
+  }
+  &__context p,
+  &__quote p {
+    margin: 0;
+  }
+  &__notice {
+    margin: 0;
+    border: 1px solid var(--sys-color-border-subtle);
+    border-radius: 12px;
+    padding: 16px;
+    color: var(--sys-color-text-subtle);
+  }
+  &__article {
+    font-size: 17px;
+    line-height: 1.7;
+  }
+  &__article h2 {
+    font-size: 27px;
+    line-height: 1.25;
+    margin: 8px 0 12px;
+    letter-spacing: -0.02em;
+  }
+  &__eyebrow {
+    color: var(--sys-color-text-subtle);
+    font-size: 13px;
+  }
+  &__quote,
+  &__card {
     display: grid;
-    gap: 2px;
-    border-radius: sys-var(radius, none);
-    overflow: hidden;
-    background: sys-var(color, surface, subtle);
-
-    // Single image: full width, flexible height
-    &--1 {
-      grid-template-columns: 1fr;
-      max-height: 508px;
-
-      .content-tweet__media-item {
-        aspect-ratio: auto;
-        max-height: 508px;
-      }
-    }
-
-    // Two images: side-by-side squares
-    &--2 {
-      grid-template-columns: 1fr 1fr;
-
-      .content-tweet__media-item {
-        aspect-ratio: 1 / 1;
-      }
-    }
-
-    // Three images: asymmetric layout
-    &--3 {
-      grid-template-columns: 2fr 1fr;
-      grid-template-rows: 1fr 1fr;
-
-      .content-tweet__media-item:nth-child(1) {
-        grid-row: 1 / 3;
-        aspect-ratio: 2 / 1;
-      }
-
-      .content-tweet__media-item:nth-child(2),
-      .content-tweet__media-item:nth-child(3) {
-        aspect-ratio: 1 / 1;
-      }
-    }
-
-    // Four+ images: 2x2 grid
-    &--4 {
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 1fr 1fr;
-
-      .content-tweet__media-item {
-        aspect-ratio: 1 / 1;
-      }
-    }
+    gap: 10px;
+    border: 1px solid var(--sys-color-border-subtle);
+    border-radius: 14px;
+    padding: 14px;
+    font-size: 15px;
   }
-
-  &__media-item {
-    position: relative;
-    overflow: hidden;
-    background: sys-var(color, surface, subtle);
-
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center;
-      display: block;
-    }
-  }
-
-  &__media-error {
+  &__quote-heading {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    background: sys-var(color, surface, subtle);
-    color: sys-var(color, text, subtle);
-    @include apply-font(body-sm);
-
-    &-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      background: sys-var(color, surface, base);
-      color: sys-var(color, text, subtle);
-      @include apply-icon(md);
-    }
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+  }
+  &__quote-heading time {
+    color: var(--sys-color-text-subtle);
+    margin-left: auto;
+    font-size: 12px;
+  }
+  &__quote .content-tweet__text-link {
+    justify-self: start;
+    font-size: 13px;
+  }
+  &__card {
+    color: inherit;
+    text-decoration: none;
+  }
+  &__card:hover {
+    background: var(--sys-color-surface-subtle);
+  }
+  &__footer {
+    display: grid;
+    gap: 12px;
+  }
+  &__metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: 14px;
+  }
+  &__counts {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12px 16px;
+    padding: 14px 0;
+    border-block: 1px solid var(--sys-color-border-subtle);
+    color: var(--sys-color-text-subtle);
+  }
+  &__counts div {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  &__counts dt {
+    display: flex;
+  }
+  &__counts dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  &__footnote {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--sys-color-text-subtle);
+  }
+  &__footnote:empty {
+    display: none;
+  }
+  &__sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 4px;
+    border-radius: 2px;
+  }
+  :deep(.rich-text a),
+  :deep(.content-tweet__article a) {
+    color: light-dark(#087bbd, #6dc2ff);
+    text-decoration: none;
+  }
+  :deep(.rich-text a:hover),
+  :deep(.content-tweet__article a:hover) {
+    text-decoration: underline;
+  }
+}
+.tweet-media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 2px;
+  height: 340px;
+  max-height: 65vh;
+  overflow: hidden;
+  border: 1px solid var(--sys-color-border-subtle);
+  border-radius: 16px;
+  &--1 {
+    grid-template-columns: minmax(0, 1fr);
+    height: 180px;
+  }
+  &--1:has(.tweet-media--loaded),
+  &--1.tweet-media-grid--loaded {
+    height: min(440px, 65vh);
+  }
+  &--3 > :first-child {
+    grid-row: span 2;
+  }
+  &:not(&--1) :deep(.ink-image__img) {
+    object-fit: cover;
+  }
+}
+@media (max-width: 480px) {
+  .content-tweet {
+    gap: 14px;
+  }
+  .content-tweet__text {
+    font-size: 18px;
+  }
+  .content-tweet__counts {
+    gap: 10px;
+  }
+  .tweet-media-grid {
+    height: 250px;
+  }
+  .tweet-media-grid--1:has(.tweet-media--loaded),
+  .tweet-media-grid--1.tweet-media-grid--loaded {
+    height: min(360px, 65vh);
   }
 }

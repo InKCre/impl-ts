@@ -99,8 +99,8 @@ importers:
         specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz
         version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.21.6)
       '@inkcre/ui-web':
-        specifier: 2.2.1
-        version: 2.2.1(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+        specifier: 2.3.0
+        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       '@module-federation/runtime':
         specifier: ^0.21.4
         version: 0.21.6
@@ -367,8 +367,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.2.1
-        version: 2.2.1(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+        specifier: 2.3.0
+        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -419,8 +419,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.2.1
-        version: 2.2.1(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+        specifier: 2.3.0
+        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -477,8 +477,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.2.1
-        version: 2.2.1(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+        specifier: 2.3.0
+        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -526,8 +526,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.2.1
-        version: 2.2.1(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+        specifier: 2.3.0
+        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -629,8 +629,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@inkcre/ui-web':
-        specifier: 2.2.1
-        version: 2.2.1(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+        specifier: 2.3.0
+        version: 2.3.0(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
     devDependencies:
       pinia:
         specifier: ^3.0.3
@@ -1510,8 +1510,8 @@ packages:
       '@inkcre/core': '>=0.4.0 <0.5.0'
       '@module-federation/runtime': '>=0.21.4 <0.23.0'
 
-  '@inkcre/ui-web@2.2.1':
-    resolution: {integrity: sha512-rsljLVVzpzCRhywF0poVBFl21H48JAQwENwci+efL5/YOLjav9Uv7yh8oMN4eqmOiQw9Hgt4Tl6Epg2Rzb/g+w==, tarball: https://npm.pkg.github.com/download/@inkcre/ui-web/2.2.1/5b22fbb31e4bf02e4f742bb0f9353cacfb4b8fd9}
+  '@inkcre/ui-web@2.3.0':
+    resolution: {integrity: sha512-fXfAro12+zzyhtjiZqfQBvyMJKVnclrm/qvHst70dnRFZekYIkE+rSfabEJ//avAvvJyVZL7kK6XewXK4PgdJg==, tarball: https://npm.pkg.github.com/download/@inkcre/ui-web/2.3.0/2c81dee78ac6797018f0e62a2a988747cd3c7a3e}
     peerDependencies:
       unocss: ^66.5.0
       vue: ^3.5.25
@@ -1784,12 +1784,14 @@ packages:
   '@opentelemetry/sdk-trace-base@2.11.0':
     resolution: {integrity: sha512-H19x/TX/LZdqiYOjM7fqtSxwlplC5pgelavqbQdHbhdq0q/AI/TGkM2dfGuuynTXmJPeF2HoZVoPDu+TGoW78A==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-web@2.11.0':
     resolution: {integrity: sha512-8hgLI437x8VRKzgUr+WRcHFp9AeaHmveKRsPIMNele9tethgCKprakRRqZCWyt41ilALHATfspUMl1An0OTMUQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -7536,7 +7538,7 @@ snapshots:
       semver: 7.8.5
       zod: 4.1.12
 
-  '@inkcre/ui-web@2.2.1(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))':
+  '@inkcre/ui-web@2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))':
     dependencies:
       '@codemirror/autocomplete': 6.20.3
       '@codemirror/commands': 6.11.1
@@ -7552,7 +7554,7 @@ snapshots:
       vscode-languageserver-textdocument: 1.0.14
       vue: 3.5.40(typescript@5.9.3)
 
-  '@inkcre/ui-web@2.2.1(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))':
+  '@inkcre/ui-web@2.3.0(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))':
     dependencies:
       '@codemirror/autocomplete': 6.20.3
       '@codemirror/commands': 6.11.1
