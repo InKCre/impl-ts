@@ -142,7 +142,9 @@ function distributionLabel(distribution: NativeDistribution | null): string {
     ? 'Python'
     : distribution === 'module_federation'
       ? 'Module Federation'
-      : t('extension.distributionUnknown')
+      : distribution === 'swift_bundled'
+        ? 'Swift (bundled)'
+        : t('extension.distributionUnknown')
 }
 
 function supportedFormats(peer: Peer): NativeDistribution[] {
@@ -297,7 +299,12 @@ async function loadVersions(): Promise<void> {
   versionLoading.value = true
   versionOptions.value = []
   versionError.value = ''
-  const readPublished = async (format: NativeDistribution) => {
+  if (distribution === 'swift_bundled') {
+    versionError.value = t('extension.bundledManagedByApp')
+    versionLoading.value = false
+    return
+  }
+  const readPublished = async (format: 'python' | 'module_federation') => {
     try {
       const catalog = await getExtensionRegistry().getExtension(props.extension.name, format)
       const releases = sortPublishedReleases(catalog.releases ?? [])
@@ -327,7 +334,7 @@ async function loadVersions(): Promise<void> {
       : (preferredPublishedRelease(releases)?.version ?? '')
     if (!releases.length) {
       // On explicit install, show another published native format without implying this Peer supports it.
-      const other: NativeDistribution = distribution === 'python' ? 'module_federation' : 'python'
+      const other = distribution === 'python' ? 'module_federation' : 'python'
       if (publishedFormats.value[other] === undefined) await readPublished(other)
     }
   } catch (error) {
@@ -396,6 +403,11 @@ async function openDocumentation(peer: Peer): Promise<void> {
   docsLoading.value = true
   documentation.value = []
   docsError.value = ''
+  if (pin.distribution === 'swift_bundled') {
+    docsError.value = t('extension.bundledManagedByApp')
+    docsLoading.value = false
+    return
+  }
   try {
     const origin = await new ExtensionRegistryOriginResolver(
       () => configStore.peerConfig.extension_registry_url

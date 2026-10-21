@@ -212,7 +212,8 @@
     "runtimeUnknown": "Runtime status unavailable",
     "unavailableOnPeer": "Unavailable on this Peer",
     "publishedDistributions": "Published distributions",
-    "noPublishedDistribution": "No published {distribution} releases."
+    "noPublishedDistribution": "No published {distribution} releases.",
+    "bundledManagedByApp": "This distribution ships with its application. Manage it and consult its documentation in that application, rather than Registry."
   },
   "job": {
     "loadFailed": "Unable to load this job.",
