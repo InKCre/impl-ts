@@ -86,13 +86,34 @@ async function refreshExtensions(): Promise<void> {
   if (extensionsLoading.value) return
   extensionsLoading.value = true
   extensionError.value = null
-  try {
-    extensions.value = await getExtensionHost().list()
-  } catch (error) {
-    extensionError.value = error instanceof Error ? error.message : String(error)
-  } finally {
-    extensionsLoading.value = false
+  
+  const maxRetries = 3
+  let lastError: Error | null = null
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      extensions.value = await getExtensionHost().list()
+      lastError = null
+      break // Success
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      
+      // If it's a prepared statement conflict, wait and retry
+      if (lastError.message.includes('prepared statement') && attempt < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)))
+        continue
+      }
+      
+      // For other errors, fail immediately
+      break
+    }
   }
+  
+  if (lastError) {
+    extensionError.value = lastError.message
+  }
+  
+  extensionsLoading.value = false
 }
 
 function refreshAll(): void {
@@ -164,11 +185,14 @@ function updateExtension(updated: InstalledExtension): void {
 
 watch(() => [route.query.install, route.query.version], loadInstallRelease, { immediate: true })
 
-onMounted(() => {
-  if (connected.value) {
-    void refreshExtensions()
-    void refreshPeers()
+// Watch for connection state changes and reload when connected
+watch(connected, (isConnected) => {
+  if (isConnected) {
+    refreshAll()
   }
+}, { immediate: true })
+
+onMounted(() => {
   void loadBrowseUrl()
 })
 </script>
