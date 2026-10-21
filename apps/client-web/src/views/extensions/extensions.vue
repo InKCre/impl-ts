@@ -10,7 +10,6 @@ import {
   PeerManager,
   ExtensionParticipationModel,
   type ExtensionParticipation,
-  type NativeDistribution,
   type InstalledExtension,
 } from '@inkcre/core'
 import type { ReleaseRecord } from '@inkcre/extension-runtime-client-web'
@@ -36,7 +35,7 @@ const installPeers = ref<Peer[]>([])
 const installPeerOptions = computed(() =>
   installPeers.value.map((peer) => ({ label: peer.name, value: peer.id }))
 )
-const installDistribution = computed<NativeDistribution>(() =>
+const installDistribution = computed<'python' | 'module_federation'>(() =>
   route.query.distribution === 'python' ? 'python' : 'module_federation'
 )
 const peersLoading = ref(false)

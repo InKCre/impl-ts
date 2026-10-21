@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -8,6 +9,16 @@ import extensionPackage from './package.json'
 export default defineConfig({
   plugins: [
     vue(),
+    {
+      name: 'capture-license',
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'LICENSE',
+          source: readFileSync(new URL('./LICENSE', import.meta.url), 'utf8'),
+        })
+      },
+    },
     federation({
       name: 'extension.capture',
       filename: 'remoteEntry.js',
