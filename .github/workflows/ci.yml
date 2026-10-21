@@ -129,6 +129,7 @@ jobs:
           node --test scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs
           scripts/tests/independent-extension-release.test.mjs
           scripts/tests/release-checkout.test.mjs
+          scripts/tests/core-sdk-compatibility.test.mjs
 
   peer-database:
     name: client-web E2E
