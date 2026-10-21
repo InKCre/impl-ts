@@ -18,13 +18,16 @@ Extension packages. On a protected `main` push,
   Extension Version PR. That PR owns generated package versions and changelogs; contributors do not
   edit those outputs separately. The reconciliation step does not publish, create GitHub Releases,
   or push tags.
-- After the Version PR is merged and no changesets remain, the candidate job checks out that exact
-  release revision, installs the frozen workspace, and builds `@inkcre/core` plus every
+- The candidate job checks out the exact protected-main revision, installs the frozen workspace,
+  and builds `@inkcre/core` plus every
   `extensions/*` producer itself. It saves the selected plan, original prepare descriptors, full ZIP
   snapshots and SHA-256 digests as the immutable `first-party-extension-candidate` Actions artifact.
   No Registry writes occur until that artifact is retained and checked.
-- Producers are discovered from package metadata. A published Release with an existing Module
-  Federation association is a historical no-op at candidate selection. Missing MF native coordinates become
+- Producers are discovered from package metadata. A producer with its own direct pending Changeset
+  is not selected, including a new producer whose initial coordinate does not yet exist. Dependency
+  bumps inferred by Changesets do not count as direct intent. This allows an independently prepared
+  version to publish while other packages still have pending changesets. A published Release with
+  an existing Module Federation association is a historical no-op at candidate selection. Missing MF native coordinates become
   fixed candidates; the publish job downloads this run's exact artifact, prepares them with their
   saved provenance, uploads, publishes, and verifies every candidate from the public Registry.
   It never consumes pull-request CI artifacts or rebuilds a publication candidate.
