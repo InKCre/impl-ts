@@ -18,7 +18,9 @@
     "retry": "Retry",
     "visual": "Form",
     "json": "JSON",
-    "fixJsonBeforeForm": "Fix the JSON before switching to the form."
+    "fixJsonBeforeForm": "Fix the JSON before switching to the form.",
+    "databaseError": "Database connection error. Please try again.",
+    "networkError": "Network connection error. Please check your internet connection."
   },
   "startup": {
     "loading": "Starting InKCre…",

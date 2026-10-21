@@ -18,7 +18,9 @@
     "retry": "重试",
     "visual": "表单",
     "json": "JSON",
-    "fixJsonBeforeForm": "先修正 JSON，才能切换到表单。"
+    "fixJsonBeforeForm": "先修正 JSON，才能切换到表单。",
+    "databaseError": "数据库连接错误，请稍后重试。",
+    "networkError": "网络连接错误，请检查你的网络连接。"
   },
   "startup": {
     "loading": "正在启动 InKCre…",

@@ -28,6 +28,27 @@ const extensionError = ref<string | null>(null)
 const peerError = ref<string | null>(null)
 const browseUrl = ref<string | null>(null)
 const browseError = ref<string | null>(null)
+
+// Helper to format user-friendly error messages
+function formatErrorMessage(error: unknown, fallbackKey: string): string {
+  const message = error instanceof Error ? error.message : String(error)
+  
+  // Don't expose raw HTML or technical details to users
+  if (message.includes('<!doctype') || message.includes('<html') || message.length > 200) {
+    return t(fallbackKey)
+  }
+  
+  // Clean up common technical error patterns
+  if (message.includes('prepared statement')) {
+    return t('common.databaseError')
+  }
+  
+  if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+    return t('common.networkError')
+  }
+  
+  return message
+}
 const installRequested = computed(
   () => route.query.install !== undefined || route.query.version !== undefined
 )
@@ -76,7 +97,7 @@ async function refreshPeers(): Promise<void> {
     peers.value = allPeers
     livePeerIds.value = new Set(livePeers.map((peer) => peer.id))
   } catch (error) {
-    peerError.value = error instanceof Error ? error.message : String(error)
+    peerError.value = formatErrorMessage(error, 'extension.peerListUnavailable')
   } finally {
     peersLoading.value = false
   }
@@ -110,7 +131,7 @@ async function refreshExtensions(): Promise<void> {
   }
   
   if (lastError) {
-    extensionError.value = lastError.message
+    extensionError.value = formatErrorMessage(lastError, 'extension.errorDescription')
   }
   
   extensionsLoading.value = false
@@ -129,7 +150,7 @@ async function loadBrowseUrl(): Promise<void> {
     browseUrl.value = url.href
   } catch (error) {
     browseUrl.value = null
-    browseError.value = error instanceof Error ? error.message : String(error)
+    browseError.value = formatErrorMessage(error, 'extension.registryUnavailable')
   }
 }
 
