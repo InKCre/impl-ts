@@ -2,7 +2,6 @@
 '@inkcre/client-web': patch
 '@inkcre/ext-dev-utils': patch
 '@inkcre/ext-github': patch
-'@inkcre/ext-mail': patch
 '@inkcre/ext-memos': patch
 '@inkcre/ext-twitter': patch
 ---

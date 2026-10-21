@@ -79,7 +79,6 @@ jobs:
   candidate:
     name: Build or restore first-party MF candidate
     needs: reconcile
-    if: needs.reconcile.outputs.has_changesets == 'false'
     permissions:
       contents: read
       packages: read
