@@ -102,6 +102,9 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Set Changesets baseline to the exact release revision
+        run: git branch main "$SOURCE_REVISION"
+
       - name: Install the pinned pnpm release
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
