@@ -311,6 +311,8 @@
     "capabilitiesList": "能力列表",
     "showDetails": "显示详情",
     "hideDetails": "隐藏详情",
+    "viewRaw": "查看原始 JSON",
+    "viewFormatted": "查看格式化",
     "status": "状态"
   },
   "infoBase": {

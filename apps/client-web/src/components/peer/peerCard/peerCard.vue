@@ -21,6 +21,7 @@ const deleteOpen = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
 const capabilitiesOpen = ref(false)
+const showRawCapabilities = ref(false)
 
 const diagnostics = computed(() =>
   props.readiness && props.readiness.status !== 'unavailable' ? props.readiness.diagnostics : null
@@ -209,11 +210,25 @@ const formatCapability = (cap: unknown): string => {
       :show-confirm="false"
       :cancel-text="t('common.close')"
     >
-      <ul class="peer-card__capabilities-list">
+      <div class="peer-card__capabilities-header">
+        <button
+          type="button"
+          class="peer-card__view-toggle"
+          @click="showRawCapabilities = !showRawCapabilities"
+        >
+          {{ showRawCapabilities ? t('peer.viewFormatted') : t('peer.viewRaw') }}
+        </button>
+      </div>
+      
+      <!-- Formatted view -->
+      <ul v-if="!showRawCapabilities" class="peer-card__capabilities-list">
         <li v-for="(cap, index) in peer.capabilities" :key="index">
           <code>{{ formatCapability(cap) }}</code>
         </li>
       </ul>
+      
+      <!-- Raw JSON view -->
+      <pre v-else class="peer-card__capabilities-raw">{{ JSON.stringify(peer.capabilities, null, 2) }}</pre>
     </InkDialog>
 
     <!-- Delete dialog -->

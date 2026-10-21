@@ -306,6 +306,8 @@
     "capabilitiesList": "Capabilities List",
     "showDetails": "Show Details",
     "hideDetails": "Hide Details",
+    "viewRaw": "View Raw JSON",
+    "viewFormatted": "View Formatted",
     "status": "Status"
   },
   "infoBase": {

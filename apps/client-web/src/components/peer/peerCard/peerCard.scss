@@ -74,6 +74,32 @@
     }
   }
 
+  &__capabilities-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: sys-var(space, sm);
+  }
+
+  &__view-toggle {
+    padding: sys-var(space, xs) sys-var(space, sm);
+    border: 1px solid sys-var(color, border, subtle);
+    background: none;
+    color: sys-var(color, text, subtle);
+    @include apply-font(body-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      color: sys-var(color, text, base);
+      border-color: sys-var(color, border, base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid sys-var(color, border, strong);
+      outline-offset: 2px;
+    }
+  }
+
   &__capabilities-list {
     display: flex;
     flex-direction: column;
@@ -94,6 +120,20 @@
       background-color: sys-var(color, surface, subtle);
       overflow-wrap: anywhere;
     }
+  }
+
+  &__capabilities-raw {
+    margin: 0;
+    padding: sys-var(space, sm);
+    background-color: sys-var(color, surface, subtle);
+    @include apply-font(label-md, $mono: true);
+    font-size: 0.8em;
+    line-height: 1.4;
+    overflow-x: auto;
+    max-height: 60vh;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
   }
 
   &__actions {
