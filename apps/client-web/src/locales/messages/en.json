@@ -297,7 +297,16 @@
       "transport_error": "Readiness could not be reached. Refresh to check again.",
       "http_error": "Readiness returned an unexpected HTTP status.",
       "invalid_response": "Readiness returned an unsupported response."
-    }
+    },
+    "readinessIssues": "Device has readiness issues. Check details.",
+    "deviceInfo": "Device Info",
+    "deviceId": "Device ID",
+    "capabilities": "Capabilities",
+    "capabilitiesCount": "{count} items",
+    "capabilitiesList": "Capabilities List",
+    "showDetails": "Show Details",
+    "hideDetails": "Hide Details",
+    "status": "Status"
   },
   "infoBase": {
     "relationLoadFailed": "Unable to load this relation.",

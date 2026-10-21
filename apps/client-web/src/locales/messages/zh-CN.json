@@ -302,7 +302,16 @@
       "transport_error": "无法连接就绪检查端点，可刷新后重新检查。",
       "http_error": "就绪检查返回了意外的 HTTP 状态。",
       "invalid_response": "就绪检查返回了不支持的响应。"
-    }
+    },
+    "readinessIssues": "设备存在就绪问题，请查看详情。",
+    "deviceInfo": "设备信息",
+    "deviceId": "设备 ID",
+    "capabilities": "能力",
+    "capabilitiesCount": "{count} 项",
+    "capabilitiesList": "能力列表",
+    "showDetails": "显示详情",
+    "hideDetails": "隐藏详情",
+    "status": "状态"
   },
   "infoBase": {
     "relationLoadFailed": "无法读取此关联。",

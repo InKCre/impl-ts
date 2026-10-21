@@ -7,12 +7,31 @@
     display: flex;
     align-items: center;
     min-inline-size: 0;
+    max-inline-size: 100%;
+    overflow: hidden;
+
+    // Ensure long names don't break layout
+    :deep(.ink-input--inline) {
+      max-inline-size: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
-  // Status badges: distinguish peer states visually while staying neutral.
+  // Status badges - consistent styling
+  &__status-badge {
+    @include apply-font(label-md);
+    padding-inline: sys-var(space, sm);
+    padding-block: sys-var(space, xs);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
   &__status--online {
     color: sys-var(color, text, base);
     background-color: sys-var(color, surface, raised);
+    border: 1px solid sys-var(color, border, base);
   }
 
   &__status--offline {
@@ -28,15 +47,12 @@
   &__status--current {
     color: sys-var(color, text, base);
     background-color: sys-var(color, surface, raised);
+    border: 1px solid sys-var(color, border, base);
     font-weight: 500;
   }
 
-  &__item-info {
-    min-inline-size: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: sys-var(space, xs);
+  &__actions {
+    flex-shrink: 0;
   }
 
   &__save-error {
@@ -44,35 +60,151 @@
     margin: 0;
   }
 
-  &__item-id {
-    @include apply-font(label-md, $mono: true);
+  // Readiness summary - compact display
+  &__readiness-summary {
+    @include apply-font(body-sm);
+    padding: sys-var(space, sm) sys-var(space, md);
+    margin: 0;
+
+    p {
+      margin: 0;
+    }
+
+    &--error {
+      background-color: sys-var(color, surface, subtle);
+      border-inline-start: 3px solid sys-var(color, feedback, error);
+    }
+
+    &--warning {
+      color: sys-var(color, text, subtle);
+      background-color: sys-var(color, surface, subtle);
+      border-inline-start: 3px solid sys-var(color, border, base);
+    }
+  }
+
+  // Details toggle button
+  &__details-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: sys-var(space, xs);
+    padding: sys-var(space, xs) 0;
+    border: none;
+    background: none;
     color: sys-var(color, text, subtle);
+    @include apply-font(body-sm);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: sys-var(color, text, base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid sys-var(color, border, strong);
+      outline-offset: 2px;
+    }
   }
 
-  &__readiness {
-    @include apply-font(body-sm);
-    max-inline-size: 100%;
-    p {
-      margin: sys-var(space, xs) 0;
-    }
-    ul {
-      margin: sys-var(space, xs) 0;
-      padding-inline-start: sys-var(space, md);
+  &__details-chevron {
+    font-size: 0.75em;
+    transition: transform 0.15s ease;
+
+    &--open {
+      transform: rotate(180deg);
     }
   }
 
-  &__details {
+  // Details panel
+  &__details-panel {
+    display: flex;
+    flex-direction: column;
+    gap: sys-var(space, md);
+    padding: sys-var(space, md);
+    background-color: sys-var(color, surface, subtle);
+    border: 1px solid sys-var(color, border, subtle);
+  }
+
+  &__section {
+    min-inline-size: 0;
+  }
+
+  &__section-title {
+    @include apply-font(label-md);
+    color: sys-var(color, text, subtle);
+    margin: 0 0 sys-var(space, xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  &__info-list {
+    display: flex;
+    flex-direction: column;
+    gap: sys-var(space, xs);
+    margin: 0;
+
+    div {
+      display: flex;
+      gap: sys-var(space, sm);
+      align-items: baseline;
+    }
+
+    dt {
+      @include apply-font(body-sm);
+      color: sys-var(color, text, subtle);
+      min-inline-size: 5rem;
+      flex-shrink: 0;
+    }
+
+    dd {
+      margin: 0;
+      @include apply-font(body-sm);
+      color: sys-var(color, text, base);
+      overflow-wrap: anywhere;
+    }
+
+    code {
+      @include apply-font(label-md, $mono: true);
+      padding: 2px sys-var(space, xs);
+      background-color: sys-var(color, surface, base);
+    }
+  }
+
+  &__device-id {
+    font-size: 0.85em;
+  }
+
+  &__capabilities-list {
+    display: flex;
+    flex-direction: column;
+    gap: sys-var(space, xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      @include apply-font(body-sm);
+    }
+
+    code {
+      padding: 2px sys-var(space, xs);
+      background-color: sys-var(color, surface, base);
+      overflow-wrap: anywhere;
+    }
+  }
+
+  &__hint {
     @include apply-font(body-sm);
-    max-inline-size: 100%;
-    summary {
-      cursor: pointer;
-    }
-    p {
-      margin: sys-var(space, xs) 0;
-    }
-    pre {
-      max-inline-size: 100%;
-      overflow-x: auto;
+    color: sys-var(color, text, subtle);
+    margin: 0;
+  }
+
+  &__delete-info {
+    margin: 0 0 sys-var(space, sm);
+
+    strong {
+      @include apply-font(body-md);
     }
   }
 }

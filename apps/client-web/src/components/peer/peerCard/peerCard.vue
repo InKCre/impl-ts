@@ -20,27 +20,30 @@ const configError = ref('')
 const deleteOpen = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
+const showDetails = ref(false)
+
 const diagnostics = computed(() =>
   props.readiness && props.readiness.status !== 'unavailable' ? props.readiness.diagnostics : null
 )
-const databaseComponents = computed(() =>
-  diagnostics.value
-    ? Object.entries(diagnostics.value.database).filter(
-        (entry): entry is [string, { status: string; problems?: string[] }] =>
-          typeof entry[1] === 'object' &&
-          ((entry[1].status !== 'ok' && entry[1].status !== 'not_required') ||
-            !!entry[1].problems?.length)
-      )
-    : []
-)
+
+const hasIssues = computed(() => {
+  if (!diagnostics.value) return false
+  const db = diagnostics.value.database
+  return Object.values(db).some(
+    (c: any) => c && typeof c === 'object' && (c.status === 'error' || c.problems?.length)
+  )
+})
+
 function openDelete() {
   deleteError.value = ''
   deleteOpen.value = true
 }
+
 const canSaveConfig = computed(
   () =>
     configValidation.value?.status === 'valid' && configValidation.value.text === configModel.value
 )
+
 function openConfig() {
   configModel.value = JSON.stringify(props.peer.config, null, 2)
   configValidation.value = undefined
@@ -108,13 +111,21 @@ const onConfirmDelete = async () => {
   }
 }
 
-const getStatusText = (status: 'online' | 'offline' | 'unknown') => {
-  const statusMap = {
-    online: t('peer.statusOnline'),
-    offline: t('peer.statusOffline'),
-    unknown: t('peer.statusUnknown'),
+const statusConfig = computed(() => {
+  const config = {
+    online: { text: t('peer.statusOnline'), class: 'peer-card__status--online' },
+    offline: { text: t('peer.statusOffline'), class: 'peer-card__status--offline' },
+    unknown: { text: t('peer.statusUnknown'), class: 'peer-card__status--unknown' },
   }
-  return statusMap[status]
+  return config[props.status]
+})
+
+const formatCapability = (cap: unknown): string => {
+  if (typeof cap === 'string') return cap
+  if (cap && typeof cap === 'object' && 'id' in cap) {
+    return String((cap as { id: unknown }).id)
+  }
+  return JSON.stringify(cap)
 }
 </script>
 
@@ -125,12 +136,12 @@ const getStatusText = (status: 'online' | 'offline' | 'unknown') => {
         <h3 class="entity-card__title peer-card__title">
           <InkInput v-model="peer.name" type="inline" @confirm="savePeer" />
         </h3>
-        <span :class="['entity-card__status', `peer-card__status--${status}`]">
-          {{ getStatusText(status) }}
+        <span :class="['peer-card__status-badge', statusConfig.class]">
+          {{ statusConfig.text }}
         </span>
-        <span v-if="current" class="entity-card__status peer-card__status--current">{{
-          t('peer.current')
-        }}</span>
+        <span v-if="current" class="peer-card__status-badge peer-card__status--current">
+          {{ t('peer.current') }}
+        </span>
       </div>
       <div class="entity-card__actions peer-card__actions">
         <InkButton :text="t('peer.editConfig')" size="sm" @click="openConfig" />
@@ -144,43 +155,92 @@ const getStatusText = (status: 'online' | 'offline' | 'unknown') => {
         />
       </div>
     </header>
+
     <div class="entity-card__meta">
       <span>{{ peer.application_version ? `v${peer.application_version}` : t('peer.versionUnknown') }}</span>
     </div>
+
     <p v-if="saveError" role="alert" class="peer-card__save-error text-feedback-error">
       {{ saveError }}
     </p>
-    <div class="peer-card__item-info">
-      <section v-if="diagnostics" class="peer-card__readiness" :aria-label="t('peer.readiness')">
-        <p>
-          <strong>{{ t(`peer.readinessStatus.${diagnostics.status}`) }}</strong> ·
-          {{ t('peer.phase') }}: <code>{{ diagnostics.runtime.phase }}</code> ·
-          {{ t('peer.reason') }}: <code>{{ diagnostics.runtime.reason }}</code>
-        </p>
-        <p v-if="diagnostics.runtime.step">
-          {{ t('peer.step') }}: <code>{{ diagnostics.runtime.step }}</code>
-        </p>
-        <p>{{ t('peer.database') }}: {{ diagnostics.database.status }}</p>
-        <ul v-if="databaseComponents.length">
-          <li v-for="[name, component] in databaseComponents" :key="name">
-            <span>{{ name }}: {{ component.status }}</span>
-            <ul v-if="component.problems?.length">
-              <li v-for="problem in component.problems" :key="problem">{{ problem }}</li>
-            </ul>
+
+    <!-- Readiness summary - only show if there are issues or if explicitly requested -->
+    <div v-if="diagnostics && hasIssues" class="peer-card__readiness-summary peer-card__readiness-summary--error">
+      <p role="alert">
+        <strong>{{ t('peer.readinessIssues') }}</strong>
+      </p>
+    </div>
+    <div v-else-if="readiness?.status === 'unavailable'" class="peer-card__readiness-summary peer-card__readiness-summary--warning">
+      <p>{{ t(`peer.readinessUnavailable.${readiness.reason}`) }}</p>
+    </div>
+
+    <!-- Details toggle -->
+    <button
+      type="button"
+      class="peer-card__details-toggle"
+      :aria-expanded="showDetails"
+      @click="showDetails = !showDetails"
+    >
+      {{ showDetails ? t('peer.hideDetails') : t('peer.showDetails') }}
+      <span :class="['peer-card__details-chevron', { 'peer-card__details-chevron--open': showDetails }]" aria-hidden="true">▼</span>
+    </button>
+
+    <!-- Details section -->
+    <div v-if="showDetails" class="peer-card__details-panel">
+      <!-- Technical readiness info -->
+      <section v-if="diagnostics" class="peer-card__section" :aria-label="t('peer.readiness')">
+        <h4 class="peer-card__section-title">{{ t('peer.readiness') }}</h4>
+        <dl class="peer-card__info-list">
+          <div>
+            <dt>{{ t('peer.status') }}</dt>
+            <dd>{{ t(`peer.readinessStatus.${diagnostics.status}`) }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('peer.phase') }}</dt>
+            <dd><code>{{ diagnostics.runtime.phase }}</code></dd>
+          </div>
+          <div v-if="diagnostics.runtime.step">
+            <dt>{{ t('peer.step') }}</dt>
+            <dd><code>{{ diagnostics.runtime.step }}</code></dd>
+          </div>
+          <div>
+            <dt>{{ t('peer.database') }}</dt>
+            <dd>{{ diagnostics.database.status }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- Device info -->
+      <section class="peer-card__section">
+        <h4 class="peer-card__section-title">{{ t('peer.deviceInfo') }}</h4>
+        <dl class="peer-card__info-list">
+          <div>
+            <dt>{{ t('peer.deviceId') }}</dt>
+            <dd><code class="peer-card__device-id">{{ peer.id }}</code></dd>
+          </div>
+          <div>
+            <dt>{{ t('peer.capabilities') }}</dt>
+            <dd>{{ t('peer.capabilitiesCount', { count: peer.capabilities.length }) }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- Capabilities list -->
+      <section v-if="peer.capabilities.length" class="peer-card__section">
+        <h4 class="peer-card__section-title">{{ t('peer.capabilitiesList') }}</h4>
+        <ul class="peer-card__capabilities-list">
+          <li v-for="(cap, index) in peer.capabilities" :key="index">
+            <code>{{ formatCapability(cap) }}</code>
           </li>
         </ul>
       </section>
-      <p v-else-if="readiness?.status === 'unavailable'" class="peer-card__readiness">
-        {{ t(`peer.readinessUnavailable.${readiness.reason}`) }}
+
+      <p v-if="!current && status === 'online'" class="peer-card__hint">
+        {{ t('peer.deleteOnline') }}
       </p>
-      <details class="peer-card__details">
-        <summary>{{ t('common.details') }}</summary>
-        <code class="peer-card__item-id">{{ peer.id }}</code>
-        <p>{{ t('peer.capabilities', { count: peer.capabilities.length }) }}</p>
-        <pre v-if="peer.capabilities.length">{{ JSON.stringify(peer.capabilities, null, 2) }}</pre>
-        <p v-if="!current && status === 'online'">{{ t('peer.deleteOnline') }}</p>
-      </details>
     </div>
+
+    <!-- Config dialog -->
     <InkDialog v-model="configPopupOpen" :title="t('peer.editConfig')" :is-loading="savingConfig">
       <SchemaConfigEditor
         v-model="configModel"
@@ -202,6 +262,7 @@ const getStatusText = (status: 'online' | 'offline' | 'unknown') => {
       </template>
     </InkDialog>
 
+    <!-- Delete dialog -->
     <InkDialog
       v-model="deleteOpen"
       :title="t('peer.delete')"
@@ -210,7 +271,10 @@ const getStatusText = (status: 'online' | 'offline' | 'unknown') => {
       :is-loading="deleting"
       @confirm="onConfirmDelete"
     >
-      <p>{{ peer.name }} · {{ peer.id }}</p>
+      <p class="peer-card__delete-info">
+        <strong>{{ peer.name }}</strong><br />
+        <code class="peer-card__device-id">{{ peer.id }}</code>
+      </p>
       <p>{{ t('peer.deleteConfirm') }}</p>
       <p v-if="deleteError" role="alert" class="text-feedback-error">{{ deleteError }}</p>
     </InkDialog>
