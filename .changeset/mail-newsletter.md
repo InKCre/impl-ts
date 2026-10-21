@@ -1,5 +1,4 @@
 ---
-'@inkcre/ext-mail': minor
 '@inkcre/core': minor
 '@inkcre/client-web': patch
 ---
