@@ -4,6 +4,7 @@ import type { SolvedContentRendererProps } from '@inkcre/core'
 
 import type { EmailResolver } from '../../resolver'
 import type { SolvedEmail } from '../../schema'
+import { readingBodies, HTML_BODIES, htmlText } from '../../newsletter'
 
 const props = defineProps<SolvedContentRendererProps<SolvedEmail, EmailResolver>>()
 const sender = computed(() => {
@@ -11,10 +12,11 @@ const sender = computed(() => {
   return participant?.relation.display_name || participant?.address.solvedContent.address || null
 })
 const body = computed(() => {
-  const text = props.solvedContent.bodies.find(
-    (item) => item.block.resolver === 'core.text.v1'
-  )?.solvedContent
-  if (typeof text !== 'string') return null
+  const body = readingBodies(props.solvedContent.bodies)[0]
+  if (!body) return null
+  const text = HTML_BODIES.has(body.block.resolver)
+    ? htmlText(body.solvedContent, false)
+    : body.solvedContent
   const plain = text.replace(/\s+/g, ' ').trim()
   return plain.length > 180 ? `${plain.slice(0, 180)}…` : plain
 })

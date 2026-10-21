@@ -1,11 +1,21 @@
 import { execFileSync } from 'node:child_process'
 import { access, readFile, readdir, realpath } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { inspectBrowserArtifact } from './browser-runtime-contract.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const jsonOutput = process.argv.includes('--json')
 const coreRoot = `${repoRoot}/packages/core`
 const errors = []
+
+try {
+  execFileSync(process.execPath, ['scripts/check-local-runtime-contract.mjs'], {
+    cwd: repoRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+} catch (error) {
+  errors.push(`browser source contract failed: ${error.stderr?.toString() || error.message}`)
+}
 
 async function requireFile(path) {
   try {
@@ -80,16 +90,6 @@ try {
   // The web application is a static Pages artifact.
 }
 
-const forbiddenBrowserArtifactTerms = new Map([
-  ['/api/config', 'legacy runtime-config channel'],
-  ['VITE_INKCRE_JWT_SECRET', 'build-supplied JWT credential channel'],
-  ['herokuapp.com', 'environment-specific Heroku service origin'],
-  ['http://127.0.0.1:8000', 'loopback API default'],
-  ['raw.githubusercontent.com/stopwords-iso', 'mutable third-party runtime bootstrap fallback'],
-  ['063cd1df-c495-5006-a119-67aa633b26be', 'environment-specific client identity'],
-  ['1eaaadc6-2c1d-4515-ad06-22905dc890a9', 'legacy environment client identity'],
-])
-
 for (const [label, directory] of [
   ['static web', webDist],
   ['browser extension', webextDist],
@@ -102,12 +102,8 @@ for (const [label, directory] of [
       }
 
       const content = await readFile(file, 'utf8')
-      for (const [term, reason] of forbiddenBrowserArtifactTerms) {
-        if (content.includes(term)) {
-          errors.push(
-            `${label} output contains ${reason} "${term}": ${file.slice(repoRoot.length + 1)}`
-          )
-        }
+      for (const reason of inspectBrowserArtifact(content)) {
+        errors.push(`${label} output contains ${reason}: ${file.slice(repoRoot.length + 1)}`)
       }
     }
   } catch (error) {

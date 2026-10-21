@@ -5,6 +5,9 @@ import {
   EmailAddressResolver,
   MailFlagResolver,
   MailMimePartResolver,
+  MailingListResolver,
+  NewsletterHtmlResolver,
+  NewsletterTextResolver,
 } from './resolver'
 
 const resolvers = [
@@ -13,6 +16,9 @@ const resolvers = [
   EmailAddressResolver,
   MailFlagResolver,
   MailMimePartResolver,
+  MailingListResolver,
+  NewsletterHtmlResolver,
+  NewsletterTextResolver,
 ]
 
 const Extension: ExtensionModule = {

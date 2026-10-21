@@ -63,11 +63,21 @@ Web、mail、twitter 和 ext-dev-utils 锁定同一正式 UI 版本；生产构�
 The web settings UI owns the PostgREST URL, technical Peer ID, user-supplied JWT signing
 credential, language, and full-browser import/export. The selected Peer's database row owns its Extension Registry URL and
 other Peer configuration. A fresh browser origin has no environment selection. The explicit export includes the credential
-so another browser can restore the same experience. No InKCre service origin, Peer identity, or JWT
-credential may enter source, source maps, Vite variables, Cloudflare bindings, or the built web and
-extension artifacts. The executable checks are
-[`scripts/check-local-runtime-contract.mjs`](../../scripts/check-local-runtime-contract.mjs) and
-[`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs).
+so another browser can restore the same experience.
+
+部署实例的连接地址、固定 Peer 身份和 JWT 凭据不能成为提交到仓库的默认值，也不能进入 source map、
+Vite 变量、Cloudflare bindings 或浏览器产物。业务链接、第三方 API 地址、文档示例及公共产品 Registry
+默认地址不选择用户连接的 InKCre 部署，无需逐条 URL 白名单。可执行检查入口为
+[`scripts/check-local-runtime-contract.mjs`](../../scripts/check-local-runtime-contract.mjs) 和
+[`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs)。
+
+源码检查按用途检查 bootstrap/Peer 配置字段的赋值与默认值、数据库客户端地址、Registry 覆盖配置、
+数据库签名凭据及浏览器扩展 API 默认值。它分析 JavaScript、TypeScript 和 Vue script 中的语法，
+跟踪同文件字符串常量与 schema 默认值。同一个自定义域名用作业务链接时通过，写入部署配置时拒绝；
+URL 路径和托管商域名都不是部署身份。跨模块导入的常量及任意跨模块数据流仍由代码审查负责。
+`pnpm check:runtime` 先运行判定规则的行为回归，再检查所有浏览器消费者和原生扩展。
+产物检查和正式 Web release 检查也先执行源码检查，再验证静态产物结构及已知凭据、旧配置通道的泄漏特征，
+不根据托管商域名封锁业务链接。
 
 ## Database Providers and Ownership
 

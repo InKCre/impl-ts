@@ -2,12 +2,12 @@
 
 ## Artifact Contract
 
-`apps/client-web` produces a static, environment-neutral Vite artifact. Runtime service origins,
-Peer identity, and JWT credentials remain browser-owned and are not compiled into production or
-preview bytes. Pages supplies static hosting only: this repository has no application Worker or
-runtime configuration endpoint. [`scripts/verify-client-web-release.mjs`](../../scripts/verify-client-web-release.mjs)
-and [`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs) enforce the
-artifact boundary.
+`apps/client-web` 构建静态且与部署环境无关的 Vite 产物。部署实例的连接地址、Peer 身份与 JWT 凭据
+由运行时持有，不能编入生产或预览产物；公共业务链接和产品 Registry 默认地址不选择部署实例。
+Pages 只提供静态托管，本仓库没有应用 Worker 或运行时配置接口。
+[`scripts/verify-client-web-release.mjs`](../../scripts/verify-client-web-release.mjs) 和
+[`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs) 共同执行此边界。
+两个入口都先执行源码配置检查，再检查构建输出，独立 release 验证与 workspace CI 使用相同的部署配置规则。
 
 The **Client checks** workflow in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 validates the candidate but uploads no deployable SPA, Module Federation, or Registry handoff
