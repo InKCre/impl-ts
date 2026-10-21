@@ -30,7 +30,7 @@
 
 如果服务已运行但无法提供连接地址，在「Peer → 编辑配置」设置该 Peer 的公共 HTTP
 基址，再刷新向导。手机端后续操作见
-[DAVx⁵、Tasks.org 和联系人教程](https://github.com/InKCre/impl-py/blob/feat/caldav-extension/extensions/caldav/docs/global/android.md)。
+[DAVx⁵、Tasks.org 和联系人教程](https://github.com/InKCre/impl-py/blob/main/extensions/caldav/docs/global/android.md)。
 
 所有 DAV 客户端共享密码和集合。准备连接不会轮换已有密码；如需撤销或轮换，使用所选
 Python 分发的配置表单修改 `password`，并更新仍需同步的客户端。
