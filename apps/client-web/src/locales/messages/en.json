@@ -168,7 +168,10 @@
       "everyWeek": "Every week",
       "everyMonth": "Every month",
       "custom": "Custom"
-    }
+    },
+    "created": "Created",
+    "updated": "Updated",
+    "view": "View"
   },
   "extension": {
     "lead": "Add new source types and interface capabilities to your InKCre.",

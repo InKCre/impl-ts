@@ -587,7 +587,7 @@ async function onDeleteCron() {
       <p v-if="deleteError" role="alert" class="text-feedback-error">{{ deleteError }}</p>
     </InkDialog>
 
-    <InkPopup v-model="newJobOpen" :title="t('source.newJobTitle')" @close="onCloseJob">
+    <InkPopup v-model:open="newJobOpen" :title="t('source.newJobTitle')" @close="onCloseJob">
       <InkForm @submit="onCreateJob">
         <p class="source-view__popup-description">{{ t('source.newJobDescription') }}</p>
         <InkDropdown
@@ -617,7 +617,7 @@ async function onDeleteCron() {
       </InkForm>
     </InkPopup>
 
-    <InkPopup v-model="newCronOpen" :title="t('source.addSchedule')" @close="onCloseCron">
+    <InkPopup v-model:open="newCronOpen" :title="t('source.addSchedule')" @close="onCloseCron">
       <InkForm @submit="onCreateCron">
         <InkInput
           v-model="cronSchedule"
