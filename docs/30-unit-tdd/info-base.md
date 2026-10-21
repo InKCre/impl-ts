@@ -159,4 +159,8 @@ content or choose a semantic Storage type. Storage remains bytes-only mechanics.
 
 只捕获媒体元数据的归档不需要预建持久语义内容 Block。`inkcre/twitter` 保存共同模型的 Media 记录，不建立 Media-to-content Relation；列表、文本投影和索引只读取已有元数据。用户明确展开后，Twitter Resolver 选择图片 URL 或最高码率的可用 MP4，再交给现有 `HttpStorage` 按通用 HTTP(S)、超时、字节上限和重定向规则读取。它不另设 CDN、端口或重定向政策，读取也不持久化媒体字节。
 
+Twitter 的详情 renderer 以作者、正文、媒体与引用、发布时间、只读统计组织阅读，顶部提供在新标签打开原帖的文字链接。Graph preview 与详情共享身份与文字表达，预览仅限制可见行数，详情保留完整正文和长文。头像使用本地占位，不自动获取远端图片；引用只呈现已经捕获的事实，通过已保存帖子入口继续阅读，不凭作者 ID 补造 handle。新归档的媒体按需读取；已加载图片可点击图片或常驻放大按钮进入大图，关闭后回到原入口。视频提供原生控制，在浏览器允许全屏时显示全屏按钮，保留播放进度与状态；全屏请求失败时显示提示并继续使用原播放器。加载与解码失败允许重试，放大不会额外读取或持久化媒体。
+
+每个媒体视图拥有独立的运行态 Resolver 和 Object URL，随视图切换、卸载或加载结果被替换而撤销；视图关闭后的异步结果也会被释放，不与同时打开的视图共享待撤销的句柄。旧格式 renderer 使用相同阅读布局，但其 Resolver 原有的附件关系解析仍可能读取字节；本轮没有改写旧格式解析合同。UI 候选验收入口及边界见 [`scripts/tests/twitter-rendering`](../../scripts/tests/twitter-rendering/README.md)。
+
 媒体显示使用运行态 Object URL，随 Resolver 刷新、释放和缓存替换撤销。协议 DTO、provider 响应及共同信息模型的转换属于 Twitter 适配器，不能让客户端协议字段集变成 info-base 或 Resolver 的持久数据权威。

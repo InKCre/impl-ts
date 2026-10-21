@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { SignJWT } from 'jose'
 
@@ -442,7 +443,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
       headers: { 'Access-Control-Allow-Origin': '*' },
       body:
         url === highVideoUrl
-          ? Buffer.from([0, 0, 0, 24, 102, 116, 121, 112])
+          ? readFileSync(new URL('./twitter-rendering/public/video.mp4', import.meta.url))
           : 'unexpected variant',
     })
   })
@@ -462,7 +463,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   await page.goto(`/info-base/graph/blocks/${postBlock!.id}/content`)
   const content = page.locator('.solved-content-popup')
   await expect(content).toContainText('Archive Acceptance Author', { timeout: 30_000 })
-  await expect(content.getByRole('link', { name: `Original post · ${postId}` })).toHaveAttribute(
+  await expect(content.getByRole('link', { name: 'View original post on X' })).toHaveAttribute(
     'href',
     `https://x.com/i/status/${postId}`
   )
@@ -473,22 +474,24 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   ).toBeGreaterThanOrEqual(600)
   await expect(content).toContainText('Long-form archive article title')
   await expect(content).toContainText('Long-form paragraph remains readable.')
-  await expect(content).toContainText('Reply to @')
-  await expect(content).toContainText(`Quoted post · ${quoteId}`)
+  await expect(content).toContainText('Replying to @')
+  await expect(content.getByRole('region', { name: 'Quoted post' })).toBeVisible()
   await expect(content).toContainText('Acceptance image metadata')
   await expect(content).toContainText('Controlled failure image metadata')
   await expect(content).toContainText('Acceptance video metadata')
   await expect(content).toContainText('Alternate CDN image metadata')
-  const mediaCards = content.locator('.archive-media')
+  const mediaCards = content.locator('.tweet-media')
   await expect(mediaCards).toHaveCount(4)
   const imageCard = mediaCards.filter({ hasText: 'Acceptance image metadata' })
   const failedMediaCard = mediaCards.filter({ hasText: 'Controlled failure image metadata' })
   const videoCard = mediaCards.filter({ hasText: 'Acceptance video metadata' })
   const alternateMediaCard = mediaCards.filter({ hasText: 'Alternate CDN image metadata' })
-  await expect(imageCard.getByRole('button', { name: 'Load media' })).toBeVisible()
-  await expect(failedMediaCard.getByRole('button', { name: 'Load media' })).toBeVisible()
-  await expect(videoCard.getByRole('button', { name: 'Load media' })).toBeVisible()
-  await expect(alternateMediaCard.getByRole('button', { name: 'Load media' })).toBeVisible()
+  await expect(imageCard.getByRole('button', { name: /^Load (photo|video)/ })).toBeVisible()
+  await expect(failedMediaCard.getByRole('button', { name: /^Load (photo|video)/ })).toBeVisible()
+  await expect(videoCard.getByRole('button', { name: /^Load (photo|video)/ })).toBeVisible()
+  await expect(
+    alternateMediaCard.getByRole('button', { name: /^Load (photo|video)/ })
+  ).toBeVisible()
   expect(
     await page.evaluate(
       ({
@@ -527,30 +530,30 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   ).toEqual([])
   expect(controlledMediaReads).toEqual([])
   const imageRead = page.waitForRequest((request) => request.url() === imageUrl)
-  await imageCard.getByRole('button', { name: 'Load media' }).click()
+  await imageCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
   await imageRead
   const loadedImage = imageCard.locator('img')
   await expect(loadedImage).toBeVisible()
   await expect(loadedImage).toHaveJSProperty('naturalWidth', 1)
   const failedImageRead = page.waitForRequest((request) => request.url() === failedImageUrl)
-  await failedMediaCard.getByRole('button', { name: 'Load media' }).click()
+  await failedMediaCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
   await failedImageRead
   await expect(failedMediaCard.getByRole('alert')).toContainText('HTTP 503')
   const videoRead = page.waitForRequest((request) => request.url() === highVideoUrl)
-  await videoCard.getByRole('button', { name: 'Load media' }).click()
+  await videoCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
   await videoRead
   await expect(videoCard.locator('video')).toBeVisible()
   expect(await videoCard.locator('video').getAttribute('src')).toMatch(/^blob:/)
   const alternateImageRead = page.waitForRequest((request) => request.url() === alternateImageUrl)
-  await alternateMediaCard.getByRole('button', { name: 'Load media' }).click()
+  await alternateMediaCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
   await alternateImageRead
   await expect(alternateMediaCard.locator('img')).toHaveJSProperty('naturalWidth', 1)
   expect(controlledMediaReads).toEqual([imageUrl, failedImageUrl, highVideoUrl, alternateImageUrl])
 
-  await content.getByRole('button', { name: `View reply ${replyId}` }).click()
+  await content.getByRole('button', { name: /^Replying to @/ }).click()
   await expect(page).toHaveURL(
     new RegExp(
-      `/info-base/graph/blocks/${relations.find((row) => row.content.includes('reply'))?.to_}$`
+      `/info-base/graph/blocks/${relations.find((row) => row.content.includes('reply'))?.to_}/content$`
     )
   )
 
