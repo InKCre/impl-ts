@@ -60,6 +60,8 @@
   &__capabilities-btn {
     cursor: pointer;
     transition: all 0.15s ease;
+    min-height: auto;
+    min-width: auto;
 
     &:hover {
       color: sys-var(color, text, base);
