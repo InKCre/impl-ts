@@ -4,6 +4,7 @@ export {
   Resolver,
   // Protocol interfaces
   type ResolverContentState,
+  type RecallTarget,
   type SolvedContentRendererProps,
 } from './base'
 
