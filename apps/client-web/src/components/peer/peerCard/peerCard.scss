@@ -57,6 +57,43 @@
     font-size: 0.75rem;
   }
 
+  &__capabilities-btn {
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      color: sys-var(color, text, base);
+      border-color: sys-var(color, border, base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid sys-var(color, border, strong);
+      outline-offset: 2px;
+    }
+  }
+
+  &__capabilities-list {
+    display: flex;
+    flex-direction: column;
+    gap: sys-var(space, sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 60vh;
+    overflow-y: auto;
+
+    li {
+      @include apply-font(body-sm);
+    }
+
+    code {
+      display: block;
+      padding: sys-var(space, xs) sys-var(space, sm);
+      background-color: sys-var(color, surface, subtle);
+      overflow-wrap: anywhere;
+    }
+  }
+
   &__actions {
     flex-shrink: 0;
   }

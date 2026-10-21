@@ -20,6 +20,7 @@ const configError = ref('')
 const deleteOpen = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
+const capabilitiesOpen = ref(false)
 
 const diagnostics = computed(() =>
   props.readiness && props.readiness.status !== 'unavailable' ? props.readiness.diagnostics : null
@@ -118,6 +119,14 @@ const statusConfig = computed(() => {
   }
   return config[props.status]
 })
+
+const formatCapability = (cap: unknown): string => {
+  if (typeof cap === 'string') return cap
+  if (cap && typeof cap === 'object' && 'id' in cap) {
+    return String((cap as { id: unknown }).id)
+  }
+  return JSON.stringify(cap)
+}
 </script>
 
 <template>
@@ -133,9 +142,14 @@ const statusConfig = computed(() => {
         <span v-if="current" class="peer-card__status-badge peer-card__status--current">
           {{ t('peer.current') }}
         </span>
-        <span v-if="peer.capabilities.length > 0" class="peer-card__status-badge peer-card__status--capabilities">
+        <button
+          v-if="peer.capabilities.length > 0"
+          type="button"
+          class="peer-card__status-badge peer-card__status--capabilities peer-card__capabilities-btn"
+          @click="capabilitiesOpen = true"
+        >
           {{ t('peer.capabilitiesCount', { count: peer.capabilities.length }) }}
-        </span>
+        </button>
       </div>
       <div class="entity-card__actions peer-card__actions">
         <InkButton :text="t('peer.editConfig')" size="sm" @click="openConfig" />
@@ -186,6 +200,20 @@ const statusConfig = computed(() => {
           @click="onConfirmConfig"
         />
       </template>
+    </InkDialog>
+
+    <!-- Capabilities dialog -->
+    <InkDialog
+      v-model="capabilitiesOpen"
+      :title="t('peer.capabilitiesList')"
+      :show-confirm="false"
+      :cancel-text="t('common.close')"
+    >
+      <ul class="peer-card__capabilities-list">
+        <li v-for="(cap, index) in peer.capabilities" :key="index">
+          <code>{{ formatCapability(cap) }}</code>
+        </li>
+      </ul>
     </InkDialog>
 
     <!-- Delete dialog -->
