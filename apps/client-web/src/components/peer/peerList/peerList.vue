@@ -47,6 +47,8 @@ const refreshPeers = async () => {
 }
 
 const getPeerStatus = (peer: Peer): 'online' | 'offline' | 'unknown' => {
+  // Current browser is always online
+  if (peer.id === currentPeerId) return 'online'
   if (livePeers.value.has(peer.id)) return 'online'
   if (peer.lease_expires_at === null) return 'unknown'
   return 'offline'
