@@ -181,7 +181,9 @@ const formatCapability = (cap: unknown): string => {
       :aria-expanded="showDetails"
       @click="showDetails = !showDetails"
     >
-      {{ showDetails ? t('peer.hideDetails') : t('peer.showDetails') }}
+      <span class="peer-card__details-text">
+        {{ showDetails ? t('peer.hideDetails') : t('peer.showDetails') }}
+      </span>
       <span :class="['peer-card__details-chevron', { 'peer-card__details-chevron--open': showDetails }]" aria-hidden="true">▼</span>
     </button>
 

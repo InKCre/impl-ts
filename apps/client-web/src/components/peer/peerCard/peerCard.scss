@@ -19,35 +19,35 @@
     }
   }
 
-  // Status badges - consistent styling
+  // Status badges - consistent styling with borders
   &__status-badge {
     @include apply-font(label-md);
     padding-inline: sys-var(space, sm);
     padding-block: sys-var(space, xs);
     white-space: nowrap;
     flex-shrink: 0;
+    border: 1px solid;
+    background-color: transparent;
   }
 
   &__status--online {
     color: sys-var(color, text, base);
-    background-color: sys-var(color, surface, raised);
-    border: 1px solid sys-var(color, border, base);
+    border-color: sys-var(color, border, base);
   }
 
   &__status--offline {
     color: sys-var(color, text, subtle);
-    background-color: sys-var(color, surface, subtle);
+    border-color: sys-var(color, border, subtle);
   }
 
   &__status--unknown {
     color: sys-var(color, text, subtle);
-    background-color: sys-var(color, surface, subtle);
+    border-color: sys-var(color, border, subtle);
   }
 
   &__status--current {
     color: sys-var(color, text, base);
-    background-color: sys-var(color, surface, raised);
-    border: 1px solid sys-var(color, border, base);
+    border-color: sys-var(color, border, base);
     font-weight: 500;
   }
 
@@ -93,9 +93,8 @@
     color: sys-var(color, text, subtle);
     @include apply-font(body-sm);
     cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 2px;
     transition: color 0.15s ease;
+    text-decoration: none;
 
     &:hover {
       color: sys-var(color, text, base);
@@ -104,6 +103,16 @@
     &:focus-visible {
       outline: 2px solid sys-var(color, border, strong);
       outline-offset: 2px;
+    }
+
+    // Only underline the text, not the chevron
+    .peer-card__details-text {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    &:hover .peer-card__details-text {
+      text-decoration-color: sys-var(color, text, base);
     }
   }
 
