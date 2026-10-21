@@ -38,7 +38,7 @@ export interface ContactField {
   label: string
 }
 
-export type DAVContent =
+export type DAVContent = (
   | { kind: 'calendar'; href: string; text: string; items: CalendarItem[] }
   | {
       kind: 'contact'
@@ -60,6 +60,7 @@ export type DAVContent =
       members: { id: number; title: string }[]
     }
   | { kind: 'invalid'; text: string }
+) & { links?: { id: number; name: string; label: string; value: string }[] }
 
 export function safeHttpUrl(value: string): string | null {
   try {
@@ -175,6 +176,9 @@ export function parseResource(raw: string, expected: 'calendar' | 'contact'): DA
       return { kind: 'calendar', href: resource.href, text, items }
     }
     if (component.name !== 'vcard') throw new Error('Expected VCARD.')
+    for (const property of component.getAllProperties()) {
+      if (property.name.includes('.')) property.jCal[0] = property.name.split('.').at(-1)!
+    }
     const fields = ['tel', 'email', 'adr', 'org', 'title', 'bday', 'note', 'url']
       .map((name) => ({
         name,

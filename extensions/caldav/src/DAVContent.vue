@@ -20,6 +20,12 @@ function label(name: string) {
     bday: ['Birthday', '生日'],
     note: ['Notes', '备注'],
     url: ['Website', '网站'],
+    photo: ['Photo', '照片'],
+    logo: ['Logo', '标志'],
+    sound: ['Audio', '音频'],
+    attach: ['Attachment', '附件'],
+    description: ['Description', '正文'],
+    'related-to': ['Related item', '关联对象'],
   }
   const value = labels[name]
   return value ? tr(...value) : name
@@ -209,8 +215,22 @@ function status(value: string) {
       </ul>
     </template>
 
+    <section v-if="solvedContent.links?.length" class="linked-content">
+      <h3>{{ tr('Related content', '关联内容') }}</h3>
+      <ul class="members">
+        <li v-for="(link, index) in solvedContent.links" :key="index">
+          <InkButton
+            :text="
+              [label(link.name), link.label, link.value.slice(0, 64)].filter(Boolean).join(' · ')
+            "
+            @click="getInfoBaseRouter().push({ name: 'solved-content', block: link.id })"
+          />
+        </li>
+      </ul>
+    </section>
+
     <details>
-      <summary>{{ tr('Original content', '完整原文') }}</summary>
+      <summary>{{ tr('DAV content', 'DAV 内容') }}</summary>
       <pre>{{ solvedContent.text }}</pre>
     </details>
   </article>

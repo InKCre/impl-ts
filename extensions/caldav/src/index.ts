@@ -1,8 +1,22 @@
 import { Resolver, type ExtensionModule } from '@inkcre/core'
 import CalDAVSetup from './CalDAVSetup.vue'
-import { CalendarResolver, CollectionResolver, ContactResolver } from './resolver'
+import {
+  CalendarResolver,
+  CollectionResolver,
+  ContactResolver,
+  LegacyCalendarResolver,
+  LegacyCollectionResolver,
+  LegacyContactResolver,
+} from './resolver'
 
-const resolvers = [CalendarResolver, CollectionResolver, ContactResolver]
+const resolvers = [
+  CalendarResolver,
+  CollectionResolver,
+  ContactResolver,
+  LegacyCalendarResolver,
+  LegacyCollectionResolver,
+  LegacyContactResolver,
+]
 const extension: ExtensionModule = {
   setup: { component: CalDAVSetup },
   async initialize() {
