@@ -20,6 +20,7 @@ export {
   registerCoreResolvers,
   // Resolver base types and utilities
   type ResolverContentState,
+  type RecallTarget,
   type SolvedContentRendererProps,
   CORE_RESOLVER_IDS,
   DuplicateResolverRegistrationError,

@@ -15,6 +15,7 @@
 import { ref, type Component, type Ref } from 'vue'
 import type { Block } from '../block'
 import type { Relation } from '../relation'
+import type { LexicalRetrievalMatch } from '../../lexical-retrieval/main'
 import {
   DuplicateResolverRegistrationError,
   type ProjectionOptions,
@@ -32,6 +33,14 @@ import {
 export interface ResolverContentState {
   status: 'idle' | 'loading' | 'success' | 'error'
   error: Error | null
+}
+
+/** A reading destination; the original retrieval match remains the evidence. */
+export interface RecallTarget {
+  block: Block
+  label: string
+  description: string
+  excerpt: string
 }
 
 // ============================================================================
@@ -241,6 +250,11 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
   }
 
   abstract getText(options?: ProjectionOptions): Promise<string | null>
+
+  /** Return null when this match has no unambiguous contextual reading destination. */
+  async getRecallTarget(_match: LexicalRetrievalMatch): Promise<RecallTarget | null> {
+    return null
+  }
 
   /**
    * Cleanup when resolver is no longer needed.

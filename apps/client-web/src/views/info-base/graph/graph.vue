@@ -9,6 +9,7 @@ import {
   getInfoBaseRouter,
   GraphNavigationRetrievalManager,
   LexicalRetrievalManager,
+  presentLexicalMatches,
   ResolverCache,
   type Block,
   type GraphDirection,
@@ -74,6 +75,12 @@ const sceneAddress = computed(() => {
 })
 
 const sceneKey = computed(() => JSON.stringify(sceneAddress.value))
+// Restore may register reading destinations after the initial query has already returned.
+watch(extensionHostRestoreState, (state) => {
+  if (['restored', 'failed'].includes(state) && sceneAddress.value?.type === 'recall') {
+    void loadScene()
+  }
+})
 const focalBlock = computed(() => {
   const address = sceneAddress.value
   return address?.type === 'block' ? address.block : null
@@ -279,7 +286,8 @@ async function loadScene(): Promise<void> {
       else nextStatus = result.status === 'not_found' ? 'not-found' : 'limit'
     } else {
       const result = await LexicalRetrievalManager.retrieve({ query: address.query, limit: 20 })
-      graph = { blocks: result.matches.map((match) => match.block), relations: [] }
+      const groups = await presentLexicalMatches(result.matches)
+      graph = { blocks: groups.map((group) => group.block), relations: [] }
     }
     if (current !== generation) return
     if (graph) {
