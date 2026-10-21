@@ -51,6 +51,12 @@
     font-weight: 500;
   }
 
+  &__status--capabilities {
+    color: sys-var(color, text, subtle);
+    border-color: sys-var(color, border, subtle);
+    font-size: 0.75rem;
+  }
+
   &__actions {
     flex-shrink: 0;
   }
@@ -60,8 +66,9 @@
     margin: 0;
   }
 
-  // Readiness summary - compact display
-  &__readiness-summary {
+  // Readiness warnings
+  &__readiness-warning,
+  &__readiness-unavailable {
     @include apply-font(body-sm);
     padding: sys-var(space, sm) sys-var(space, md);
     margin: 0;
@@ -69,151 +76,40 @@
     p {
       margin: 0;
     }
-
-    &--error {
-      background-color: sys-var(color, surface, subtle);
-      border-inline-start: 3px solid sys-var(color, feedback, error);
-    }
-
-    &--warning {
-      color: sys-var(color, text, subtle);
-      background-color: sys-var(color, surface, subtle);
-      border-inline-start: 3px solid sys-var(color, border, base);
-    }
   }
 
-  // Details toggle button
-  &__details-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: sys-var(space, xs);
-    padding: sys-var(space, xs) 0;
-    border: none;
-    background: none;
-    color: sys-var(color, text, subtle);
-    @include apply-font(body-sm);
-    cursor: pointer;
-    transition: color 0.15s ease;
-    text-decoration: none;
-
-    &:hover {
-      color: sys-var(color, text, base);
-    }
-
-    &:focus-visible {
-      outline: 2px solid sys-var(color, border, strong);
-      outline-offset: 2px;
-    }
-
-    // Only underline the text, not the chevron
-    .peer-card__details-text {
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-
-    &:hover .peer-card__details-text {
-      text-decoration-color: sys-var(color, text, base);
-    }
-  }
-
-  &__details-chevron {
-    font-size: 0.75em;
-    transition: transform 0.15s ease;
-
-    &--open {
-      transform: rotate(180deg);
-    }
-  }
-
-  // Details panel
-  &__details-panel {
-    display: flex;
-    flex-direction: column;
-    gap: sys-var(space, md);
-    padding: sys-var(space, md);
+  &__readiness-warning {
     background-color: sys-var(color, surface, subtle);
-    border: 1px solid sys-var(color, border, subtle);
+    border-inline-start: 3px solid sys-var(color, feedback, error);
   }
 
-  &__section {
-    min-inline-size: 0;
-  }
-
-  &__section-title {
-    @include apply-font(label-md);
+  &__readiness-unavailable {
     color: sys-var(color, text, subtle);
-    margin: 0 0 sys-var(space, xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    background-color: sys-var(color, surface, subtle);
+    border-inline-start: 3px solid sys-var(color, border, base);
   }
 
-  &__info-list {
-    display: flex;
-    flex-direction: column;
-    gap: sys-var(space, xs);
-    margin: 0;
-
-    div {
-      display: flex;
-      gap: sys-var(space, sm);
-      align-items: baseline;
-    }
-
-    dt {
-      @include apply-font(body-sm);
-      color: sys-var(color, text, subtle);
-      min-inline-size: 5rem;
-      flex-shrink: 0;
-    }
-
-    dd {
-      margin: 0;
-      @include apply-font(body-sm);
-      color: sys-var(color, text, base);
-      overflow-wrap: anywhere;
-    }
-
-    code {
-      @include apply-font(label-md, $mono: true);
-      padding: 2px sys-var(space, xs);
-      background-color: sys-var(color, surface, base);
-    }
-  }
-
-  &__device-id {
-    font-size: 0.85em;
-  }
-
-  &__capabilities-list {
-    display: flex;
-    flex-direction: column;
-    gap: sys-var(space, xs);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-
-    li {
-      @include apply-font(body-sm);
-    }
-
-    code {
-      padding: 2px sys-var(space, xs);
-      background-color: sys-var(color, surface, base);
-      overflow-wrap: anywhere;
-    }
-  }
-
-  &__hint {
-    @include apply-font(body-sm);
-    color: sys-var(color, text, subtle);
-    margin: 0;
-  }
-
+  // Delete dialog info
   &__delete-info {
-    margin: 0 0 sys-var(space, sm);
+    margin: 0 0 sys-var(space, md);
+  }
 
-    strong {
-      @include apply-font(body-md);
-    }
+  &__delete-name {
+    @include apply-font(body-md);
+    margin: 0 0 sys-var(space, xs);
+  }
+
+  &__delete-id {
+    @include apply-font(label-md, $mono: true);
+    color: sys-var(color, text, subtle);
+    padding: sys-var(space, xs) sys-var(space, sm);
+    background-color: sys-var(color, surface, subtle);
+    display: inline-block;
+  }
+
+  &__delete-warning {
+    @include apply-font(body-sm);
+    color: sys-var(color, feedback, error);
+    margin: sys-var(space, sm) 0 0;
   }
 }

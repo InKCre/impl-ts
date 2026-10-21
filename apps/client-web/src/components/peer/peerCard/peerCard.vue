@@ -20,7 +20,6 @@ const configError = ref('')
 const deleteOpen = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
-const showDetails = ref(false)
 
 const diagnostics = computed(() =>
   props.readiness && props.readiness.status !== 'unavailable' ? props.readiness.diagnostics : null
@@ -119,14 +118,6 @@ const statusConfig = computed(() => {
   }
   return config[props.status]
 })
-
-const formatCapability = (cap: unknown): string => {
-  if (typeof cap === 'string') return cap
-  if (cap && typeof cap === 'object' && 'id' in cap) {
-    return String((cap as { id: unknown }).id)
-  }
-  return JSON.stringify(cap)
-}
 </script>
 
 <template>
@@ -141,6 +132,9 @@ const formatCapability = (cap: unknown): string => {
         </span>
         <span v-if="current" class="peer-card__status-badge peer-card__status--current">
           {{ t('peer.current') }}
+        </span>
+        <span v-if="peer.capabilities.length > 0" class="peer-card__status-badge peer-card__status--capabilities">
+          {{ t('peer.capabilitiesCount', { count: peer.capabilities.length }) }}
         </span>
       </div>
       <div class="entity-card__actions peer-card__actions">
@@ -164,82 +158,12 @@ const formatCapability = (cap: unknown): string => {
       {{ saveError }}
     </p>
 
-    <!-- Readiness summary - only show if there are issues or if explicitly requested -->
-    <div v-if="diagnostics && hasIssues" class="peer-card__readiness-summary peer-card__readiness-summary--error">
-      <p role="alert">
-        <strong>{{ t('peer.readinessIssues') }}</strong>
-      </p>
+    <!-- Readiness warning -->
+    <div v-if="diagnostics && hasIssues" class="peer-card__readiness-warning" role="alert">
+      <p>{{ t('peer.readinessIssues') }}</p>
     </div>
-    <div v-else-if="readiness?.status === 'unavailable'" class="peer-card__readiness-summary peer-card__readiness-summary--warning">
+    <div v-else-if="readiness?.status === 'unavailable'" class="peer-card__readiness-unavailable">
       <p>{{ t(`peer.readinessUnavailable.${readiness.reason}`) }}</p>
-    </div>
-
-    <!-- Details toggle -->
-    <button
-      type="button"
-      class="peer-card__details-toggle"
-      :aria-expanded="showDetails"
-      @click="showDetails = !showDetails"
-    >
-      <span class="peer-card__details-text">
-        {{ showDetails ? t('peer.hideDetails') : t('peer.showDetails') }}
-      </span>
-      <span :class="['peer-card__details-chevron', { 'peer-card__details-chevron--open': showDetails }]" aria-hidden="true">▼</span>
-    </button>
-
-    <!-- Details section -->
-    <div v-if="showDetails" class="peer-card__details-panel">
-      <!-- Technical readiness info -->
-      <section v-if="diagnostics" class="peer-card__section" :aria-label="t('peer.readiness')">
-        <h4 class="peer-card__section-title">{{ t('peer.readiness') }}</h4>
-        <dl class="peer-card__info-list">
-          <div>
-            <dt>{{ t('peer.status') }}</dt>
-            <dd>{{ t(`peer.readinessStatus.${diagnostics.status}`) }}</dd>
-          </div>
-          <div>
-            <dt>{{ t('peer.phase') }}</dt>
-            <dd><code>{{ diagnostics.runtime.phase }}</code></dd>
-          </div>
-          <div v-if="diagnostics.runtime.step">
-            <dt>{{ t('peer.step') }}</dt>
-            <dd><code>{{ diagnostics.runtime.step }}</code></dd>
-          </div>
-          <div>
-            <dt>{{ t('peer.database') }}</dt>
-            <dd>{{ diagnostics.database.status }}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <!-- Device info -->
-      <section class="peer-card__section">
-        <h4 class="peer-card__section-title">{{ t('peer.deviceInfo') }}</h4>
-        <dl class="peer-card__info-list">
-          <div>
-            <dt>{{ t('peer.deviceId') }}</dt>
-            <dd><code class="peer-card__device-id">{{ peer.id }}</code></dd>
-          </div>
-          <div>
-            <dt>{{ t('peer.capabilities') }}</dt>
-            <dd>{{ t('peer.capabilitiesCount', { count: peer.capabilities.length }) }}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <!-- Capabilities list -->
-      <section v-if="peer.capabilities.length" class="peer-card__section">
-        <h4 class="peer-card__section-title">{{ t('peer.capabilitiesList') }}</h4>
-        <ul class="peer-card__capabilities-list">
-          <li v-for="(cap, index) in peer.capabilities" :key="index">
-            <code>{{ formatCapability(cap) }}</code>
-          </li>
-        </ul>
-      </section>
-
-      <p v-if="!current && status === 'online'" class="peer-card__hint">
-        {{ t('peer.deleteOnline') }}
-      </p>
     </div>
 
     <!-- Config dialog -->
@@ -273,11 +197,14 @@ const formatCapability = (cap: unknown): string => {
       :is-loading="deleting"
       @confirm="onConfirmDelete"
     >
-      <p class="peer-card__delete-info">
-        <strong>{{ peer.name }}</strong><br />
-        <code class="peer-card__device-id">{{ peer.id }}</code>
-      </p>
+      <div class="peer-card__delete-info">
+        <p class="peer-card__delete-name">{{ peer.name }}</p>
+        <code class="peer-card__delete-id">{{ peer.id }}</code>
+      </div>
       <p>{{ t('peer.deleteConfirm') }}</p>
+      <p v-if="status === 'online'" class="peer-card__delete-warning">
+        {{ t('peer.deleteOnline') }}
+      </p>
       <p v-if="deleteError" role="alert" class="text-feedback-error">{{ deleteError }}</p>
     </InkDialog>
   </article>
