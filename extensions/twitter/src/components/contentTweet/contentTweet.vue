@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { InkButton, InkImage } from '@inkcre/ui-web'
 import type { SolvedContentRendererProps } from '@inkcre/core'
 import type { Tweet } from '../../schema'
-import { legacyText } from './presentation'
+import { legacyText, xUrl } from './presentation'
 import TweetIdentity from './tweetIdentity.vue'
 import TweetIcon from './tweetIcon.vue'
 
@@ -26,7 +26,7 @@ watch(
     <header class="content-tweet__header">
       <TweetIdentity /><a
         class="content-tweet__source"
-        :href="`https://x.com/i/status/${solvedContent.id}`"
+        :href="xUrl(`/i/status/${solvedContent.id}`)"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="View original post on X"

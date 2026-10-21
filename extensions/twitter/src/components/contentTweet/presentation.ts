@@ -1,5 +1,9 @@
 import type { RichText } from '../../schema'
 
+export function xUrl(path: string): string {
+  return new URL(path, 'https://x.com').href
+}
+
 export function visibleText(value: RichText | undefined): string {
   if (!value) return ''
   return value.visible ? [...value.text].slice(...value.visible).join('') : value.text

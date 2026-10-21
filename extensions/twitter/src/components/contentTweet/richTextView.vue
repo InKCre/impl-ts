@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { RichText } from '../../schema'
-import { safeUrl } from './presentation'
+import { safeUrl, xUrl } from './presentation'
 
 const props = defineProps<{ value: RichText }>()
 const segments = computed(() => {
@@ -14,11 +14,11 @@ const segments = computed(() => {
       item.type === 'url'
         ? safeUrl(item.expanded)
         : item.type === 'mention'
-          ? `https://x.com/i/user/${encodeURIComponent(item.userId)}`
+          ? xUrl(`/i/user/${encodeURIComponent(item.userId)}`)
           : item.type === 'hashtag'
-            ? `https://x.com/hashtag/${encodeURIComponent(label.replace(/^#/, ''))}`
+            ? xUrl(`/hashtag/${encodeURIComponent(label.replace(/^#/, ''))}`)
             : item.type === 'cashtag'
-              ? `https://x.com/search?q=${encodeURIComponent(label)}`
+              ? xUrl(`/search?q=${encodeURIComponent(label)}`)
               : undefined
     return href ? [{ range: item.range, href }] : []
   })

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { getInfoBaseRouter, type SolvedContentRendererProps } from '@inkcre/core'
 import type { ArchivePostContentModel } from '../../resolver'
-import { compactCount, postDate, safeUrl } from './presentation'
+import { compactCount, postDate, safeUrl, xUrl } from './presentation'
 import TweetIdentity from './tweetIdentity.vue'
 import TweetIcon from './tweetIcon.vue'
 import RichTextView from './richTextView.vue'
@@ -79,7 +79,7 @@ function navigate(block: number): void {
       <TweetIdentity :author="solvedContent.author" />
       <a
         class="content-tweet__source"
-        :href="`https://x.com/i/status/${post.id}`"
+        :href="xUrl(`/i/status/${post.id}`)"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="View original post on X"
@@ -160,11 +160,7 @@ function navigate(block: number): void {
       >
         Open saved post →
       </button>
-      <a
-        v-else
-        :href="`https://x.com/i/status/${item.id}`"
-        target="_blank"
-        rel="noopener noreferrer"
+      <a v-else :href="xUrl(`/i/status/${item.id}`)" target="_blank" rel="noopener noreferrer"
         >View on X ↗</a
       >
     </section>
