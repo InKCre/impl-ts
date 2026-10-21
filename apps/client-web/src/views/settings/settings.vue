@@ -205,7 +205,6 @@ const onFileSelected = async (event: Event) => {
           v-model="metaFormConfig.INKCRE_JWT_SECRET"
           :label="t('settings.jwtSecret')"
           native-type="password"
-          :show-password-toggle="true"
           autocomplete="off"
           placeholder="••••••••"
           :disabled="formBusy"
