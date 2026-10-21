@@ -1,5 +1,16 @@
 # @inkcre/ext-twitter
 
+## 0.5.0
+
+### Minor Changes
+
+- 2d260e3: 普通 Web Peer JWT 保持 24 小时签发默认值，并与数据库准入策略解耦。Twitter 新增 x-monkey 原生归档记录的读取与浏览器连接入口；账户页在本地签发短时 Peer JWT，不增加 Host SDK API，因此仍兼容 Core SDK >=0.4.0。
+
+### Patch Changes
+
+- e74195b: Web 宿主与第一方 Module Federation 扩展统一采用正式 @inkcre/ui-web 2.3.0，共享同一 UI 单例。图片查看支持连续缩放、拖动平移、双指捏合与键盘操作，100% 仅作为快捷比例；保留按需媒体读取、关闭与焦点恢复。
+- e74195b: 改善新旧推文详情与图谱预览的阅读布局、富文本、引用和媒体呈现。媒体保持按需读取，增加清晰的图片放大、视频全屏与原帖入口，保留播放状态并在关闭后恢复键盘焦点。
+
 ## 0.4.2
 
 ### Patch Changes
