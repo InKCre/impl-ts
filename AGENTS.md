@@ -43,8 +43,6 @@ Before choosing a design, identify shared state, business contracts, and each pa
 
 For UI work, read the installed `@inkcre/ui-web` package's `DESIGN.md` and `skills/ui-web/SKILL.md` under the consuming app's `node_modules/`. The package owns design and API rules; this repository owns business flows and layout. Backend-only tasks do not need the UI docs.
 
-**UI Source Development**: When modifying `@inkcre/ui-web` source, see [UI Development Pitfalls](../ui/docs/ui-development-pitfalls.md) for common traps and the correct workflow. Use `pnpm dev:ui --ui-source ../ui/packages/web` or set `INKCRE_UI_SOURCE_ROOT` with a full InkUI build.
-
 ## Development Constraints
 
 - Runtime: Node.js 22.22.3; package manager: pnpm 11.11.0. Exact commands live in `package.json` and `docs/40-deployment/`.
