@@ -8,7 +8,9 @@
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build"
+    "type-check": "vue-tsc --build",
+    "test:a11y": "playwright test accessibility.spec.ts",
+    "test:a11y:report": "playwright test accessibility.spec.ts --reporter=html"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
@@ -32,9 +34,11 @@
     "zod-config": "^1.4.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@iconify-json/mdi": "^1.2.3",
     "@module-federation/enhanced": "^0.22.0",
     "@module-federation/vite": "^1.1.0",
+    "@playwright/test": "1.61.1",
     "@tsconfig/node22": "^22.0.2",
     "@types/node": "^22.16.5",
     "@vitejs/plugin-vue": "^6.0.1",
@@ -43,6 +47,7 @@
     "get-port": "^7.1.0",
     "npm-run-all2": "^8.0.4",
     "picocolors": "^1.1.1",
+    "playwright": "^1.64.1",
     "sass-embedded": "^1.90.0",
     "sirv": "^3.0.2",
     "typescript": "catalog:",
