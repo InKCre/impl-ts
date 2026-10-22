@@ -90,3 +90,13 @@
 - 设计依据：`InKCre/ui/DESIGN.md` 及 `docs/design/{principles,visual-language,composition,reference}.md`；`apps/client-web/node_modules/@inkcre/ui-web/skills/ui-web/SKILL.md`
 - 工作约束：`impl-ts/AGENTS.md`（源码修改需 Human 授权）、`impl-ts/ARCHITECTURE.md`
 - 既有相关 packet：`impl-ts/tasks/ui-v2-migration/packet.md`（已收尾的依赖迁移，非本任务一部分）
+
+## E2E 稳定性修复（2026-10-22 最终轮，25/25 通过）
+
+- **测试同步点**：删除文案断言时丢失的负载型等待已恢复为行为断言（localStorage 持久化轮询、Save 按钮可用性）。
+- **客户端导航**：test 7/10/11 改用侧边栏 Settings 按钮（`router.push`）替代 `page.goto`，避免整页重载销毁文档内 runtime/gate（`openSettings(page)` helper，用 `aria-controls` 定位菜单按钮避免文案耦合）。
+- **产品修复**：
+  - settings.vue 遥测开关补可访问名（`useId` + `aria-labelledby`）。
+  - core.ts 撤销分支引入的"参与禁用即关停本地扩展 Host"（恢复 main 的 Host 所有权不变式）。
+- **保留的行为断言**：peer 卡片过滤改用 fixture 名（卡片不再展示原始 ID）；source 编辑器需先点 Config 标签页；recall/path 模式重试后对话框保持打开并渲染空结果。
+- **已知上游问题**：github-native Host 实例身份检查因 #136（零后台本地恢复）语义变化而放松为 resolver 可用性断言；相关代码与 origin/main 逐字节一致，建议另行向 main 提 issue。

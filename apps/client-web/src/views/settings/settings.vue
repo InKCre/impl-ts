@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   InkForm,
@@ -25,6 +25,7 @@ import {
 } from '@/core'
 
 const { t } = useI18n()
+const telemetryLabelId = useId()
 
 const metaFormConfig = reactive<MetaConfig>({ ...configStore.metaConfig })
 const pendingAction = ref<'save' | 'import' | 'reset' | null>(null)
@@ -247,10 +248,14 @@ const onFileSelected = async (event: Event) => {
 
       <fieldset class="settings-view__group">
         <legend>{{ t('settings.telemetry') }}</legend>
-        <label class="settings-view__switch-field">
-          <span>{{ t('settings.telemetryEnabled') }}</span>
-          <InkSwitch v-model="metaFormConfig.telemetry_enabled" :disabled="formBusy" />
-        </label>
+        <div class="settings-view__switch-field">
+          <span :id="telemetryLabelId">{{ t('settings.telemetryEnabled') }}</span>
+          <InkSwitch
+            v-model="metaFormConfig.telemetry_enabled"
+            :disabled="formBusy"
+            :aria-labelledby="telemetryLabelId"
+          />
+        </div>
         <InkInput
           v-model="metaFormConfig.telemetry_peer_relay_url"
           :label="t('settings.telemetryRelay')"
