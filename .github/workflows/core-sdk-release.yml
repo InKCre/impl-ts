@@ -1,0 +1,161 @@
+name: Core SDK release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current-main source
+        required: true
+        type: string
+      recovery_run_id:
+        description: Optional original main-push run whose saved SDK bytes must be recovered
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-sdk-release-main
+  cancel-in-progress: false
+
+jobs:
+  identity:
+    name: Resolve trusted SDK delivery and original candidate
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+      actions: read
+    env:
+      SOURCE_REVISION: ${{ inputs.source_sha || github.sha }}
+    outputs:
+      artifact_id: ${{ steps.saved.outputs.artifact_id }}
+      published: ${{ steps.saved.outputs.published }}
+      source_revision: ${{ steps.saved.outputs.source_revision }}
+      payload_run_id: ${{ steps.saved.outputs.payload_run_id }}
+    steps:
+      - name: Validate exact protected-main controller
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const main = await github.rest.git.getRef({ ...context.repo, ref: 'heads/main' })
+            if (context.ref !== 'refs/heads/main' || !/^[0-9a-f]{40}$/.test(process.env.SOURCE_REVISION) || main.data.object.sha !== process.env.SOURCE_REVISION) {
+              core.setFailed('SDK controller requires the exact current protected-main source.')
+            }
+      - name: Checkout trusted controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      - name: Locate original candidate or verify existing release
+        id: saved
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RECOVERY_RUN_ID: ${{ inputs.recovery_run_id }}
+        run: node scripts/publish-core-sdk.mjs locate
+
+  candidate:
+    name: Build or restore Core SDK candidate
+    needs: identity
+    if: needs.identity.outputs.published != 'true'
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_REVISION: ${{ needs.identity.outputs.source_revision }}
+    outputs:
+      artifact_id: ${{ needs.identity.outputs.artifact_id || steps.retained.outputs.artifact-id }}
+    steps:
+      - name: Checkout trusted controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      - name: Install pnpm
+        if: needs.identity.outputs.artifact_id == ''
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.11.0
+      - name: Configure workspace package access
+        if: needs.identity.outputs.artifact_id == ''
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          registry-url: https://npm.pkg.github.com
+          scope: '@inkcre'
+      - name: Build and capture prebuilt SDK
+        if: needs.identity.outputs.artifact_id == ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @inkcre/core build
+          node scripts/publish-core-sdk.mjs capture
+      - name: Restore original candidate
+        if: needs.identity.outputs.artifact_id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.identity.outputs.artifact_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ needs.identity.outputs.payload_run_id }}
+          path: .core-sdk-delivery
+          merge-multiple: true
+      - name: Verify candidate
+        run: node scripts/publish-core-sdk.mjs check
+      - name: Retain immutable candidate before publication
+        id: retained
+        if: needs.identity.outputs.artifact_id == ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-sdk-candidate
+          path: .core-sdk-delivery
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: Publish immutable Core SDK assets
+    needs: [identity, candidate]
+    if: needs.identity.outputs.published != 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      - name: Download original SDK candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.candidate.outputs.artifact_id }}
+          run-id: ${{ needs.identity.outputs.payload_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: .core-sdk-delivery
+          merge-multiple: true
+      - name: Publish or recover exact assets and verify bytes
+        env:
+          SOURCE_REVISION: ${{ needs.identity.outputs.source_revision }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-core-sdk.mjs publish

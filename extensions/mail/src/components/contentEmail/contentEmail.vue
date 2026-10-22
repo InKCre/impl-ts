@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import DOMPurify from 'dompurify'
+import { InkButton } from '@inkcre/ui-web'
 import { getInfoBaseRouter, type SolvedContentRendererProps } from '@inkcre/core'
 
 import type { EmailResolver } from '../../resolver'
 import MimePartItem from '../contentMimePart/MimePartItem.vue'
-import type { SolvedEmail, SolvedMimePart } from '../../schema'
+import type { SolvedEmail } from '../../schema'
+import { readingBodies } from '../../newsletter'
+import MailBody from '../MailBody.vue'
 
 const props = defineProps<SolvedContentRendererProps<SolvedEmail, EmailResolver>>()
 const router = getInfoBaseRouter()
@@ -63,54 +65,7 @@ const conversations = computed(() => {
   ]
 })
 
-const htmlBody = computed(() =>
-  email.value.bodies.find((body) => body.block.resolver === 'core.html.v1')
-)
-const textBody = computed(() =>
-  email.value.bodies.find((body) => body.block.resolver === 'core.text.v1')
-)
-
-function objectUrl(part: SolvedMimePart): string | null {
-  const solved = part.content?.solvedContent
-  if (!solved || typeof solved !== 'object' || !('objectUrl' in solved)) return null
-  return typeof solved.objectUrl === 'string' ? solved.objectUrl : null
-}
-
-const isolatedHtml = computed(() => {
-  if (!htmlBody.value) return ''
-  const sanitized = DOMPurify.sanitize(htmlBody.value.solvedContent, {
-    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'link', 'meta', 'base'],
-    FORBID_ATTR: ['style', 'srcset', 'poster', 'background', 'formaction'],
-  })
-  const document = new DOMParser().parseFromString(sanitized, 'text/html')
-  const cidUrls = new Map<string, string>()
-  for (const embedded of email.value.embedded) {
-    if (embedded.body.id !== htmlBody.value.block.id) continue
-    const url = objectUrl(embedded.mimePart.solvedContent)
-    if (url) cidUrls.set(embedded.reference.toLowerCase(), url)
-  }
-
-  for (const element of document.querySelectorAll<HTMLElement>('[src]')) {
-    const source = element.getAttribute('src')?.trim() ?? ''
-    const local = cidUrls.get(source.toLowerCase())
-    if (element instanceof HTMLImageElement && local) element.src = local
-    else element.removeAttribute('src')
-  }
-  for (const anchor of document.querySelectorAll<HTMLAnchorElement>('a[href]')) {
-    const href = anchor.getAttribute('href') ?? ''
-    try {
-      const target = new URL(href)
-      if (!['http:', 'https:'].includes(target.protocol)) throw new Error('unsupported link')
-      anchor.href = target.href
-      anchor.target = '_blank'
-      anchor.rel = 'noopener noreferrer'
-    } catch {
-      anchor.removeAttribute('href')
-      anchor.removeAttribute('target')
-    }
-  }
-  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob:; style-src 'nonce-inkcre-mail'"><style nonce="inkcre-mail">body{margin:0;padding:16px;color:#202020;background:#fff;font:16px/1.65 system-ui,sans-serif;overflow-wrap:anywhere}h1,h2,h3{line-height:1.35;font-weight:600}h1{font-size:1.5em}h2{font-size:1.25em}h3{font-size:1.1em}img{max-width:100%;height:auto}pre{white-space:pre-wrap}blockquote{margin-inline:0;padding-inline-start:16px;border-inline-start:2px solid #ccc}a{color:inherit}</style></head><body>${document.body.innerHTML}</body></html>`
-})
+const bodies = computed(() => readingBodies(email.value.bodies))
 
 async function materialize(block: number): Promise<void> {
   if (materializing.value.has(block)) return
@@ -170,16 +125,23 @@ function navigate(block: number): void {
         </dl>
       </details>
     </header>
-    <iframe
-      v-if="htmlBody"
-      :key="isolatedHtml"
-      class="content-email__html"
-      title="Email HTML body"
-      sandbox="allow-popups allow-popups-to-escape-sandbox"
-      :srcdoc="isolatedHtml"
+    <nav v-if="email.mailingLists.length" aria-label="所属刊物">
+      <InkButton
+        v-for="publication in email.mailingLists"
+        :key="publication.block.id"
+        @click="router.push({ name: 'solved-content', block: publication.block.id })"
+      >
+        {{ publication.solvedContent.name || publication.solvedContent.list_id }} · 查看各期
+      </InkButton>
+    </nav>
+    <MailBody
+      v-for="body in bodies"
+      :key="body.block.id"
+      :block="body.block"
+      :content="body.solvedContent"
+      :embedded="email.embedded"
     />
-    <pre v-else-if="textBody" class="content-email__text">{{ textBody.solvedContent }}</pre>
-    <p v-else class="content-email__empty">No body content</p>
+    <p v-if="!bodies.length" class="content-email__empty">No body content</p>
     <section v-if="attachments.length" class="content-email__parts" aria-label="Attachments">
       <h3>
         Attachments <span>{{ attachments.length }}</span>

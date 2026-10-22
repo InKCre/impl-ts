@@ -1,5 +1,21 @@
 # @inkcre/ext-dev-utils
 
+## 0.1.4
+
+### Patch Changes
+
+- e74195b: Web 宿主与第一方 Module Federation 扩展统一采用正式 @inkcre/ui-web 2.3.0，共享同一 UI 单例。图片查看支持连续缩放、拖动平移、双指捏合与键盘操作，100% 仅作为快捷比例；保留按需媒体读取、关闭与焦点恢复。
+
+## 0.1.3
+
+### Patch Changes
+
+- 7307dda: Source 与 Peer 配置使用可视化表单，保留完整 JSON 编辑模式；Peers 页面可确认删除离线 Peer 并清理其扩展启用记录。Extension 浏览与版本选择交由 Registry，Web 接收精确版本并确认安装；Web 与 Module Federation 扩展统一升级正式 UI 2.2.0，Peer AI 凭据在 schema 中标记为密码输入。
+- Updated dependencies [7307dda]
+- Updated dependencies
+- Updated dependencies [7307dda]
+  - @inkcre/core@0.4.0
+
 ## 0.1.2
 
 ### Patch Changes

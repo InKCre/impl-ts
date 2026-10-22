@@ -1,9 +1,14 @@
 {
   "format": 1,
-  "repository": "InKCre/core-py",
-  "stable_image": "ghcr.io/inkcre/core-py:stable",
+  "repository": "InKCre/impl-py",
+  "stable_image": "ghcr.io/inkcre/impl-py:stable",
   "runtime_images": {
     "pgvector": "pgvector/pgvector:pg17@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0",
     "postgrest": "postgrest/postgrest:v14.15@sha256:2f8e7b656f09db697a8875177694b417b35cb76c21370de07fc54e711e902326"
+  },
+  "canonical_candidate": {
+    "image": "ghcr.io/inkcre/impl-py@sha256:c30502e05c0fe6fdd2eeca91b4dd431d0ab1dcc305f6a68feef3cc72b8f57440",
+    "source_revision": "93316dc01f6ddfb6fb629ba59f8267a0a6264a26",
+    "contract_revision": "extension-peer-participation-v2"
   }
 }

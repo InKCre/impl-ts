@@ -133,7 +133,7 @@ const databaseCompatibility = JSON.parse(
 )
 record(
   'core-runtime-release',
-  coreRelease.stable_image === 'ghcr.io/inkcre/core-py:stable' ? 'ok' : 'error',
+  coreRelease.stable_image === 'ghcr.io/inkcre/impl-py:stable' ? 'ok' : 'error',
   coreRelease.stable_image
 )
 record(

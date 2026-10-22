@@ -19,6 +19,7 @@ coverage
 /playwright-report/
 /test-results/
 /.extension-delivery/
+/.core-sdk-delivery/
 
 /cypress/videos/
 /cypress/screenshots/

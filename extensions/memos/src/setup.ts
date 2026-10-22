@@ -1,5 +1,7 @@
+import corePackage from '../../../packages/core/package.json'
 import {
   ExtensionModel,
+  ExtensionParticipationModel,
   configStore,
   ExtensionRegistryOriginResolver,
   PeerManager,
@@ -9,6 +11,10 @@ import {
 } from '@inkcre/core'
 import {
   getExtensionDocumentation,
+  RegistryReleaseReader,
+  sortPublishedReleases,
+  manageExtensionOnPeer,
+  readExtensionPeerStatus,
   listAdvertisedExtensionManagementPeers,
 } from '@inkcre/extension-runtime-client-web'
 
@@ -31,7 +37,39 @@ export async function readSetup(): Promise<{ extension: ExtensionModel; peers: P
     listAdvertisedExtensionManagementPeers(),
   ])
   if (!extension) throw new Error('Memos is not installed.')
-  return { extension, peers }
+  const statuses = await Promise.all(
+    peers.map(async (peer) => ({
+      peer,
+      status: await readExtensionPeerStatus(peer.id, extensionName),
+    }))
+  )
+  return {
+    extension,
+    peers: statuses
+      .filter(({ status }) => status.supported_distributions.includes('python'))
+      .map(({ peer }) => peer),
+  }
+}
+
+/** An explicit connection-preparation action may create a native selection, never background restore. */
+export async function ensureMemosParticipation(peerId: string): Promise<void> {
+  if (await ExtensionParticipationModel.get(peerId, extensionName)) return
+  const origin = await new ExtensionRegistryOriginResolver(
+    () => configStore.peerConfig.extension_registry_url
+  ).resolve()
+  const reader = new RegistryReleaseReader({
+    registryOrigin: origin,
+    hostSdk: { name: '@inkcre/core', version: corePackage.version },
+  })
+  const catalog = await reader.getExtension(extensionName, 'python')
+  const release = sortPublishedReleases(catalog.releases ?? [])[0]
+  if (!release) throw new Error('Memos has no published Python distribution.')
+  await manageExtensionOnPeer(peerId, {
+    action: 'select',
+    extension: extensionName,
+    distribution: 'python',
+    version: release.version,
+  })
 }
 
 export class MemosConnectionError extends Error {
@@ -68,7 +106,12 @@ export async function readHelpUrl(version: string): Promise<string | null> {
   const origin = await new ExtensionRegistryOriginResolver(
     () => configStore.peerConfig.extension_registry_url
   ).resolve()
-  const documentation = await getExtensionDocumentation(origin, extensionName, version)
+  const documentation = await getExtensionDocumentation(
+    origin,
+    extensionName,
+    version,
+    'module_federation'
+  )
   const entry = documentation?.find((link) => link.scope === 'module-federation')
   if (!entry) return null
   const url = new URL(entry.entry_url)

@@ -4,12 +4,19 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current-main source to resume once
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   identity:
+    if: github.event_name == 'workflow_dispatch' || vars.INKCRE_WEB_PRODUCTION_PAUSED != 'true'
     name: Resolve exact current-main delivery
     runs-on: ubuntu-latest
     outputs:
@@ -19,9 +26,13 @@ jobs:
         id: identity
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         with:
           script: |
+            if (context.ref !== 'refs/heads/main' || !/^[0-9a-f]{40}$/.test(process.env.SOURCE_SHA)) {
+              core.setFailed('Delivery requires an exact protected-main source.')
+              return
+            }
             const currentMain = await github.rest.git.getRef({
               owner: context.repo.owner,
               repo: context.repo.repo,

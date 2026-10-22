@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current-main source to resume once
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,6 +20,7 @@ concurrency:
 
 jobs:
   reconcile:
+    if: github.event_name == 'workflow_dispatch' || vars.INKCRE_WEB_PRODUCTION_PAUSED != 'true'
     name: Reconcile first-party Extension release plan
     permissions:
       contents: write
@@ -23,9 +30,20 @@ jobs:
     outputs:
       has_changesets: ${{ steps.changesets.outputs.has-changesets }}
     steps:
+      - name: Validate exact protected-main source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+        with:
+          script: |
+            const main = await github.rest.git.getRef({ ...context.repo, ref: 'heads/main' })
+            if (context.ref !== 'refs/heads/main' || !/^[0-9a-f]{40}$/.test(process.env.SOURCE_SHA) || main.data.object.sha !== process.env.SOURCE_SHA) {
+              core.setFailed('Publication requires the exact current protected-main source.')
+            }
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 0
 
       - name: Install the pinned pnpm release
@@ -61,7 +79,6 @@ jobs:
   candidate:
     name: Build or restore first-party MF candidate
     needs: reconcile
-    if: needs.reconcile.outputs.has_changesets == 'false'
     permissions:
       contents: read
       packages: read
@@ -74,16 +91,19 @@ jobs:
       INKCRE_EXTENSION_REGISTRY_URL: >-
         ${{ vars.INKCRE_EXTENSION_REGISTRY_URL || 'https://registry.inkcre.dev' }}
       SOURCE_REPOSITORY: https://github.com/${{ github.repository }}
-      SOURCE_REVISION: ${{ github.sha }}
+      SOURCE_REVISION: ${{ inputs.source_sha || github.sha }}
     outputs:
       artifact_id: ${{ steps.saved.outputs.artifact_id || steps.retained.outputs.artifact-id }}
     steps:
       - name: Checkout the release revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Set Changesets baseline to the exact release revision
+        run: git branch main "$SOURCE_REVISION"
 
       - name: Install the pinned pnpm release
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -155,7 +175,7 @@ jobs:
       - name: Checkout the release revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
 
       - name: Install the pinned pnpm release
@@ -189,5 +209,5 @@ jobs:
             ${{ vars.INKCRE_EXTENSION_REGISTRY_URL || 'https://registry.inkcre.dev' }}
           INKCRE_EXTENSION_REGISTRY_TOKEN: ${{ secrets.INKCRE_EXTENSION_REGISTRY_TOKEN }}
           SOURCE_REPOSITORY: https://github.com/${{ github.repository }}
-          SOURCE_REVISION: ${{ github.sha }}
+          SOURCE_REVISION: ${{ inputs.source_sha || github.sha }}
         run: node scripts/publish-first-party-extensions.mjs publish

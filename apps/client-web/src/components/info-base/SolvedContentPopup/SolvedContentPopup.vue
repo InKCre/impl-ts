@@ -2,8 +2,9 @@
 import { onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { InkButton, InkLoading, InkPopup } from '@inkcre/ui-web'
-import { Block, getInfoBaseRouter, Resolver } from '@inkcre/core'
+import { Block, getInfoBaseRouter, Resolver, UnknownResolverError } from '@inkcre/core'
 
+import { extensionHostRestoreState } from '@/core'
 import SolvedContentRenderer from '@/components/info-base/SolvedContentRenderer/SolvedContentRenderer.vue'
 import type { SolvedContentPopupProps } from './SolvedContentPopup'
 
@@ -17,6 +18,7 @@ const resolver = shallowRef<Resolver | null>(null)
 const solvedContent = shallowRef<unknown>(null)
 const error = shallowRef<Error | null>(null)
 let generation = 0
+let lookupBeforeRestore = false
 
 async function load(refresh = false): Promise<void> {
   const current = ++generation
@@ -25,6 +27,7 @@ async function load(refresh = false): Promise<void> {
   solvedContent.value = null
   error.value = null
   status.value = 'loading'
+  lookupBeforeRestore = false
   await previous?.dispose()
 
   let next: Resolver | null = null
@@ -35,6 +38,7 @@ async function load(refresh = false): Promise<void> {
       status.value = 'missing'
       return
     }
+    lookupBeforeRestore = ['idle', 'restoring'].includes(extensionHostRestoreState.value)
     const resolverClass = Resolver.getClass(block.resolver)
     next = new resolverClass(block)
     const solved = await next.getSolvedContent({ refresh, materializeMissing: false })
@@ -58,6 +62,17 @@ watch(
   () => void load(),
   { immediate: true }
 )
+// A deep link can arrive before enabled native modules register their resolvers.
+// Retry only that lookup failure when restore finishes; preserve other read failures.
+watch([extensionHostRestoreState, error], ([state, cause]) => {
+  if (
+    ['restored', 'failed'].includes(state) &&
+    lookupBeforeRestore &&
+    cause instanceof UnknownResolverError
+  ) {
+    void load()
+  }
+})
 onUnmounted(() => {
   generation += 1
   void resolver.value?.dispose()

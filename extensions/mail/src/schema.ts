@@ -9,6 +9,12 @@ export const CanonicalEmailSchema = z.strictObject({
 })
 export type CanonicalEmail = z.infer<typeof CanonicalEmailSchema>
 
+export const CanonicalMailingListSchema = z.strictObject({
+  list_id: z.string(),
+  name: z.string().nullable().default(null),
+})
+export type CanonicalMailingList = z.infer<typeof CanonicalMailingListSchema>
+
 export const CanonicalMailboxSchema = z.strictObject({
   name: z.string(),
   special_uses: z.array(z.string()).default([]),
@@ -40,6 +46,7 @@ export type CanonicalMimePart = z.infer<typeof CanonicalMimePartSchema>
 export const ComponentRelationSchema = z.strictObject({
   role: z.enum(['body', 'attachment', 'inline']),
   part_id: z.string(),
+  alternative_groups: z.array(z.string()).nullable().default(null),
 })
 export type ComponentRelation = z.infer<typeof ComponentRelationSchema>
 
@@ -75,6 +82,7 @@ export interface SolvedMimePart {
 export interface SolvedEmail {
   root: CanonicalEmail
   bodies: Array<SolvedBlock<string> & { relation: ComponentRelation }>
+  mailingLists: Array<SolvedBlock<CanonicalMailingList>>
   mimeParts: Array<SolvedBlock<SolvedMimePart> & { relation: ComponentRelation }>
   participants: Array<{
     relation: ParticipantRelation
@@ -89,6 +97,11 @@ export interface SolvedEmail {
     reference: string
     mimePart: SolvedBlock<SolvedMimePart>
   }>
+}
+
+export interface SolvedMailingList {
+  root: CanonicalMailingList
+  emails: Array<SolvedBlock<CanonicalEmail>>
 }
 
 export function parseJson(value: string): unknown {

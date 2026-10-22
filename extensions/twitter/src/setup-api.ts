@@ -1,21 +1,31 @@
+import corePackage from '../../../packages/core/package.json'
 import {
-  InstalledExtensionSchema,
+  RegistryReleaseReader,
+  sortPublishedReleases,
+  manageExtensionOnPeer,
+  readExtensionPeerStatus,
+} from '@inkcre/extension-runtime-client-web'
+import {
+  ExtensionParticipationModel,
+  ExtensionRegistryOriginResolver,
   Cron,
   CronForm,
   ExtensionModel,
   Peer,
+  PeerConfigSchema,
   PeerManager,
   PeerProtocolRequestSchema,
   PeerProtocolResponseSchema,
   Source,
   SourceForm,
   type InstalledExtension,
+  type ExtensionRuntimeStatus,
   type JsonValue,
 } from '@inkcre/core'
 import { z } from 'zod'
 
 const EXTENSION_NAME = 'inkcre/twitter'
-const EXTENSION_MANAGEMENT_CAPABILITY = 'core.extension.management.v1'
+const EXTENSION_MANAGEMENT_CAPABILITY = 'core.extension.management.v2'
 const TWITTER_SETUP_STATUS_CAPABILITY = 'inkcre.twitter.setup.status.v1'
 const TWITTER_OAUTH_APP_CONFIGURE_CAPABILITY = 'inkcre.twitter.oauth-app.configure.v1'
 const TWITTER_OAUTH_BEGIN_CAPABILITY = 'inkcre.twitter.oauth.begin.v1'
@@ -43,6 +53,7 @@ const HttpsUrlSchema = z
 
 export const TwitterSetupStatusSchema = z.object({
   callback_url: HttpUrlSchema,
+  x_monkey_base_url: HttpsUrlSchema.nullable().optional(),
   connected: z.boolean(),
   user_id: z.string().nullable(),
   handle: z.string().nullable(),
@@ -91,18 +102,30 @@ function advertises(peer: Peer, capability: string): boolean {
 
 export async function discoverCoreCandidates(signal?: AbortSignal): Promise<CorePeerCandidate[]> {
   signal?.throwIfAborted()
-  const [extension, peers] = await Promise.all([
+  const [extension, peers, participations] = await Promise.all([
     ExtensionModel.get(EXTENSION_NAME),
     PeerManager.listLive(),
+    ExtensionParticipationModel.list(),
   ])
   signal?.throwIfAborted()
   if (!extension) return []
-  return peers
-    .filter((peer) => advertises(peer, EXTENSION_MANAGEMENT_CAPABILITY))
-    .map((peer) => ({
+  const candidates = await Promise.all(
+    peers
+      .filter((peer) => advertises(peer, EXTENSION_MANAGEMENT_CAPABILITY))
+      .map(async (peer) => ({
+        peer,
+        status: await readExtensionPeerStatus(peer.id, EXTENSION_NAME),
+      }))
+  )
+  signal?.throwIfAborted()
+  return candidates
+    .filter(({ status }) => status.supported_distributions.includes('python'))
+    .map(({ peer }) => ({
       peer,
       extension,
-      enabled: extension.enabled.includes(peer.id),
+      enabled: participations.some(
+        (row) => row.name === EXTENSION_NAME && row.peer_id === peer.id && row.enabled
+      ),
       setupAvailable: advertises(peer, TWITTER_SETUP_STATUS_CAPABILITY),
     }))
 }
@@ -110,14 +133,29 @@ export async function discoverCoreCandidates(signal?: AbortSignal): Promise<Core
 export class TwitterSetupAPI {
   constructor(readonly peer: Peer) {}
 
-  enableCore(signal?: AbortSignal): Promise<InstalledExtension> {
-    return delegateTwitterRequest(
-      this.peer,
-      EXTENSION_MANAGEMENT_CAPABILITY,
-      { body: { action: 'enable', extension: EXTENSION_NAME } },
-      InstalledExtensionSchema,
-      signal
-    )
+  async enableCore(signal?: AbortSignal): Promise<ExtensionRuntimeStatus> {
+    const existing = await ExtensionParticipationModel.get(this.peer.id, EXTENSION_NAME)
+    if (!existing) {
+      const peerConfig = PeerConfigSchema.parse(this.peer.config)
+      const origin = await new ExtensionRegistryOriginResolver(
+        () => peerConfig.extension_registry_url
+      ).resolve()
+      const reader = new RegistryReleaseReader({
+        registryOrigin: origin,
+        hostSdk: { name: '@inkcre/core', version: corePackage.version },
+      })
+      const catalog = await reader.getExtension(EXTENSION_NAME, 'python')
+      const release = sortPublishedReleases(catalog.releases ?? [])[0]
+      if (!release) throw new Error('Twitter has no published Python distribution.')
+      await manageExtensionOnPeer(this.peer.id, {
+        action: 'select',
+        extension: EXTENSION_NAME,
+        distribution: 'python',
+        version: release.version,
+      })
+    }
+    signal?.throwIfAborted()
+    return manageExtensionOnPeer(this.peer.id, { action: 'enable', extension: EXTENSION_NAME })
   }
 
   status(signal?: AbortSignal): Promise<TwitterSetupStatus> {

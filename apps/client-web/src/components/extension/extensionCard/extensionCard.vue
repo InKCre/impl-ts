@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, shallowRef, watch, type Component } from 'vue'
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watch,
+  type Component,
+} from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   InkButton,
@@ -9,502 +18,684 @@ import {
   type JsonEditorValidation,
 } from '@inkcre/ui-web'
 import { toast } from '@/components/toast/toast'
-import { getExtensionHost, getExtensionRegistry, getExtensionSetupContribution } from '@/core'
-import { configStore, ExtensionRegistryOriginResolver, type Peer } from '@inkcre/core'
 import {
-  getExtensionDocumentation,
+  configStore,
+  ExtensionRegistryOriginResolver,
+  ExtensionModel,
+  ExtensionParticipationModel,
+  PeerOutcomeUnknown,
+  type ExtensionRuntimeStatus,
+  type NativeDistribution,
+  type MetaConfig,
+  type Peer,
+} from '@inkcre/core'
+import {
+  manageExtensionOnPeer,
   sortPublishedReleases,
+  preferredPublishedRelease,
+  RegistryReleaseError,
+  getExtensionDocumentation,
   type ExtensionDocumentationLink,
 } from '@inkcre/extension-runtime-client-web'
+import {
+  extensionHostRestoreState,
+  extensionHostConnectionReady,
+  getExtensionHost,
+  getExtensionRegistry,
+  getExtensionSetupContribution,
+  startExtensionHost,
+  webPeerConnectionState,
+} from '@/core'
 import { extensionCardProps, extensionCardEmits } from './extensionCard'
-import { extensionPeerControlMode, setExtensionPeerEnabled } from '@/extension-peer-control'
+import {
+  extensionPeerControlMode,
+  observeExtensionPeer,
+  selectExtensionPeerVersion,
+  setExtensionPeerEnabled,
+} from '@/extension-peer-control'
 import SchemaConfigEditor from '@/components/schemaConfigEditor/schemaConfigEditor.vue'
 
 const props = defineProps(extensionCardProps)
 const emit = defineEmits(extensionCardEmits)
 const { t } = useI18n()
-
-// --- data ---
-const configPopupOpen = ref(false)
-const configSaving = ref(false)
-const configValidation = ref<JsonEditorValidation>()
-const versionPopupOpen = ref<boolean | Promise<boolean>>(false)
-const managementOpen = ref(false)
-function openManagement(): void {
-  operationError.value = null
-  managementOpen.value = true
+const statuses = ref<Record<string, ExtensionRuntimeStatus | null>>({})
+const formats = ref<Record<string, NativeDistribution[]>>({})
+const errors = ref<Record<string, string>>({})
+const busyPeer = ref('')
+const refreshing = ref(false)
+const selectedPeer = shallowRef<Peer | null>(null)
+const versionOpen = ref(false)
+const versionLoading = ref(false)
+const versionModel = ref('')
+const distributionModel = ref<NativeDistribution>('module_federation')
+const versionOptions = ref<{ label: string; value: string }[]>([])
+const versionError = ref('')
+const publishedFormats = ref<Partial<Record<NativeDistribution, boolean>>>({})
+const knownPublishedFormats = computed(() =>
+  (['python', 'module_federation'] as const).filter((format) => publishedFormats.value[format])
+)
+let versionRequest = 0
+let documentationRequest = 0
+let active = true
+onUnmounted(() => {
+  active = false
+  versionRequest += 1
+  documentationRequest += 1
+})
+function ownsConnection(meta: MetaConfig): boolean {
+  const current = configStore.metaConfig
+  return (
+    active &&
+    meta.INKCRE_PGREST_URL === current.INKCRE_PGREST_URL &&
+    meta.INKCRE_PEER_ID === current.INKCRE_PEER_ID &&
+    meta.INKCRE_JWT_SECRET === current.INKCRE_JWT_SECRET
+  )
 }
-const setupPopupOpen = ref(false)
+const documentation = ref<ExtensionDocumentationLink[]>([])
+const docsOpen = ref(false)
+const docsLoading = ref(false)
+const docsError = ref('')
+const docsPeerName = ref('')
+const configOpen = ref(false)
+const configSaving = ref(false)
+const configModel = ref('')
+const schemaPeerId = ref('')
+const configValidation = ref<JsonEditorValidation>()
+const configError = ref('')
+const setupOpen = ref(false)
 const setupComponent = shallowRef<Component | null>(null)
 const setupContribution = shallowRef(getExtensionSetupContribution(props.extension.name))
-const peerDialogOpen = ref(false)
-const peerAction = ref<'enable' | 'disable'>('enable')
-const selectedPeerIds = ref<string[]>([])
-const peerActionErrors = ref<string[]>([])
-const updatingPeers = ref(false)
-const isUninstalling = ref(false)
-const operationError = ref<string | null>(null)
-const configModel = ref(JSON.stringify(props.extension.config, null, 2))
-const versionModel = ref(props.extension.version)
-const versionOptions = ref<{ label: string; value: string; description?: string }[]>([])
-const versionLoading = ref(false)
-const versionError = ref<string | null>(null)
-const documentation = shallowRef<ExtensionDocumentationLink[]>([])
-const documentationRetry = ref(0)
-const documentationStatus = ref<'loading' | 'available' | 'missing' | 'unavailable'>('loading')
+const rows = computed(() =>
+  props.peers.map((peer) => ({
+    peer,
+    pin: props.participations.find((row) => row.peer_id === peer.id),
+    status: statuses.value[peer.id],
+  }))
+)
+const schemaOptions = computed(() =>
+  props.participations
+    .filter((row) => row.config_schema && row.distribution)
+    .map((row) => ({
+      label: `${props.peers.find((peer) => peer.id === row.peer_id)?.name ?? row.peer_id} · ${distributionLabel(row.distribution)} ${row.version}`,
+      value: row.peer_id,
+    }))
+)
+const configSchema = computed(
+  () =>
+    props.participations.find((row) => row.peer_id === schemaPeerId.value)?.config_schema ??
+    undefined
+)
 const canSaveConfig = computed(
   () =>
     configValidation.value?.status === 'valid' && configValidation.value.text === configModel.value
 )
-
-// --- computed ---
-watch(
-  () => [props.extension.name, props.extension.version, documentationRetry.value] as const,
-  async ([name, version], _previous, onCleanup) => {
-    let current = true
-    onCleanup(() => {
-      current = false
-    })
-    documentation.value = []
-    documentationStatus.value = 'loading'
-    try {
-      const origin = await new ExtensionRegistryOriginResolver(
-        () => configStore.peerConfig.extension_registry_url
-      ).resolve()
-      const links = await getExtensionDocumentation(origin, name, version)
-      if (!current) return
-      documentation.value = links ?? []
-      documentationStatus.value = links?.length ? 'available' : 'missing'
-    } catch {
-      if (current) documentationStatus.value = 'unavailable'
-    }
-  },
-  { immediate: true }
+const distributionOptions = computed(() =>
+  selectedPeer.value
+    ? supportedFormats(selectedPeer.value).map((format) => ({
+        label: format === 'python' ? 'Python' : 'Module Federation',
+        value: format,
+      }))
+    : []
 )
 
-watch(
-  () => props.extension.config,
-  (config) => {
-    if (!configPopupOpen.value) configModel.value = JSON.stringify(config, null, 2)
-  },
-  { deep: true }
-)
-
-const canUninstall = computed(() => props.extension.enabled.length === 0 && !isUninstalling.value)
-const eligiblePeers = computed(() =>
-  props.peers.filter((peer) => {
-    const alreadyEnabled = props.extension.enabled.includes(peer.id)
-    return peerAction.value === 'disable' ? alreadyEnabled : !alreadyEnabled
-  })
-)
-const hasDeferredSelection = computed(() =>
-  eligiblePeers.value.some(
-    (peer) =>
-      selectedPeerIds.value.includes(peer.id) &&
-      extensionPeerControlMode(peer, props.currentPeerId, props.livePeerIds) === 'desired-state'
-  )
-)
-const peerLabel = (peer: Peer) =>
-  `${peer.name} · ${peer.application_version ? `v${peer.application_version}` : t('peer.versionUnknown')}`
-const closeSetup = async () => {
-  setupPopupOpen.value = false
-  setupComponent.value = null
-  await nextTick()
+function distributionLabel(distribution: NativeDistribution | null): string {
+  return distribution === 'python'
+    ? 'Python'
+    : distribution === 'module_federation'
+      ? 'Module Federation'
+      : t('extension.distributionUnknown')
 }
 
-const openPeerDialog = (action: 'enable' | 'disable') => {
-  peerAction.value = action
-  selectedPeerIds.value = []
-  peerActionErrors.value = []
-  operationError.value = null
-  peerDialogOpen.value = true
+function supportedFormats(peer: Peer): NativeDistribution[] {
+  if (peer.id === props.currentPeerId) return ['module_federation']
+  const observed = formats.value[peer.id]
+  if (observed?.length) return observed
+  const previous = props.participations.find((row) => row.peer_id === peer.id)
+  return previous?.distribution ? [previous.distribution] : []
 }
-
-const applyPeerAction = async () => {
-  if (updatingPeers.value || selectedPeerIds.value.length === 0) return
-  const selectedPeers = eligiblePeers.value.filter((peer) =>
-    selectedPeerIds.value.includes(peer.id)
+function statusText(peerId: string): string {
+  const pin = props.participations.find((row) => row.peer_id === peerId)
+  const status = statuses.value[peerId]
+  if (status?.restart_required)
+    return [
+      status.loaded_version
+        ? t('extension.runningVersion', { version: status.loaded_version })
+        : null,
+      t('extension.restartRequired'),
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  if (status?.running && status.loaded_version)
+    return t('extension.runningVersion', { version: status.loaded_version })
+  if (pin?.distribution === null) return t('extension.needsVersionSelection')
+  if (!status) return t('extension.runtimeUnknown')
+  if (status?.error) return t('extension.startFailed')
+  return t('extension.notRunning')
+}
+function noPublishedDistributionForPeer(peer: Peer): boolean {
+  const supported = supportedFormats(peer)
+  return (
+    supported.length > 0 && supported.every((format) => publishedFormats.value[format] === false)
   )
-  if (selectedPeers.length === 0) return
-  const enabled = peerAction.value === 'enable'
-  updatingPeers.value = true
-  peerActionErrors.value = []
+}
+async function refreshCard(): Promise<void> {
+  // Catalog facts are populated only by an explicit version choice, never by initial card mounting.
+  publishedFormats.value = {}
+  await refreshRuntime()
+}
+let runtimeRequest = 0
+async function refreshRuntime(): Promise<void> {
+  const request = ++runtimeRequest
+  refreshing.value = true
+  const meta = { ...configStore.metaConfig }
+  const host = getExtensionHost()
+  const ownsRefresh = () =>
+    request === runtimeRequest && ownsConnection(meta) && getExtensionHost() === host
   try {
-    if (!enabled && selectedPeerIds.value.includes(props.currentPeerId)) await closeSetup()
-    for (const peer of selectedPeers) {
-      try {
-        const updated = await setExtensionPeerEnabled({
-          name: props.extension.name,
-          peer,
-          currentPeerId: props.currentPeerId,
-          livePeerIds: props.livePeerIds,
-          enabled,
-          manager: getExtensionHost(),
-        })
-        emit('updated', updated)
-      } catch (error) {
-        peerActionErrors.value.push(
-          `${peerLabel(peer)}: ${error instanceof Error ? error.message : String(error)}`
-        )
-      }
+    if (extensionHostConnectionReady.value && extensionHostRestoreState.value !== 'failed') {
+      // Restore attempts every enabled module; a failure still leaves per-module status to inspect.
+      await startExtensionHost().catch(() => {})
     }
-    if (peerActionErrors.value.length) {
-      try {
-        const latest = await getExtensionHost().get(props.extension.name)
-        if (latest) emit('updated', latest)
-      } catch (error) {
-        peerActionErrors.value.push(error instanceof Error ? error.message : String(error))
-      }
-      selectedPeerIds.value = []
-    } else {
-      peerDialogOpen.value = false
-    }
+    if (!ownsRefresh()) return
+    await Promise.all(
+      props.peers.map(async (peer) => {
+        try {
+          const result = await observeExtensionPeer({
+            name: props.extension.name,
+            peer,
+            currentPeerId: props.currentPeerId,
+            livePeerIds: props.livePeerIds,
+            manager: host,
+          })
+          if (!ownsRefresh()) return
+          formats.value[peer.id] = result.supported_distributions
+          statuses.value[peer.id] = result.status
+          delete errors.value[peer.id]
+        } catch (error) {
+          if (!ownsRefresh()) return
+          statuses.value[peer.id] = null
+          errors.value[peer.id] = error instanceof Error ? error.message : String(error)
+        }
+      })
+    )
+    if (ownsRefresh()) setupContribution.value = getExtensionSetupContribution(props.extension.name)
   } finally {
-    setupContribution.value = getExtensionSetupContribution(props.extension.name)
-    updatingPeers.value = false
+    if (request === runtimeRequest) refreshing.value = false
   }
 }
-
-const onEditConfigClick = () => {
-  configModel.value = JSON.stringify(props.extension.config, null, 2)
-  configValidation.value = undefined
-  operationError.value = null
-  configPopupOpen.value = true
+function currentHostRestoring(peer: Peer): boolean {
+  return peer.id === props.currentPeerId && extensionHostRestoreState.value === 'restoring'
 }
-
-const onSetupClick = () => {
-  const contribution = setupContribution.value
-  if (!contribution) return
-  setupComponent.value = contribution.component
-  setupPopupOpen.value = true
-}
-
-const onChangeVersionClick = async () => {
-  managementOpen.value = false
-  versionModel.value = props.extension.version
-  versionOptions.value = []
-  versionError.value = null
-  versionPopupOpen.value = true
-  versionLoading.value = true
+async function perform(peer: Peer, operation: () => Promise<unknown>): Promise<Error | null> {
+  if (busyPeer.value) return null
+  busyPeer.value = peer.id
+  // A pre-command sample must not replace the status observed after its completion.
+  runtimeRequest += 1
+  delete errors.value[peer.id]
+  let operationError: Error | null = null
+  const meta = { ...configStore.metaConfig }
+  const host = getExtensionHost()
+  const ownsOperation = () => ownsConnection(meta) && getExtensionHost() === host
   try {
-    const record = await getExtensionRegistry().getExtension(props.extension.name)
-    versionOptions.value = sortPublishedReleases(record.releases ?? []).map((release) => ({
+    if (currentHostRestoring(peer)) await startExtensionHost().catch(() => {})
+    if (!ownsOperation()) return null
+    await operation()
+  } catch (error) {
+    operationError = error instanceof Error ? error : new Error(String(error))
+  } finally {
+    // A failed command may still have persisted its desired intent.
+    if (ownsOperation()) emit('participationChanged')
+    try {
+      if (ownsOperation()) await refreshRuntime()
+    } finally {
+      if (operationError && ownsOperation()) errors.value[peer.id] = operationError.message
+      busyPeer.value = ''
+    }
+  }
+  return operationError
+}
+
+async function togglePeer(peer: Peer, enabled: boolean): Promise<void> {
+  if (!enabled && peer.id === props.currentPeerId) await closeSetup()
+  await perform(peer, () =>
+    setExtensionPeerEnabled({
+      name: props.extension.name,
+      peer,
+      currentPeerId: props.currentPeerId,
+      livePeerIds: props.livePeerIds,
+      enabled,
+      manager: getExtensionHost(),
+    })
+  )
+}
+async function removePeer(peer: Peer): Promise<void> {
+  const error = await perform(peer, async () => {
+    if (peer.id === props.currentPeerId)
+      return getExtensionHost().uninstall(props.extension.name, peer.id)
+    if (extensionPeerControlMode(peer, props.currentPeerId, props.livePeerIds) === 'remote-host') {
+      await manageExtensionOnPeer(peer.id, { action: 'unselect', extension: props.extension.name })
+      return
+    }
+    const pin = await ExtensionParticipationModel.get(peer.id, props.extension.name)
+    if (pin) await pin.remove()
+  })
+  if (!error) toast.success(t('extension.uninstallSuccess'))
+}
+async function openVersion(peer: Peer): Promise<void> {
+  selectedPeer.value = peer
+  versionError.value = ''
+  versionModel.value = ''
+  distributionModel.value =
+    props.participations.find((row) => row.peer_id === peer.id)?.distribution ??
+    supportedFormats(peer)[0] ??
+    'module_federation'
+  versionOpen.value = true
+  await loadVersions()
+}
+async function loadVersions(): Promise<void> {
+  const request = ++versionRequest
+  const distribution = distributionModel.value
+  const peerId = selectedPeer.value?.id
+  versionLoading.value = true
+  versionOptions.value = []
+  versionError.value = ''
+  const readPublished = async (format: NativeDistribution) => {
+    try {
+      const catalog = await getExtensionRegistry().getExtension(props.extension.name, format)
+      const releases = sortPublishedReleases(catalog.releases ?? [])
+      if (request === versionRequest) publishedFormats.value[format] = releases.length > 0
+      return releases
+    } catch (error) {
+      if (error instanceof RegistryReleaseError && error.status === 404) {
+        if (request === versionRequest) publishedFormats.value[format] = false
+        return []
+      }
+      if (request === versionRequest) delete publishedFormats.value[format]
+      throw error
+    }
+  }
+  try {
+    const releases = await readPublished(distribution)
+    if (request !== versionRequest) return
+    versionOptions.value = releases.map((release) => ({
       label: release.version,
       value: release.version,
-      description: [
-        release.python ? t('extension.hostCore') : null,
-        release.module_federation ? t('extension.hostWeb') : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
     }))
+    const previous = props.participations.find(
+      (row) => row.peer_id === peerId && row.distribution === distribution
+    )
+    versionModel.value = versionOptions.value.some((option) => option.value === previous?.version)
+      ? previous!.version
+      : (preferredPublishedRelease(releases)?.version ?? '')
+    if (!releases.length) {
+      // On explicit install, show another published native format without implying this Peer supports it.
+      const other: NativeDistribution = distribution === 'python' ? 'module_federation' : 'python'
+      if (publishedFormats.value[other] === undefined) await readPublished(other)
+    }
   } catch (error) {
-    versionError.value = error instanceof Error ? error.message : String(error)
+    if (request === versionRequest)
+      versionError.value = error instanceof Error ? error.message : String(error)
   } finally {
-    versionLoading.value = false
+    if (request === versionRequest) versionLoading.value = false
   }
 }
 
-const onConfirmVersion = () => {
-  if (versionLoading.value || versionError.value || !versionModel.value) return
-  versionPopupOpen.value = (async () => {
+async function saveVersion(): Promise<void> {
+  const peer = selectedPeer.value
+  if (!peer || !versionModel.value || versionLoading.value || busyPeer.value) return
+  const distribution = distributionModel.value
+  const version = versionModel.value
+  const name = props.extension.name
+  const meta = { ...configStore.metaConfig }
+  const host = getExtensionHost()
+  const pickerRequest = versionRequest
+  const ownsSelection = () =>
+    ownsConnection(meta) &&
+    getExtensionHost() === host &&
+    versionOpen.value &&
+    versionRequest === pickerRequest &&
+    selectedPeer.value?.id === peer.id &&
+    distributionModel.value === distribution &&
+    versionModel.value === version
+  const commandError = await perform(peer, () =>
+    selectExtensionPeerVersion({
+      name: props.extension.name,
+      nickname: props.extension.nickname ?? props.extension.name,
+      releases: getExtensionRegistry(),
+      version,
+      distribution,
+      peer,
+      currentPeerId: props.currentPeerId,
+      livePeerIds: props.livePeerIds,
+      manager: getExtensionHost(),
+    })
+  )
+  if (!ownsSelection()) return
+  if (!commandError) {
+    versionOpen.value = false
+  } else if (commandError instanceof PeerOutcomeUnknown) {
+    // This independent read can verify selection through a target Peer restart; never resend select.
     try {
-      operationError.value = null
-      const updatedExtension = await getExtensionHost().changeVersion(
-        props.extension.name,
-        versionModel.value
-      )
-      emit('updated', updatedExtension)
-      return false
-    } catch (error) {
-      operationError.value = error instanceof Error ? error.message : String(error)
-      return true
+      const observed = await ExtensionParticipationModel.readForConnection(meta, peer.id, name)
+      if (
+        ownsSelection() &&
+        observed?.distribution === distribution &&
+        observed.version === version
+      ) {
+        versionOpen.value = false
+      }
+    } catch {
+      // Keep the original unknown outcome until the exact selection can be observed.
     }
-  })()
+  }
 }
-
-const onConfirmConfig = async () => {
+async function openDocumentation(peer: Peer): Promise<void> {
+  const pin = props.participations.find((row) => row.peer_id === peer.id)
+  if (!pin?.distribution) return
+  const request = ++documentationRequest
+  docsPeerName.value = `${peer.name} · ${distributionLabel(pin.distribution)} ${pin.version}`
+  docsOpen.value = true
+  docsLoading.value = true
+  documentation.value = []
+  docsError.value = ''
+  try {
+    const origin = await new ExtensionRegistryOriginResolver(
+      () => configStore.peerConfig.extension_registry_url
+    ).resolve()
+    const links =
+      (await getExtensionDocumentation(
+        origin,
+        props.extension.name,
+        pin.version,
+        pin.distribution
+      )) ?? []
+    if (request === documentationRequest) documentation.value = links
+  } catch (error) {
+    if (request === documentationRequest)
+      docsError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    if (request === documentationRequest) docsLoading.value = false
+  }
+}
+function openConfig(): void {
+  configModel.value = JSON.stringify(props.extension.config, null, 2)
+  schemaPeerId.value = schemaOptions.value.some((option) => option.value === props.currentPeerId)
+    ? props.currentPeerId
+    : ''
+  configValidation.value = undefined
+  configError.value = ''
+  configOpen.value = true
+}
+async function saveConfig(): Promise<void> {
   if (configSaving.value || !canSaveConfig.value) return
   configSaving.value = true
-  operationError.value = null
   try {
     const config: unknown = JSON.parse(configModel.value)
     if (!config || typeof config !== 'object' || Array.isArray(config))
       throw new Error(t('common.invalidConfig'))
-    const updatedExtension = await getExtensionHost().updateConfig(
-      props.extension.name,
-      config as Record<string, unknown>
-    )
-    emit('updated', updatedExtension)
-    configPopupOpen.value = false
+    const shared = await ExtensionModel.get(props.extension.name)
+    if (!shared) throw new Error('Extension no longer exists.')
+    emit('updated', await shared.updateConfig(config as Record<string, unknown>))
+    configOpen.value = false
   } catch (error) {
-    operationError.value = error instanceof Error ? error.message : t('common.saveFailed')
+    configError.value = error instanceof Error ? error.message : String(error)
   } finally {
     configSaving.value = false
   }
 }
-
-const onUninstall = async () => {
-  operationError.value = null
-  isUninstalling.value = true
-  try {
-    await getExtensionHost().uninstall(props.extension.name)
-    managementOpen.value = false
-    emit('uninstalled')
-    toast.success(t('extension.uninstallSuccess'))
-  } catch (error) {
-    operationError.value = error instanceof Error ? error.message : String(error)
-  } finally {
-    isUninstalling.value = false
-  }
+function openSetup(): void {
+  setupComponent.value = setupContribution.value?.component ?? null
+  setupOpen.value = !!setupComponent.value
 }
+async function closeSetup(): Promise<void> {
+  setupOpen.value = false
+  setupComponent.value = null
+  await nextTick()
+}
+watch(() => props.livePeerIds, refreshRuntime)
+watch(extensionHostRestoreState, (state) => {
+  if (state === 'restored' || state === 'failed') void refreshRuntime()
+})
+onMounted(refreshRuntime)
 </script>
 
 <template>
-  <article class="entity-card extension-card">
-    <header class="entity-card__header">
-      <div class="entity-card__title-group">
-        <h3 class="entity-card__title extension-card__title">
-          {{ extension.nickname ?? extension.name }}
-        </h3>
+  <article class="extension-card" :aria-label="extension.nickname ?? extension.name">
+    <header class="extension-card__header">
+      <div>
+        <span class="extension-card__id">{{ extension.nickname ?? extension.name }}</span>
+        <p class="extension-card__hint">{{ extension.name }}</p>
       </div>
-    </header>
-    <div class="entity-card__meta">
-      <code>{{ extension.name }}</code>
-      <span>v{{ extension.version }}</span>
-      <span>{{ t('extension.enabledPeerCount', { count: extension.enabled.length }) }}</span>
-    </div>
-
-    <div class="entity-card__actions extension-card__actions--primary">
-      <InkButton
-        :text="t('extension.enableOnPeers')"
-        size="sm"
-        :disabled="
-          peerSelectionDisabled || !peers.some((peer) => !extension.enabled.includes(peer.id))
-        "
-        @click="openPeerDialog('enable')"
-      />
-      <InkButton
-        :text="t('extension.disableOnPeers')"
-        size="sm"
-        :disabled="
-          peerSelectionDisabled || !peers.some((peer) => extension.enabled.includes(peer.id))
-        "
-        @click="openPeerDialog('disable')"
-      />
-    </div>
-    <div class="entity-card__actions extension-card__actions--secondary">
-      <InkButton
-        v-if="setupContribution"
-        :text="t('extension.setup')"
-        size="sm"
-        theme="subtle"
-        @click="onSetupClick"
-      />
-      <InkButton
-        @click="onEditConfigClick"
-        :text="t('extension.editConfig')"
-        size="sm"
-        theme="subtle"
-      />
-      <InkButton
-        :text="t('extension.versionAndRemoval')"
-        size="sm"
-        theme="subtle"
-        @click="openManagement"
-      />
-    </div>
-    <InkDialog
-      v-model="managementOpen"
-      :title="t('extension.versionAndRemoval')"
-      :subtitle="`${extension.nickname ?? extension.name} · v${extension.version}`"
-      :show-confirm="false"
-      :cancel-text="t('common.close')"
-      :is-loading="isUninstalling"
-    >
       <div class="extension-card__actions">
         <InkButton
-          @click="onChangeVersionClick"
-          :text="t('extension.changeVersion')"
+          v-if="setupContribution"
+          :text="t('extension.setup')"
           size="sm"
-          :disabled="extension.enabled.length > 0"
+          theme="primary"
+          @click="openSetup"
         />
+        <InkButton :text="t('extension.editConfig')" size="sm" @click="openConfig" />
         <InkButton
-          @click="onUninstall"
-          :text="t('extension.uninstall')"
-          theme="danger"
+          :text="t('common.refresh')"
           size="sm"
-          :disabled="!canUninstall"
-          :is-loading="isUninstalling"
+          :is-loading="refreshing"
+          @click="refreshCard"
         />
       </div>
-
-      <p v-if="extension.enabled.length > 0" class="extension-card__hint">
-        {{ t('extension.uninstallDisabled') }}
-      </p>
-      <p v-else class="extension-card__hint">{{ t('extension.uninstallConfirm') }}</p>
-      <p v-if="operationError" role="alert" class="extension-card__error">{{ operationError }}</p>
-    </InkDialog>
-    <div class="extension-card__documentation">
-      <InkLoading
-        v-if="documentationStatus === 'loading'"
-        variant="spinner"
-        size="xs"
-        :label="t('common.loading')"
-      />
-      <nav
-        v-else-if="documentation.length"
-        class="extension-card__actions"
-        :aria-label="t('extension.documentation')"
-      >
+    </header>
+    <h3 class="extension-card__hint">{{ t('extension.usedOnPeers') }}</h3>
+    <section
+      v-for="{ peer, pin, status } in rows"
+      :key="peer.id"
+      class="extension-card__peer-row"
+      :aria-label="peer.name"
+    >
+      <div>
+        <strong>{{ peer.name }}</strong
+        ><span v-if="peer.id === currentPeerId"> · {{ t('extension.currentBrowser') }}</span>
+        <p class="extension-card__hint">
+          {{
+            pin
+              ? `${distributionLabel(pin.distribution)} · ${pin.version}`
+              : t('extension.notInstalled')
+          }}
+        </p>
+        <p v-if="pin" class="extension-card__hint">{{ statusText(peer.id) }}</p>
+        <p v-else-if="noPublishedDistributionForPeer(peer)" class="extension-card__hint">
+          {{ t('extension.unavailableOnPeer') }}
+        </p>
+        <p v-if="errors[peer.id] || status?.error" role="alert" class="extension-card__error">
+          {{ errors[peer.id] || status?.error }}
+        </p>
+      </div>
+      <div class="extension-card__actions">
+        <InkButton
+          v-if="supportedFormats(peer).length"
+          :text="
+            t(
+              pin
+                ? 'extension.changeVersion'
+                : noPublishedDistributionForPeer(peer)
+                  ? 'extension.unavailableOnPeer'
+                  : 'extension.install'
+            )
+          "
+          size="sm"
+          :disabled="
+            !!busyPeer ||
+            peerSelectionDisabled ||
+            currentHostRestoring(peer) ||
+            (!pin && noPublishedDistributionForPeer(peer))
+          "
+          @click="openVersion(peer)"
+        />
+        <InkButton
+          v-if="pin?.distribution"
+          :text="
+            t(
+              pin.enabled || status?.running
+                ? 'extension.disableSelected'
+                : 'extension.enableSelected'
+            )
+          "
+          size="sm"
+          :is-loading="busyPeer === peer.id || (currentHostRestoring(peer) && pin.enabled)"
+          :disabled="!!busyPeer || peerSelectionDisabled || currentHostRestoring(peer)"
+          @click="togglePeer(peer, !(pin.enabled || status?.running))"
+        />
+        <InkButton
+          v-if="pin?.distribution"
+          :text="t('extension.documentation')"
+          size="sm"
+          theme="subtle"
+          @click="openDocumentation(peer)"
+        />
+        <InkButton
+          v-if="pin && !pin.enabled && !status?.running"
+          :text="t('extension.removeFromPeer')"
+          size="sm"
+          theme="subtle"
+          :disabled="!!busyPeer || currentHostRestoring(peer)"
+          @click="removePeer(peer)"
+        />
+      </div>
+    </section>
+    <InkDialog
+      v-model="docsOpen"
+      :title="t('extension.documentation')"
+      :subtitle="docsPeerName"
+      :show-confirm="false"
+      :cancel-text="t('common.close')"
+    >
+      <InkLoading v-if="docsLoading" size="xs" variant="spinner" :label="t('common.loading')" />
+      <p v-else-if="docsError" role="alert" class="extension-card__error">{{ docsError }}</p>
+      <nav v-else-if="documentation.length" class="extension-card__actions">
         <a
           v-for="link in documentation"
           :key="link.scope"
           :href="link.entry_url"
           target="_blank"
           rel="noopener noreferrer"
+          >{{ t(`extension.documentationScope.${link.scope}`) }} ↗</a
         >
-          {{ t(`extension.documentationScope.${link.scope}`) }}
-          <span aria-hidden="true"> ↗</span>
-        </a>
       </nav>
-      <p v-else-if="documentationStatus === 'unavailable'" class="extension-card__hint">
-        {{ t('extension.documentationUnavailable') }}
-      </p>
-      <p v-else-if="documentationStatus === 'missing'" class="extension-card__hint">
-        {{ t('extension.documentationMissing') }}
-      </p>
-      <InkButton
-        v-if="documentationStatus === 'unavailable'"
-        :text="t('common.retry')"
-        size="sm"
-        @click="documentationRetry++"
-      />
-    </div>
-
+      <p v-else class="extension-card__hint">{{ t('extension.documentationMissing') }}</p>
+    </InkDialog>
     <InkDialog
-      v-model="peerDialogOpen"
+      v-model="versionOpen"
       :title="
-        t(peerAction === 'enable' ? 'extension.enablePeerTitle' : 'extension.disablePeerTitle', {
-          name: extension.nickname ?? extension.name,
-        })
+        t(
+          participations.some((row) => row.peer_id === selectedPeer?.id)
+            ? 'extension.changeVersionTitle'
+            : selectedPeer && noPublishedDistributionForPeer(selectedPeer)
+              ? 'extension.unavailableOnPeer'
+              : 'extension.install'
+        )
       "
-      :show-cancel="false"
+      :subtitle="selectedPeer?.name"
       :show-confirm="false"
-      :is-loading="updatingPeers"
+      :show-cancel="false"
     >
-      <div class="extension-card__peer-options">
-        <label v-for="peer in eligiblePeers" :key="peer.id" class="extension-card__peer-option">
-          <input
-            v-model="selectedPeerIds"
-            type="checkbox"
-            :value="peer.id"
-            :disabled="updatingPeers"
-          />
-          <span>
-            <span>{{ peerLabel(peer) }}</span>
-            <span v-if="peer.id === currentPeerId" class="extension-card__peer-note">
-              {{ t('extension.currentBrowser') }}
-            </span>
-            <span
-              v-else-if="
-                extensionPeerControlMode(peer, currentPeerId, livePeerIds) === 'desired-state'
-              "
-              class="extension-card__peer-note"
-            >
-              {{ t('extension.desiredStateBrief') }}
-            </span>
-          </span>
-        </label>
-      </div>
-      <p v-if="hasDeferredSelection" class="extension-card__hint">
-        {{ t('extension.desiredStateExplanation') }}
+      <InkDropdown
+        v-if="distributionOptions.length > 1"
+        v-model="distributionModel"
+        :label="t('extension.distribution')"
+        :options="distributionOptions"
+        :disabled="versionLoading || !!busyPeer"
+        @change="loadVersions"
+      />
+      <p v-else class="extension-card__hint">
+        {{ t('extension.distribution') }}: {{ distributionLabel(distributionModel) }}
       </p>
-      <p v-for="error in peerActionErrors" :key="error" role="alert" class="extension-card__error">
-        {{ error }}
+      <InkLoading
+        v-if="versionLoading"
+        size="xs"
+        variant="spinner"
+        :label="t('extension.versionsLoading')"
+      />
+      <InkDropdown
+        v-else-if="versionOptions.length"
+        v-model="versionModel"
+        :label="t('extension.version')"
+        :options="versionOptions"
+        :error="versionError"
+        :disabled="!!busyPeer"
+        required
+      />
+      <p
+        v-if="!versionLoading && publishedFormats[distributionModel] === false"
+        class="extension-card__hint"
+      >
+        {{
+          t('extension.noPublishedDistribution', {
+            distribution: distributionLabel(distributionModel),
+          })
+        }}
       </p>
-      <template #footer>
-        <InkButton
+      <p
+        v-if="!versionLoading && !versionOptions.length && knownPublishedFormats.length"
+        class="extension-card__hint"
+      >
+        {{ t('extension.publishedDistributions') }}:
+        {{ knownPublishedFormats.map(distributionLabel).join(', ') }}
+      </p>
+      <p v-if="versionError" role="alert" class="extension-card__error">{{ versionError }}</p>
+      <p v-if="selectedPeer && errors[selectedPeer.id]" role="alert" class="extension-card__error">
+        {{ errors[selectedPeer.id] }}
+      </p>
+      <template #footer
+        ><InkButton
           :text="t('common.cancel')"
-          :disabled="updatingPeers"
-          @click="peerDialogOpen = false"
-        />
-        <InkButton
-          :text="
-            t(peerAction === 'enable' ? 'extension.enableSelected' : 'extension.disableSelected')
-          "
+          :disabled="!!busyPeer"
+          @click="versionOpen = false" /><InkButton
+          :text="t('common.save')"
           theme="primary"
-          :disabled="selectedPeerIds.length === 0"
-          :is-loading="updatingPeers"
-          @click="applyPeerAction"
-        />
-      </template>
+          :is-loading="!!busyPeer"
+          :disabled="!versionModel || versionLoading || !!versionError"
+          @click="saveVersion"
+      /></template>
     </InkDialog>
-
     <InkDialog
-      v-model="setupPopupOpen"
-      :title="t('extension.setupTitle', { name: extension.nickname ?? extension.name })"
-      :show-cancel="false"
-      :show-confirm="false"
-      :close-on-scrim="false"
-      @update:model-value="(open) => !open && closeSetup()"
-    >
-      <component :is="setupComponent" v-if="setupComponent" @close="closeSetup" />
-    </InkDialog>
-
-    <InkDialog
-      v-model="configPopupOpen"
+      v-model="configOpen"
       :title="t('extension.editConfigTitle')"
-      :is-loading="configSaving"
-      style="width: min(48rem, calc(100vw - 2 * var(--sys-space-md)))"
+      :show-confirm="false"
+      :show-cancel="false"
     >
+      <InkDropdown
+        v-if="schemaOptions.length"
+        v-model="schemaPeerId"
+        :label="t('extension.configSchemaSource')"
+        :options="[{ label: t('extension.jsonConfig'), value: '' }, ...schemaOptions]"
+      />
       <SchemaConfigEditor
         v-model="configModel"
-        :schema="extension.config_schema ?? undefined"
+        :schema="configSchema"
         :label="t('extension.editConfigTitle')"
         :disabled="configSaving"
         @validation="configValidation = $event"
       />
-      <p v-if="operationError" role="alert" class="extension-card__error">{{ operationError }}</p>
-      <template #footer>
-        <InkButton :text="t('common.cancel')" @click="configPopupOpen = false" />
-        <InkButton
+      <p v-if="configError" role="alert" class="extension-card__error">{{ configError }}</p>
+      <template #footer
+        ><InkButton
+          :text="t('common.cancel')"
+          :disabled="configSaving"
+          @click="configOpen = false" /><InkButton
           :text="t('common.save')"
           theme="primary"
-          :disabled="!canSaveConfig"
           :is-loading="configSaving"
-          @click="onConfirmConfig"
-        />
-      </template>
+          :disabled="!canSaveConfig"
+          @click="saveConfig"
+      /></template>
     </InkDialog>
-
     <InkDialog
-      v-model="versionPopupOpen"
-      :title="t('extension.changeVersionTitle')"
-      :show-confirm="!versionLoading && !versionError && versionOptions.length > 0"
-      @confirm="onConfirmVersion"
-    >
-      <div v-if="versionLoading" class="extension-card__loading">
-        <InkLoading variant="spinner" size="xs" :label="t('extension.versionsLoading')" />
-      </div>
-      <InkDropdown
-        v-else
-        v-model="versionModel"
-        :label="t('extension.version')"
-        :options="versionOptions"
-        :error="versionError ?? ''"
-        :disabled="!!versionError"
-        required
-      />
-      <InkButton
-        v-if="versionError"
-        :text="t('common.retry')"
-        size="sm"
-        @click="onChangeVersionClick"
-      />
-      <p v-if="operationError" role="alert" class="extension-card__error">{{ operationError }}</p>
-    </InkDialog>
+      v-model="setupOpen"
+      :title="t('extension.setupTitle', { name: extension.nickname ?? extension.name })"
+      :show-confirm="false"
+      :show-cancel="false"
+      :close-on-scrim="false"
+      @update:model-value="(open) => !open && closeSetup()"
+      ><component :is="setupComponent" v-if="setupComponent" @close="closeSetup"
+    /></InkDialog>
   </article>
 </template>
-
 <style lang="scss" scoped src="./extensionCard.scss" />

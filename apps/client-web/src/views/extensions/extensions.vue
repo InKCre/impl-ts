@@ -2,11 +2,20 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { InkButton, InkSkeleton, InkPlaceholder } from '@inkcre/ui-web'
+import { InkButton, InkSkeleton, InkPlaceholder, InkDropdown } from '@inkcre/ui-web'
 import { toast } from '@/components/toast/toast'
 import { usePageObjectTitle } from '@/composables/use-page-object-title'
-import { configStore, Peer, PeerManager, type InstalledExtension } from '@inkcre/core'
+import {
+  configStore,
+  Peer,
+  PeerManager,
+  ExtensionParticipationModel,
+  type ExtensionParticipation,
+  type NativeDistribution,
+  type InstalledExtension,
+} from '@inkcre/core'
 import type { ReleaseRecord } from '@inkcre/extension-runtime-client-web'
+import { observeExtensionPeer, selectExtensionPeerVersion } from '@/extension-peer-control'
 import extensionCard from '@/components/extension/extensionCard/extensionCard.vue'
 import {
   getExtensionHost,
@@ -22,6 +31,15 @@ const currentPeerId = configStore.metaConfig.INKCRE_PEER_ID
 const peers = ref<Peer[]>([])
 const livePeerIds = ref<ReadonlySet<string>>(new Set())
 const extensions = ref<InstalledExtension[]>([])
+const participations = ref<ExtensionParticipation[]>([])
+const installPeerId = ref(currentPeerId)
+const installPeers = ref<Peer[]>([])
+const installPeerOptions = computed(() =>
+  installPeers.value.map((peer) => ({ label: peer.name, value: peer.id }))
+)
+const installDistribution = computed<NativeDistribution>(() =>
+  route.query.distribution === 'python' ? 'python' : 'module_federation'
+)
 const peersLoading = ref(false)
 const extensionsLoading = ref(false)
 const extensionError = ref<string | null>(null)
@@ -107,33 +125,37 @@ async function refreshExtensions(): Promise<void> {
   if (extensionsLoading.value) return
   extensionsLoading.value = true
   extensionError.value = null
-  
   const maxRetries = 3
   let lastError: Error | null = null
-  
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      extensions.value = await getExtensionHost().list()
+      const [shared, selections] = await Promise.all([
+        getExtensionHost().list(),
+        ExtensionParticipationModel.list(),
+      ])
+      extensions.value = shared
+      participations.value = selections
       lastError = null
-      break // Success
+      break
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
-      
+
       // If it's a prepared statement conflict, wait and retry
       if (lastError.message.includes('prepared statement') && attempt < maxRetries - 1) {
-        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)))
+        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)))
         continue
       }
-      
+
       // For other errors, fail immediately
       break
     }
   }
-  
+
   if (lastError) {
     extensionError.value = formatErrorMessage(lastError, 'extension.errorDescription')
   }
-  
+
   extensionsLoading.value = false
 }
 
@@ -162,14 +184,44 @@ async function loadInstallRelease(): Promise<void> {
   if (!installRequested.value) return
   const name = route.query.install
   const version = route.query.version
-  if (typeof name !== 'string' || typeof version !== 'string') {
+  if (
+    typeof name !== 'string' ||
+    typeof version !== 'string' ||
+    !['python', 'module_federation'].includes(String(route.query.distribution))
+  ) {
     installError.value = t('extension.invalidInstallLink')
     return
   }
   installLoading.value = true
   try {
-    const release = await getExtensionRegistry().getRelease(name, version, true)
-    if (request === releaseRequest) installRelease.value = release
+    const release = await getExtensionRegistry().getRelease(
+      name,
+      version,
+      true,
+      installDistribution.value
+    )
+    if (request === releaseRequest) {
+      installRelease.value = release
+      await refreshPeers()
+      const observations = await Promise.all(
+        availablePeers.value.map(async (peer) => {
+          try {
+            const result = await observeExtensionPeer({
+              name,
+              peer,
+              currentPeerId,
+              livePeerIds: livePeerIds.value,
+              manager: getExtensionHost(),
+            })
+            return result.supported_distributions.includes(installDistribution.value) ? peer : null
+          } catch {
+            return null
+          }
+        })
+      )
+      if (request === releaseRequest)
+        installPeers.value = observations.filter((peer): peer is Peer => peer !== null)
+    }
   } catch (error) {
     if (request === releaseRequest) {
       installError.value = error instanceof Error ? error.message : String(error)
@@ -181,13 +233,24 @@ async function loadInstallRelease(): Promise<void> {
 
 async function installReleaseInDeployment(): Promise<void> {
   const release = installRelease.value
-  if (!release || installing.value || installedMatch.value || !connected.value) return
+  if (!release || installing.value || !connected.value) return
+  const peer = installPeers.value.find((peer) => peer.id === installPeerId.value)
+  if (!peer) return
   installing.value = true
   installError.value = null
   try {
-    updateExtension(
-      await getExtensionHost().install({ name: release.name, version: release.version })
-    )
+    await selectExtensionPeerVersion({
+      name: release.name,
+      nickname: release.nickname,
+      releases: getExtensionRegistry(),
+      version: release.version,
+      distribution: installDistribution.value,
+      peer,
+      currentPeerId,
+      livePeerIds: livePeerIds.value,
+      manager: getExtensionHost(),
+    })
+    await refreshExtensions()
     toast.success(t('extension.installSuccess'))
     await router.replace('/extensions')
   } catch (error) {
@@ -204,7 +267,11 @@ function updateExtension(updated: InstalledExtension): void {
     : [...extensions.value, updated].sort((left, right) => left.name.localeCompare(right.name))
 }
 
-watch(() => [route.query.install, route.query.version], loadInstallRelease, { immediate: true })
+watch(
+  () => [route.query.install, route.query.version, route.query.distribution],
+  loadInstallRelease,
+  { immediate: true }
+)
 
 // Watch for connection state changes and reload when connected
 watch(connected, (isConnected) => {
@@ -274,10 +341,16 @@ onMounted(() => {
               .join(' · ')
           }}
         </p>
-        <p v-if="installedMatch" class="extensions-view__notice">
-          {{ t('extension.installedVersion', { version: installedMatch.version }) }}
+        <InkDropdown
+          v-if="connected"
+          v-model="installPeerId"
+          :label="t('extension.targetPeer')"
+          :options="installPeerOptions"
+        />
+        <p v-if="connected && !installPeers.length" class="extensions-view__notice">
+          {{ t('extension.noSupportedPeer') }}
         </p>
-        <p v-else-if="!connected" class="extensions-view__notice">
+        <p v-if="!connected" class="extensions-view__notice">
           {{ t('extension.connectBeforeInstall') }}
           <RouterLink to="/settings">{{ t('common.settings') }}</RouterLink>
         </p>
@@ -288,10 +361,14 @@ onMounted(() => {
         <p v-if="installError" role="alert" class="extensions-view__error">{{ installError }}</p>
         <div class="extensions-view__install-actions">
           <InkButton
-            v-if="!installedMatch"
             theme="primary"
             :text="t('extension.install')"
-            :disabled="!connected || extensionsLoading || !!extensionError"
+            :disabled="
+              !connected ||
+              extensionsLoading ||
+              !!extensionError ||
+              !installPeers.some((peer) => peer.id === installPeerId)
+            "
             :is-loading="installing"
             @click="installReleaseInDeployment"
           />
@@ -358,12 +435,13 @@ onMounted(() => {
           v-for="extension in extensions"
           :key="extension.name"
           :extension="extension"
+          :participations="participations.filter((row) => row.name === extension.name)"
           :peers="availablePeers"
           :live-peer-ids="livePeerIds"
           :current-peer-id="currentPeerId"
           :peer-selection-disabled="peersLoading || !!peerError"
           @updated="updateExtension"
-          @uninstalled="refreshExtensions"
+          @participation-changed="refreshExtensions"
         />
         <div v-if="extensionError && extensions.length" class="extensions-view__error">
           <p role="alert">{{ t('extension.installedUnavailable') }}</p>

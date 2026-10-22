@@ -2,8 +2,9 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 
-const stableImagePattern = /^ghcr\.io\/inkcre\/core-py:stable$/
-const digestPattern = /^ghcr\.io\/inkcre\/core-py@sha256:[0-9a-f]{64}$/
+const stableImagePattern = /^ghcr\.io\/inkcre\/impl-py:stable$/
+const digestPattern = /^ghcr\.io\/inkcre\/impl-py@sha256:[0-9a-f]{64}$/
+const localImageIdPattern = /^sha256:[0-9a-f]{64}$/
 const sourceRevisionPattern = /^[0-9a-f]{40}$/
 const sha256Pattern = /^[0-9a-f]{64}$/
 
@@ -18,10 +19,31 @@ export async function readJson(path) {
 export function validateCoreReleaseConfig(config) {
   if (
     config?.format !== 1 ||
-    config.repository !== 'InKCre/core-py' ||
+    config.repository !== 'InKCre/impl-py' ||
     !stableImagePattern.test(config.stable_image)
   ) {
-    throw new Error('core release config must select InKCre/core-py stable')
+    throw new Error('core release config must select InKCre/impl-py stable')
+  }
+  if (config.canonical_candidate !== undefined) {
+    const candidate = config.canonical_candidate
+    if (
+      !candidate ||
+      !digestPattern.test(candidate.image) ||
+      !sourceRevisionPattern.test(candidate.source_revision) ||
+      typeof candidate.contract_revision !== 'string' ||
+      !candidate.contract_revision
+    ) {
+      throw new Error(
+        'canonical Core candidate requires a published repository digest, exact source SHA and database contract revision'
+      )
+    }
+    if (
+      Object.keys(candidate).some(
+        (key) => !['image', 'source_revision', 'contract_revision'].includes(key)
+      )
+    ) {
+      throw new Error('canonical Core candidate contains unsupported fields')
+    }
   }
   for (const name of ['pgvector', 'postgrest']) {
     const image = config.runtime_images?.[name]
@@ -143,6 +165,24 @@ export function localDocker(args, options = {}) {
   }).trim()
 }
 
+/** A reviewed canonical candidate can advance consumer admission without moving stable. */
+export function resolveConfiguredCoreRelease(runDocker, config) {
+  validateCoreReleaseConfig(config)
+  const candidate = config.canonical_candidate
+  if (!candidate) return resolveCoreRelease(runDocker, config.stable_image)
+  runDocker(['pull', candidate.image], { timeout: 300_000 })
+  const release = inspectCoreRelease(runDocker, candidate.image)
+  if (
+    release.manifest.source_revision !== candidate.source_revision ||
+    release.manifest.contract_revision !== candidate.contract_revision
+  ) {
+    throw new Error(
+      'canonical Core candidate source or database contract does not match its admission'
+    )
+  }
+  return release
+}
+
 export function resolveCoreRelease(runDocker, stableImage) {
   if (!stableImagePattern.test(stableImage)) {
     throw new Error(`unexpected core stable image: ${stableImage}`)
@@ -155,9 +195,14 @@ export function resolveCoreRelease(runDocker, stableImage) {
   return inspectCoreRelease(runDocker, image)
 }
 
-export function inspectCoreRelease(runDocker, image) {
-  if (!digestPattern.test(image)) {
+export function inspectCoreRelease(runDocker, image, { allowLocalImage = false } = {}) {
+  const localImage = allowLocalImage && localImageIdPattern.test(image)
+  if (!digestPattern.test(image) && !localImage) {
     throw new Error(`core release must be digest-pinned: ${image}`)
+  }
+  if (localImage) {
+    const actualId = runDocker(['image', 'inspect', '--format={{.Id}}', image]).trim()
+    if (actualId !== image) throw new Error('local Core image identity does not match')
   }
   const manifest = validateSchemaManifest(
     JSON.parse(

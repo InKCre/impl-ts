@@ -6,6 +6,7 @@ import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
+import { verifyPublicModuleFederation } from './verify-native-extension-distribution.mjs'
 import {
   captureCandidates,
   checkCandidates,
@@ -27,7 +28,7 @@ test('a rerun cannot replace a missing or expired release candidate', () => {
 // A real HTTP fault-injection boundary for the publisher, not a replacement Registry implementation.
 test('an unknown MF-only upload resumes the saved ZIP and verifies even an existing association', async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-publication-test-'))
-  const registryUrl = 'https://registry.example.test'
+  let registryUrl = 'https://registry.example.test'
   const prefix = '/extensions/test/source/1.0.0/module-federation/'
   const build = path.join(workspace, 'extensions/source/dist/client-web')
   const uploaded = path.join(workspace, 'uploaded')
@@ -50,6 +51,7 @@ test('an unknown MF-only upload resumes the saved ZIP and verifies even an exist
         nickname: 'Source',
         version: '1.0.0',
         state: 'published',
+        distribution: 'module_federation',
         module_federation: {
           host_sdk: '@inkcre/core',
           host_sdk_version: '>=0.2.0 <0.4.0',
@@ -91,7 +93,7 @@ test('an unknown MF-only upload resumes the saved ZIP and verifies even an exist
           return json(200, record())
         }
       }
-      if (req.url.startsWith('/v1/'))
+      if (req.url.startsWith('/v2/'))
         return json(published ? 200 : 404, published ? record() : { detail: 'not found' })
       if (!published) return json(404, { detail: 'not found' })
       const relativePath = req.url.slice(prefix.length)
@@ -144,18 +146,28 @@ test('an unknown MF-only upload resumes the saved ZIP and verifies even an exist
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
     const origin = `http://127.0.0.1:${server.address().port}`
+    registryUrl = origin
     const options = {
       workspace,
       registryUrl,
       deliveryDirectory: path.join(workspace, 'candidate'),
       token: 'test-only',
       provenance: {
-        source_repository: 'https://github.com/InKCre/client-web',
+        source_repository: 'https://github.com/InKCre/impl-ts',
         source_revision: 'exact-source',
         build_id: 'same-run',
       },
       fetchImplementation: (url, init) => fetch(new URL(new URL(url).pathname, origin), init),
     }
+    await assert.rejects(
+      verifyPublicModuleFederation({
+        registryUrl: 'http://registry.example.test',
+        packagePath: path.join(workspace, 'extensions/source/package.json'),
+        corePackagePath: path.join(workspace, 'packages/core/package.json'),
+        artifactDirectory: build,
+      }),
+      /HTTPS or loopback HTTP/
+    )
     await captureCandidates(options)
     assert.equal(writes, 0, 'capturing a candidate must not mutate the Registry')
     // A rebuild could produce other bytes; publication must still use the retained ZIP.

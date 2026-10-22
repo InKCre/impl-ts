@@ -172,10 +172,14 @@ export async function verifyPublicModuleFederation({
     artifactDirectory,
   })
   const registry = new URL(registryUrl)
-  assert.equal(registry.protocol, 'https:', 'Registry URL must use HTTPS')
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(registry.hostname)
+  assert.ok(
+    registry.protocol === 'https:' || (registry.protocol === 'http:' && loopback),
+    'Registry URL must use HTTPS or loopback HTTP'
+  )
   const [namespace, name] = local.name.split('/')
   const releaseUrl = new URL(
-    `/v1/extensions/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/releases/${encodeURIComponent(local.version)}`,
+    `/v2/extensions/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/distributions/module_federation/releases/${encodeURIComponent(local.version)}`,
     registry
   )
   const releaseResponse = await fetchImplementation(releaseUrl, {
@@ -194,17 +198,19 @@ export async function verifyPublicModuleFederation({
       nickname: release.nickname,
       version: release.version,
       state: release.state,
-      module_federation: release.module_federation,
+      distribution: release.distribution,
+      module_federation: {
+        host_sdk: release.module_federation?.host_sdk,
+        host_sdk_version: release.module_federation?.host_sdk_version,
+      },
     },
     {
       name: local.name,
       nickname: local.nickname,
       version: local.version,
       state: 'published',
-      module_federation: {
-        manifest_url: `/extensions/${local.name}/${local.version}/module-federation/mf-manifest.json`,
-        ...local.module_federation,
-      },
+      distribution: 'module_federation',
+      module_federation: local.module_federation,
     },
     'public exact Release differs from checked association'
   )
@@ -322,6 +328,7 @@ export function previewRelease(local) {
     nickname: local.nickname,
     version: local.version,
     state: 'published',
+    distribution: 'module_federation',
     module_federation: {
       manifest_url: `/extensions/${local.name}/${local.version}/module-federation/mf-manifest.json`,
       ...local.module_federation,

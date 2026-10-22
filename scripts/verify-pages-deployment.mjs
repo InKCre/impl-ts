@@ -86,7 +86,7 @@ if (previewProducer) {
     throw new Error('preview producer is missing inkcre.name or version')
   }
   const [namespace, name] = extensionName.split('/')
-  const releasePath = `/v1/extensions/${namespace}/${name}/releases/${extensionVersion}`
+  const releasePath = `/v2/extensions/${namespace}/${name}/distributions/module_federation/releases/${extensionVersion}`
   const release = await readPreviewResponse(releasePath).then((response) => response.json())
   if (release.name !== extensionName || release.version !== extensionVersion) {
     throw new Error('preview exact Release differs from its producer metadata')

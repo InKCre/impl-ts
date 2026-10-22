@@ -1,5 +1,5 @@
 {
-  "corpus_version": "14.0.0",
+  "schema_version": 4,
   "dev": {
     "targets": {
       "database": {
@@ -81,6 +81,5 @@
         "scope": "worktree"
       }
     }
-  },
-  "schema_version": 3
+  }
 }

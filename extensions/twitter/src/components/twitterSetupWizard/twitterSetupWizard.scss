@@ -81,6 +81,12 @@
     @include apply-font(body-sm);
     color: sys-var(color, text, subtle);
   }
+  &__x-monkey {
+    display: grid;
+    gap: sys-var(space, sm);
+    padding-top: sys-var(space, md);
+    border-top: 1px solid sys-var(color, border, subtle);
+  }
   &__secret {
     @include apply-font(body-md);
     box-sizing: border-box;

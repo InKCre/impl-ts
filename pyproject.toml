@@ -3,9 +3,9 @@ name = "inkcre-client-web-tooling"
 version = "0.0.0"
 description = "Repository-level development tooling for the InKCre Web monorepo"
 requires-python = ">=3.13,<3.14"
-# Gate: generate and commit pdm.lock only after this immutable Toolkit wheel is published.
+# The exact Toolkit package source is admitted for this protocol cutover; canonical wheels remain the normal delivery boundary.
 dependencies = [
-  "inkcre-extension-toolkit[cli] @ https://github.com/InKCre/ext-reg/releases/download/toolkit-v0.2.1/inkcre_extension_toolkit-0.2.1-py3-none-any.whl",
+  "inkcre-extension-toolkit[cli] @ https://github.com/InKCre/ext-reg/releases/download/toolkit-v0.5.0/inkcre_extension_toolkit-0.5.0-py3-none-any.whl",
 ]
 
 [tool.pdm]

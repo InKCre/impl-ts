@@ -3,6 +3,9 @@ import { computed, inject, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { InkButton, InkDropdown, InkForm, InkInput, INK_I18N_KEY } from '@inkcre/ui-web'
 import {
   ExtensionModel,
+  ExtensionParticipationModel,
+  configStore,
+  type ExtensionParticipation,
   PeerOutcomeUnknown,
   type InstalledExtension,
   type Peer,
@@ -10,6 +13,7 @@ import {
 import { manageExtensionOnPeer } from '@inkcre/extension-runtime-client-web'
 import {
   extensionName,
+  ensureMemosParticipation,
   generateToken,
   MemosConnectionError,
   personalAccessToken,
@@ -42,7 +46,15 @@ onUnmounted(() => {
 
 const peer = computed(() => peers.value.find((candidate) => candidate.id === selected.value))
 const savedToken = computed(() => (extension.value ? personalAccessToken(extension.value) : null))
-const enabled = computed(() => extension.value?.enabled.includes(selected.value) ?? false)
+const participations = ref<ExtensionParticipation[]>([])
+const enabled = computed(() =>
+  participations.value.some((row) => row.peer_id === selected.value && row.enabled)
+)
+const localVersion = computed(
+  () =>
+    participations.value.find((row) => row.peer_id === configStore.metaConfig.INKCRE_PEER_ID)
+      ?.version
+)
 const ready = computed(() => loaded.value && address.value && savedToken.value && enabled.value)
 const options = computed(() =>
   peers.value.map((candidate) => ({
@@ -56,11 +68,11 @@ async function loadHelp(version: string) {
   helpStatus.value = 'loading'
   try {
     const url = await readHelpUrl(version)
-    if (!mounted || extension.value?.version !== version) return
+    if (!mounted || localVersion.value !== version) return
     helpUrl.value = url
     helpStatus.value = url ? 'available' : 'missing'
   } catch {
-    if (mounted && extension.value?.version === version) helpStatus.value = 'unavailable'
+    if (mounted && localVersion.value === version) helpStatus.value = 'unavailable'
   }
 }
 
@@ -94,7 +106,11 @@ async function refresh() {
     const current = await readSetup()
     if (!mounted) return
     extension.value = current.extension
-    void loadHelp(current.extension.version)
+    participations.value = (await ExtensionParticipationModel.list()).filter(
+      (row) => row.name === extensionName
+    )
+    if (localVersion.value) void loadHelp(localVersion.value)
+    else helpStatus.value = 'missing'
     peers.value = current.peers
     if (!selected.value && current.peers.length === 1) selected.value = current.peers[0]!.id
     loaded.value = true
@@ -135,22 +151,27 @@ async function prepare() {
     const current = await ExtensionModel.get(extensionName)
     if (!current) throw new Error('Memos is no longer installed.')
     extension.value = current
+    await ensureMemosParticipation(target)
     if (!personalAccessToken(current)) {
       phase = 'save'
       draft.value ||= generateToken()
-      extension.value = await manageExtensionOnPeer(target, {
+      await manageExtensionOnPeer(target, {
         action: 'patch_config',
         extension: extensionName,
         patch: { personal_access_token: draft.value },
       })
     }
     phase = 'enable'
-    if (!extension.value.enabled.includes(target)) {
-      extension.value = await manageExtensionOnPeer(target, {
+    if (!enabled.value) {
+      await manageExtensionOnPeer(target, {
         action: 'enable',
         extension: extensionName,
       })
     }
+    extension.value = await ExtensionModel.get(extensionName)
+    participations.value = (await ExtensionParticipationModel.list()).filter(
+      (row) => row.name === extensionName
+    )
     draft.value = ''
     await loadAddress()
   } catch (cause) {

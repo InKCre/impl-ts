@@ -199,7 +199,7 @@ function localCompose(composeEnvironmentPath, project, args, options) {
 
 export function runDatabaseCompose(state, composeEnvironmentPath, args, options = {}) {
   if (state.provider.kind === 'external') {
-    throw new Error('external database runtime is owned by core-py; Compose is unavailable')
+    throw new Error('external database runtime is owned by impl-py; Compose is unavailable')
   }
   if (state.provider.kind === 'local') {
     return localCompose(composeEnvironmentPath, state.project, args, options)
@@ -326,7 +326,7 @@ export function diagnoseDatabaseProvider(provider) {
     const descriptor = JSON.parse(readFileSync(provider.descriptor, 'utf8'))
     if (
       descriptor.format !== 1 ||
-      descriptor.owner_repository !== 'InKCre/core-py' ||
+      descriptor.owner_repository !== 'InKCre/impl-py' ||
       !/^[a-f0-9]{16}$/.test(descriptor.identity) ||
       typeof descriptor.contract_revision !== 'string' ||
       descriptor.contract_revision.length === 0 ||

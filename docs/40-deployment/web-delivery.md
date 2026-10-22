@@ -2,12 +2,12 @@
 
 ## Artifact Contract
 
-`apps/client-web` produces a static, environment-neutral Vite artifact. Runtime service origins,
-Peer identity, and JWT credentials remain browser-owned and are not compiled into production or
-preview bytes. Pages supplies static hosting only: this repository has no application Worker or
-runtime configuration endpoint. [`scripts/verify-client-web-release.mjs`](../../scripts/verify-client-web-release.mjs)
-and [`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs) enforce the
-artifact boundary.
+`apps/client-web` 构建静态且与部署环境无关的 Vite 产物。部署实例的连接地址、Peer 身份与 JWT 凭据
+由运行时持有，不能编入生产或预览产物；公共业务链接和产品 Registry 默认地址不选择部署实例。
+Pages 只提供静态托管，本仓库没有应用 Worker 或运行时配置接口。
+[`scripts/verify-client-web-release.mjs`](../../scripts/verify-client-web-release.mjs) 和
+[`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs) 共同执行此边界。
+两个入口都先执行源码配置检查，再检查构建输出，独立 release 验证与 workspace CI 使用相同的部署配置规则。
 
 The **Client checks** workflow in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 validates the candidate but uploads no deployable SPA, Module Federation, or Registry handoff
@@ -42,6 +42,70 @@ The Pages project is selected by `CLOUDFLARE_PAGES_PROJECT`; deployment uses the
 Pages deployment URL and `https://app.inkcre.dev`. Production delivery has no Extension Registry
 token and no first-party Extension publication responsibility.
 
+`INKCRE_WEB_PRODUCTION_PAUSED=true` pauses automatic main-push Pages and MF publication jobs.
+It does not stop the currently deployed app, CI, previews or the independent Core SDK release.
+Set it before merging a breaking protocol cutover. After the deployment owner confirms database
+and service compatibility, explicitly dispatch `pages-deploy.yml` and `extension-release.yml`
+on `main` with `source_sha` equal to its full current SHA. Each dispatch permits one delivery
+while the variable remains true; it does not clear the pause or select a newer source silently.
+Restore automatic delivery only after the cutover has been verified.
+
+### Breaking database protocol upgrades
+
+Pages delivery changes the HTML and assets served to new visits; it does not replace JavaScript
+already running in an open tab. Client Web 0.1.2 and Core SDK 0.3 use the global Extension
+`version`, `enabled` and `config_schema` columns. The Peer-participation migration removes those
+columns, so an old tab can fail Extension reads and writes even while unrelated information remains
+readable. Reloading before the matching App is deployed still loads an incompatible client.
+
+The deployment owner coordinates a maintenance window across the affected Core/PostgREST deployment
+and Client Web. Pause browser writes and close old connected tabs before the database cutover. Keep
+the browser's connection settings and Peer ID. Resume use only after the deployment's
+`extension-peer-participation-v2` database and management endpoint are ready and Client Web 0.1.3
+has been deployed, then fully reload each connected tab. A startup error's Retry button performs
+that full reload; it cannot repair an incompatible database or update a tab while it remains open.
+The Core deployment documentation owns backup, migration and service recovery commands.
+
+This maintenance sequence does not install, upgrade or enable Extensions. The new Host restores
+existing enabled intent at the saved exact native version; it never substitutes latest. Historical
+MF releases retain their original SDK range and may require the user to select a supported release
+explicitly. Preserve shared configuration, state and stored information throughout the cutover.
+
+## Core SDK assets
+
+[`.github/workflows/core-sdk-release.yml`](../../.github/workflows/core-sdk-release.yml) independently
+publishes the version declared by `packages/core/package.json` from protected main. It packs the
+built ESM and type declarations as `inkcre-core-<version>.tgz`, alongside `source.json` containing
+the source SHA and package SHA256, in the `core-v<version>` GitHub Release. It neither publishes
+to npm nor selects an App or Extension version.
+
+The candidate is retained before Release writes. Use **Re-run failed jobs** to recover publication
+with the original artifact; a rerun without those bytes stops rather than rebuilding. Draft recovery
+uploads only missing assets and compares existing bytes before completing the Release. An already
+existing draft requires the original run's saved candidate; a new run cannot rebuild it.
+An already
+published version is verified against its source tag and recorded archive digest, never overwritten.
+Keep unfinished candidates for their 90-day retention period; loss or expiry requires investigation.
+An exact-current-main manual dispatch uses the same checks and publication boundary.
+
+GitHub does not expose a draft through the release-by-tag endpoint. The trusted identity job reads
+the release list with the same `contents: write` authority as publication so it can detect drafts;
+that job installs no dependencies. Candidate builds retain read-only repository access.
+Creation consumes the REST `201` response as the new Release identity, and asset uploads and
+publication address that exact ID through the existing GitHub CLI. The publisher does not rediscover
+a just-created draft through a potentially stale release list. Public verification still downloads
+assets anonymously; comparisons of existing draft assets use authenticated reads.
+
+If a publisher implementation needs repair, its original run still retains the package bytes.
+Dispatch the corrected workflow on current main with `source_sha` selecting the controller and
+`recovery_run_id` selecting that original run. Recovery admits only a completed main-push run of
+this repository's Core SDK workflow whose source remains in current main history, with one
+unexpired candidate. The controller SHA and payload source SHA intentionally differ: the saved
+receipt, archive digest and original run source must agree, and publication retains the payload's
+own version and tag. This entry cannot select an arbitrary artifact, URL or rebuilt package.
+Creating a historical source tag after workflow files change may require an existing maintainer
+identity; never substitute the current controller SHA or overwrite an existing tag to bypass it.
+
 ## Pull-request Preview
 
 [`.github/workflows/pages-preview.yml`](../../.github/workflows/pages-preview.yml) owns previews for
@@ -50,7 +114,7 @@ open, same-repository pull requests targeting `main`; fork pull requests are ine
 exact candidate head, installs the candidate's frozen pnpm and PDM environments, builds its SPA and
 selected Module Federation snapshots, and uses `inkcre-ext preview build` with the explicit
 `.github/preview/extensions.json` inventory to add a same-origin static Registry facade. The
-current inventory includes the Twitter and Mail Module Federation distributions. Before
+current inventory includes the CalDAV, GitHub, Twitter and Mail Module Federation distributions. Before
 deployment it revalidates that the PR is still open and its identity and head SHA have not changed.
 
 The Toolkit places read-only native Extension snapshots and preview Releases beside the exact-head
@@ -71,7 +135,7 @@ explicit positive PR number and applies the same closed internal-PR identity che
 
 ## 浏览器可选观测出口
 
-部署 owner 先通过 core-py 的部署配置流程创建 `inkcre.observability.v1`，保留稳定的
+部署 owner 先通过 impl-py 的部署配置流程创建 `inkcre.observability.v1`，保留稳定的
 `deployment_id`，并按需填写 traces、logs、metrics 完整 OTLP/HTTP URL 与诊断入口。
 浏览器不会因这些 URL 存在而自动启用；在连接设置中勾选遥测并保存后才接入。
 只启用部分信号时其余信号不远端导出；没有有效共享配置时保留本地固定原因诊断，

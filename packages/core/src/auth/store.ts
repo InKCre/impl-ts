@@ -2,6 +2,7 @@ import { ref, watch } from 'vue'
 import { SignJWT } from 'jose'
 import { configStore } from '../config'
 import { peerJwtContract } from '../database'
+import { DEFAULT_PEER_JWT_LIFETIME_SECONDS } from './defaults'
 
 const JWT_CLOCK_SKEW_SECONDS = 5
 
@@ -14,7 +15,7 @@ export async function signDatabaseToken(jwtSecret: string): Promise<string> {
   return new SignJWT({ role: peerJwtContract.role })
     .setProtectedHeader({ alg: peerJwtContract.algorithm })
     .setIssuedAt(issuedAt)
-    .setExpirationTime(issuedAt + peerJwtContract.maximum_lifetime_seconds)
+    .setExpirationTime(issuedAt + DEFAULT_PEER_JWT_LIFETIME_SECONDS)
     .setIssuer(peerJwtContract.issuer)
     .setAudience(peerJwtContract.audience)
     .sign(secret)

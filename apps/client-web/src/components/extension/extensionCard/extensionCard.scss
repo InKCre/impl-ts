@@ -1,22 +1,53 @@
 .extension-card {
-  // Inherits .entity-card pattern (global stylesheet).
+  display: flex;
+  flex-direction: column;
+  gap: sys-var(space, md);
+  padding: sys-var(space, md);
+  border: 1px solid sys-var(color, border, base);
+  background-color: sys-var(color, surface, base);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 
-  &__actions--primary {
-    margin-bottom: sys-var(space, xs);
+  &__header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: sys-var(space, sm);
+    justify-content: space-between;
+    align-items: center;
   }
 
-  &__actions--secondary {
-    opacity: 0.85;
-    transition: opacity 0.15s ease;
+  &__id {
+    @include apply-font(label-lg);
+  }
 
-    &:hover,
-    &:focus-within {
-      opacity: 1;
+  &__version {
+    @include apply-font(label-lg, $mono: true);
+    color: sys-var(color, text, subtle);
+  }
+
+  &__nickname {
+    @include apply-font(body-sm);
+    color: sys-var(color, text, subtle);
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: sys-var(space, sm);
+  }
+  &__details {
+    @include apply-font(body-sm);
+    summary {
+      cursor: pointer;
     }
-  }
-
-  &__title {
-    overflow-wrap: anywhere;
+    &[open] > summary {
+      margin-bottom: sys-var(space, sm);
+    }
+    .extension-card__hint {
+      margin-top: sys-var(space, sm);
+    }
   }
 
   &__hint {
@@ -31,17 +62,14 @@
     margin: 0;
   }
 
-  &__details {
-    @include apply-font(body-sm);
-    summary {
-      cursor: pointer;
-    }
-    &[open] > summary {
-      margin-bottom: sys-var(space, sm);
-    }
-    .extension-card__hint {
-      margin-top: sys-var(space, sm);
-    }
+  &__peer-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: sys-var(space, sm);
+    padding-block: sys-var(space, sm);
+    border-top: 1px solid sys-var(color, border, subtle);
   }
 
   &__peer-options {
@@ -74,14 +102,6 @@
     display: grid;
     min-height: 5rem;
     place-items: center;
-  }
-
-  // Local helper for action rows inside dialogs (kept for backwards layout;
-  // the card-level actions row uses the shared .entity-card__actions).
-  &__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: sys-var(space, sm);
   }
 }
 

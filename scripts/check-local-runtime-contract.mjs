@@ -1,5 +1,6 @@
 import { access, readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { inspectBrowserRuntimeSource } from './browser-runtime-contract.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const jsonOutput = process.argv.includes('--json')
@@ -107,7 +108,6 @@ for (const path of [
   }
 }
 
-const forbiddenSourceTerms = ['/api/config', 'VITE_INKCRE_JWT_SECRET']
 const runtimeSources = [
   ...(await sourceFiles('packages/core/src')),
   ...(await sourceFiles('packages/ext-dev-utils/src')),
@@ -116,73 +116,20 @@ const runtimeSources = [
   ...(await sourceFiles('apps/client-webext/composables')),
   ...(await sourceFiles('apps/client-webext/entrypoints')),
   ...(await sourceFiles('apps/client-webext/logic')),
-  ...(await sourceFiles('extensions/twitter/src')),
+  ...(
+    await Promise.all(
+      (
+        await readdir(`${repoRoot}/extensions`, { withFileTypes: true })
+      )
+        .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+        .map((entry) => sourceFiles(`extensions/${entry.name}/src`))
+    )
+  ).flat(),
 ].filter((path) => !/\.(?:spec|test)\.[cm]?[jt]sx?$/.test(path))
-
-const reviewedNonEnvironmentUrls = new Set(
-  [
-    'http://localhost:11434/v1',
-    'http://www.w3.org/2000/svg',
-    'https://ai-sdk.dev/docs/ai-sdk-ui/chatbot',
-    'https://ai-sdk.dev/elements/components/response',
-    'https://ai-sdk.dev/providers/openai-compatible-providers',
-    'https://aistudio.google.com/app/apikey',
-    'https://api.example.com/v1',
-    'https://api.together.xyz/v1',
-    'https://console.anthropic.com/settings/keys',
-    'https://example.com',
-    'https://github.com/vueuse/vueuse/blob/658444bf9f8b96118dbd06eba411bb6639e24e88/packages/core/useStorage/guess.ts',
-    'https://github.com/vueuse/vueuse/blob/658444bf9f8b96118dbd06eba411bb6639e24e88/packages/core/useStorageAsync/index.ts',
-    'https://openrouter.ai/api/v1',
-    'https://platform.openai.com/api-keys',
-    // Public product infrastructure, not a deployment/runtime environment coordinate.
-    'https://registry.inkcre.dev',
-  ].map((value) => new URL(value).href)
-)
-const absoluteUrlPattern = /https?:\/\/[^\s"'`<>),;，）、]+/g
-const uuidLiteralPattern =
-  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi
 
 for (const path of runtimeSources) {
   const source = await readFile(`${repoRoot}/${path}`, 'utf8')
-  for (const term of forbiddenSourceTerms) {
-    if (source.includes(term)) {
-      errors.push(`${path} contains forbidden runtime-config channel "${term}"`)
-    }
-  }
-
-  for (const match of source.matchAll(absoluteUrlPattern)) {
-    if (match[0] === 'https://...') {
-      continue
-    }
-    let absoluteUrl
-    try {
-      absoluteUrl = new URL(match[0]).href
-    } catch {
-      // UI placeholders such as "https://..." are not fixed origins.
-      continue
-    }
-    if (!reviewedNonEnvironmentUrls.has(absoluteUrl)) {
-      errors.push(`${path} contains unreviewed fixed browser URL "${absoluteUrl}"`)
-    }
-  }
-
-  for (const match of source.matchAll(uuidLiteralPattern)) {
-    errors.push(`${path} contains fixed browser UUID "${match[0]}"`)
-  }
-}
-
-const webextStorage = await readFile(`${repoRoot}/apps/client-webext/logic/storage.ts`, 'utf8')
-if (!/useWebExtensionStorage\(\s*'inkcreApi',\s*''\s*\)/s.test(webextStorage)) {
-  errors.push('browser extension runtime config must default its API origin to empty')
-}
-
-const writingAssist = await readFile(
-  `${repoRoot}/apps/client-webext/entrypoints/content/WritingAssist/WritingAssist.vue`,
-  'utf8'
-)
-if (writingAssist.includes('raw.githubusercontent.com/stopwords-iso')) {
-  errors.push('browser extension bootstrap must not fetch a mutable remote stopword fallback')
+  errors.push(...inspectBrowserRuntimeSource(source, path))
 }
 
 const coreIndex = await readFile(`${repoRoot}/packages/core/src/index.ts`, 'utf8')
@@ -293,7 +240,7 @@ if (remoteCompose.includes('eval ') || !remoteCompose.includes('"$docker_bin" co
 }
 const databaseRuntime = await readFile(`${repoRoot}/scripts/database-runtime-lib.mjs`, 'utf8')
 for (const required of [
-  "owner_repository !== 'InKCre/core-py'",
+  "owner_repository !== 'InKCre/impl-py'",
   'runtime_instance: descriptor.identity',
   'external database runtime provenance is incomplete',
   'external database readiness and runtime descriptor differ',

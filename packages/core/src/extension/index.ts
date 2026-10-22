@@ -1,4 +1,11 @@
 export {
+  NativeDistributionSchema,
+  ExtensionParticipationSchema,
+  ExtensionParticipationModel,
+  ExtensionRuntimeStatusSchema,
+  type NativeDistribution,
+  type ExtensionParticipation,
+  type ExtensionRuntimeStatus,
   ExtensionNameSchema,
   ExtensionVersionSchema,
   InstalledExtensionSchema,

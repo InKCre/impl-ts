@@ -3,6 +3,11 @@
   "distributions": [
     {
       "kind": "module_federation",
+      "producer": "../../extensions/caldav/package.json",
+      "artifact": "../../extensions/caldav/dist/client-web"
+    },
+    {
+      "kind": "module_federation",
       "producer": "../../extensions/twitter/package.json",
       "artifact": "../../extensions/twitter/dist/client-web"
     },
@@ -10,6 +15,11 @@
       "kind": "module_federation",
       "producer": "../../extensions/mail/package.json",
       "artifact": "../../extensions/mail/dist/client-web"
+    },
+    {
+      "kind": "module_federation",
+      "producer": "../../extensions/github/package.json",
+      "artifact": "../../extensions/github/dist/client-web"
     }
   ]
 }

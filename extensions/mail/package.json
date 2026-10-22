@@ -1,6 +1,6 @@
 {
   "name": "@inkcre/ext-mail",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@inkcre/ext-dev-utils": "workspace:*",
-    "@inkcre/ui-web": "2.2.1",
+    "@inkcre/ui-web": "2.3.0",
     "@module-federation/vite": "^1.1.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vitejs/plugin-vue-jsx": "^5.1.2",
@@ -38,7 +38,7 @@
     "nickname": "Mail",
     "module_federation": {
       "host_sdk": "@inkcre/core",
-      "host_sdk_version": ">=0.2.0 <0.4.0"
+      "host_sdk_version": ">=0.4.0 <0.6.0"
     }
   },
   "intent": {

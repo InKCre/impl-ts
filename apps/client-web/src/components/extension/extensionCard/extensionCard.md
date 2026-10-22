@@ -1,28 +1,21 @@
 # ExtensionCard
 
-A component that displays an installed Extension and opens focused Peer selection for enablement changes.
+Displays one deployment Extension and its independent native participation on each Peer.
 
-## Props
+The `extension` prop supplies shared identity and configuration; `participations` supplies exact
+Peer/distribution/version selections and enabled intent. `peers`, `livePeerIds` and `currentPeerId`
+identify operation targets and determine local runtime, remote management or offline intent routing.
+`peerSelectionDisabled` prevents mutation while target discovery is unavailable.
 
-- `extension` (InstalledExtension, required): the canonical installed row
-- `peers` (Peer[], required): available Peers, including this browser
-- `livePeerIds` (ReadonlySet<string>, required): server-evaluated online Peers used for management routing
-- `currentPeerId` (string, required): identifies this browser's running Host
-- `peerSelectionDisabled` (boolean): blocks actions while the Peer list is unavailable
+Each Peer row keeps version selection, enablement, actual running version and errors together.
+The component obtains actual runtime status from the host rather than inferring it from enabled
+intent. A selection change affects only that row. Removing a disabled participation retains shared
+configuration and business data. An unobserved remote Host is not assigned a format from its name.
 
-## Emits
+`updated` emits the shared configuration row after a successful save. `participationChanged` asks the
+parent to reload native choices after a successful targeted mutation. The running browser module
+can contribute its own setup dialog; disabling that browser closes its contribution first.
 
-- `updated`: Emitted with the canonical row after Peer, configuration, or version changes
-- `uninstalled`: Emitted after the canonical row is removed
-
-## Features
-
-- Display canonical Extension Name, exact version, and optional nickname
-- Choose one or more eligible Peers in an enable or disable dialog. Each selected Peer uses the existing current Host, remote Host, or durable-intent path. Partial failures remain visible and trigger a fresh installed-row read; no batch rollback or automatic retry occurs.
-- Mount an Extension-owned setup contribution from this browser's running Web Distribution
-- Keep setup availability independent of the Peer selection dialog; disabling this browser closes its setup surface first
-- Link the exact installed release's available global, Core, and Web documentation even when the extension is disabled or has no browser distribution; distinguish missing documentation from failed discovery
-- Edit extension configuration via JSON editor in a dialog
-- Select a published Registry Release and change the exact shared version only while every Peer is disabled
-- Auto-formats configuration as JSON for easier editing
-- Prevents uninstall while any Peer remains enabled
+Configuration editing offers schemas with their exact Peer/distribution/version source, plus JSON
+editing without a schema. Documentation opens for an explicitly selected participation and follows
+Registry-returned links. Missing documentation does not block runtime operations.

@@ -2,6 +2,8 @@ import { parse as parseSemVer } from 'semver'
 import type { Component } from 'vue'
 import { z } from 'zod'
 import { APIError, DBAPIClient } from '../base'
+import { MetaConfigSchema, type MetaConfig } from '../config'
+import { signDatabaseToken } from '../auth'
 
 const EXTENSION_NAME_PATTERN =
   /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
@@ -20,29 +22,50 @@ export const ExtensionVersionSchema = z.string().refine(
   { error: 'Extension version must be strict SemVer without build metadata.' }
 )
 
-/** One deployment-wide installed Extension row. */
+export const NativeDistributionSchema = z.enum(['python', 'module_federation'])
+export type NativeDistribution = z.infer<typeof NativeDistributionSchema>
+
+/** Shared identity and configuration; native versions belong to individual Peers. */
 export const InstalledExtensionSchema = z.object({
   name: ExtensionNameSchema,
-  version: ExtensionVersionSchema,
-  enabled: z.array(z.uuid()).default([]),
   nickname: z.string().nullable(),
   config: z.record(z.string(), z.unknown()).default({}),
-  config_schema: z.record(z.string(), z.unknown()).nullable(),
 })
-
-export const InstallExtensionInputSchema = InstalledExtensionSchema.pick({
-  name: true,
-  version: true,
+export const InstallExtensionInputSchema = z.object({
+  name: ExtensionNameSchema,
+  version: ExtensionVersionSchema,
 })
-
 export type InstalledExtension = z.infer<typeof InstalledExtensionSchema>
 export type InstallExtensionInput = z.infer<typeof InstallExtensionInputSchema>
-export interface ExtensionModelInstallInput extends InstallExtensionInput {
+export interface ExtensionModelInstallInput {
+  name: string
   nickname: string
 }
 
-const EXTENSION_MANAGEMENT_PROJECTION =
-  'name,version,enabled,nickname,config,config_schema' as const
+export const ExtensionParticipationSchema = z.object({
+  name: ExtensionNameSchema,
+  peer_id: z.uuid(),
+  distribution: NativeDistributionSchema.nullable(),
+  version: ExtensionVersionSchema,
+  enabled: z.boolean(),
+  config_schema: z.record(z.string(), z.unknown()).nullable(),
+})
+export type ExtensionParticipation = z.infer<typeof ExtensionParticipationSchema>
+export const ExtensionRuntimeStatusSchema = ExtensionParticipationSchema.omit({
+  version: true,
+}).extend({
+  version: ExtensionVersionSchema.nullable(),
+  supported_distributions: z.array(NativeDistributionSchema),
+  loaded_version: ExtensionVersionSchema.nullable(),
+  running: z.boolean(),
+  restart_required: z.boolean(),
+  operation: z.string().nullable(),
+  error: z.string().nullable(),
+})
+export type ExtensionRuntimeStatus = z.infer<typeof ExtensionRuntimeStatusSchema>
+
+const EXTENSION_PROJECTION = 'name,nickname,config' as const
+const PARTICIPATION_PROJECTION = 'name,peer_id,distribution,version,enabled,config_schema' as const
 
 export class ExtensionPersistenceError extends Error {
   constructor(operation: string, cause?: unknown) {
@@ -53,32 +76,21 @@ export class ExtensionPersistenceError extends Error {
   }
 }
 
-/** Rich deployment Extension aggregate backed by the canonical PostgREST relation. */
 export class ExtensionModel implements InstalledExtension {
   static readonly #dbApi = new DBAPIClient<'extensions'>('extensions')
-
   readonly name: string
-  readonly version: string
-  readonly enabled: string[]
   readonly nickname: string | null
   readonly config: Record<string, unknown>
-  readonly config_schema: Record<string, unknown> | null
 
   constructor(row: InstalledExtension) {
     const parsed = InstalledExtensionSchema.parse(row)
     this.name = parsed.name
-    this.version = parsed.version
-    this.enabled = parsed.enabled
     this.nickname = parsed.nickname
     this.config = parsed.config
-    this.config_schema = parsed.config_schema
   }
 
   static async list(): Promise<ExtensionModel[]> {
-    const response = await this.#dbApi
-      .from()
-      .select(EXTENSION_MANAGEMENT_PROJECTION)
-      .order('name', { ascending: true })
+    const response = await this.#dbApi.from().select(EXTENSION_PROJECTION).order('name')
     assertSuccess(response, 'list')
     return InstalledExtensionSchema.array()
       .parse(response.data ?? [])
@@ -88,7 +100,7 @@ export class ExtensionModel implements InstalledExtension {
   static async get(name: string): Promise<ExtensionModel | null> {
     const response = await this.#dbApi
       .from()
-      .select(EXTENSION_MANAGEMENT_PROJECTION)
+      .select(EXTENSION_PROJECTION)
       .eq('name', name)
       .maybeSingle()
     assertSuccess(response, 'read')
@@ -96,109 +108,47 @@ export class ExtensionModel implements InstalledExtension {
   }
 
   static async install(input: ExtensionModelInstallInput): Promise<ExtensionModel> {
-    const coordinate = InstallExtensionInputSchema.parse(input)
-    const exact = InstalledExtensionSchema.parse({
-      ...coordinate,
-      nickname: input.nickname,
-      enabled: [],
-      config: {},
-      config_schema: null,
-    })
-    const existing = await this.get(exact.name)
-    if (existing) {
-      if (existing.version === exact.version) return existing
-      throw new ExtensionPersistenceError(
-        'install',
-        new Error(
-          `${exact.name} is already installed at ${existing.version}; disable every Peer before an explicit version change.`
-        )
-      )
-    }
-
+    const name = ExtensionNameSchema.parse(input.name)
+    const existing = await this.get(name)
+    if (existing) return existing
+    // A competing Peer can create the shared identity; never overwrite its configuration.
     const response = await this.#dbApi
-      .insert({
-        name: exact.name,
-        version: exact.version,
-        nickname: exact.nickname,
-        config: exact.config,
-        config_schema: exact.config_schema,
-      })
-      .select(EXTENSION_MANAGEMENT_PROJECTION)
-      .single()
-    assertSuccess(response, 'install')
-    return this.fromRow(response.data)
-  }
-
-  async changeVersion(version: string, nickname: string): Promise<ExtensionModel> {
-    const exactVersion = ExtensionVersionSchema.parse(version)
-    const response = await ExtensionModel.#dbApi
-      .update({ version: exactVersion, nickname, config_schema: null })
-      .eq('name', this.name)
-      .filter('enabled', 'eq', '{}')
-      .select(EXTENSION_MANAGEMENT_PROJECTION)
-      .maybeSingle()
-    assertSuccess(response, 'change version')
-    if (response.data === null) {
-      throw new ExtensionPersistenceError(
-        'change version',
-        new Error(`Extension ${this.name} is missing or still enabled on a Peer.`)
+      .from()
+      .upsert(
+        { name, nickname: input.nickname, config: {}, state: {} },
+        { onConflict: 'name', ignoreDuplicates: true }
       )
-    }
-    return ExtensionModel.fromRow(response.data)
+    assertSuccess(response, 'install')
+    const installed = await this.get(name)
+    if (!installed) throw new ExtensionPersistenceError('install')
+    return installed
   }
 
   async updateConfig(config: Record<string, unknown>): Promise<ExtensionModel> {
     const response = await ExtensionModel.#dbApi
       .update({ config })
       .eq('name', this.name)
-      .select(EXTENSION_MANAGEMENT_PROJECTION)
+      .select(EXTENSION_PROJECTION)
       .single()
     assertSuccess(response, 'update config')
     return ExtensionModel.fromRow(response.data)
   }
 
-  enablePeer(peerId: string): Promise<ExtensionModel> {
-    return this.setPeerEnabled(peerId, true)
-  }
-
-  disablePeer(peerId: string): Promise<ExtensionModel> {
-    return this.setPeerEnabled(peerId, false)
-  }
-
   async uninstall(): Promise<void> {
+    const participations = await ExtensionParticipationModel.list()
+    if (participations.some((row) => row.name === this.name)) {
+      throw new ExtensionPersistenceError(
+        'uninstall',
+        new Error('Remove every Peer participation before deleting the shared Extension.')
+      )
+    }
     const response = await ExtensionModel.#dbApi
       .from()
       .delete()
       .eq('name', this.name)
-      .filter('enabled', 'eq', '{}')
       .select('name')
     assertSuccess(response, 'uninstall')
-    const deletedRows = InstalledExtensionSchema.pick({ name: true }).array().parse(response.data)
-    if (deletedRows.length !== 1) {
-      throw new ExtensionPersistenceError(
-        'uninstall',
-        new Error(`Extension ${this.name} is missing or still enabled on a Peer.`)
-      )
-    }
-  }
-
-  private async setPeerEnabled(peerId: string, enabled: boolean): Promise<ExtensionModel> {
-    const response = await ExtensionModel.#dbApi
-      .rpc('set_extension_peer_enabled', {
-        p_name: this.name,
-        p_peer_id: peerId,
-        p_enabled: enabled,
-      })
-      .select(EXTENSION_MANAGEMENT_PROJECTION)
-    assertSuccess(response, enabled ? 'enable Peer' : 'disable Peer')
-    const updated = InstalledExtensionSchema.array().parse(response.data ?? [])[0]
-    if (!updated) {
-      throw new ExtensionPersistenceError(
-        enabled ? 'enable Peer' : 'disable Peer',
-        new Error(`Extension ${this.name} does not exist.`)
-      )
-    }
-    return ExtensionModel.fromRow(updated)
+    if (response.data?.length !== 1) throw new ExtensionPersistenceError('uninstall')
   }
 
   private static fromRow(row: unknown): ExtensionModel {
@@ -206,13 +156,189 @@ export class ExtensionModel implements InstalledExtension {
   }
 }
 
+/** One exact native selection. Runtime facts are obtained from the hosting Peer. */
+export class ExtensionParticipationModel implements ExtensionParticipation {
+  static readonly #dbApi = new DBAPIClient<'extension_peer_participations'>(
+    'extension_peer_participations'
+  )
+  readonly name: string
+  readonly peer_id: string
+  readonly distribution: NativeDistribution | null
+  readonly version: string
+  readonly enabled: boolean
+  readonly config_schema: Record<string, unknown> | null
+
+  constructor(row: ExtensionParticipation) {
+    const parsed = ExtensionParticipationSchema.parse(row)
+    this.name = parsed.name
+    this.peer_id = parsed.peer_id
+    this.distribution = parsed.distribution
+    this.version = parsed.version
+    this.enabled = parsed.enabled
+    this.config_schema = parsed.config_schema
+  }
+
+  static async list(peerId?: string): Promise<ExtensionParticipationModel[]> {
+    let query = this.#dbApi.from().select(PARTICIPATION_PROJECTION).order('name')
+    if (peerId) query = query.eq('peer_id', peerId)
+    const response = await query
+    assertSuccess(response, 'list participation')
+    return ExtensionParticipationSchema.array()
+      .parse(response.data ?? [])
+      .map(this.fromRow)
+  }
+
+  static async get(peerId: string, name: string): Promise<ExtensionParticipationModel | null> {
+    const response = await this.#dbApi
+      .from()
+      .select(PARTICIPATION_PROJECTION)
+      .eq('peer_id', peerId)
+      .eq('name', name)
+      .maybeSingle()
+    assertSuccess(response, 'read participation')
+    return response.data === null ? null : this.fromRow(response.data)
+  }
+
+  /** Read a selection snapshot from the original connection, without creating a cross-connection mutator. */
+  static async readForConnection(
+    meta: MetaConfig,
+    peerId: string,
+    name: string
+  ): Promise<ExtensionParticipation | null> {
+    const exact = MetaConfigSchema.parse(meta)
+    const database = new DBAPIClient<'extension_peer_participations'>(
+      'extension_peer_participations',
+      undefined,
+      'inkcre',
+      exact.INKCRE_PGREST_URL,
+      () => signDatabaseToken(exact.INKCRE_JWT_SECRET)
+    )
+    const response = await database
+      .from()
+      .select(PARTICIPATION_PROJECTION)
+      .eq('peer_id', peerId)
+      .eq('name', name)
+      .maybeSingle()
+    assertSuccess(response, 'observe selection')
+    return response.data === null ? null : ExtensionParticipationSchema.parse(response.data)
+  }
+
+  static async select(input: {
+    peerId: string
+    name: string
+    distribution: NativeDistribution
+    version: string
+    expectedVersion?: string
+  }): Promise<ExtensionParticipationModel> {
+    const exact = ExtensionParticipationSchema.parse({
+      name: input.name,
+      peer_id: input.peerId,
+      distribution: input.distribution,
+      version: input.version,
+      enabled: false,
+      config_schema: null,
+    })
+    const existing = await this.get(exact.peer_id, exact.name)
+    if (!existing) {
+      if (input.expectedVersion !== undefined)
+        throw new ExtensionPersistenceError(
+          'select version',
+          new Error('The previous selection no longer exists.')
+        )
+      const response = await this.#dbApi.insert(exact).select(PARTICIPATION_PROJECTION).single()
+      assertSuccess(response, 'select version')
+      return this.fromRow(response.data)
+    }
+    if (input.expectedVersion !== undefined && existing.version !== input.expectedVersion) {
+      throw new ExtensionPersistenceError(
+        'select version',
+        new Error('The Peer selection changed; refresh and retry.')
+      )
+    }
+    if (existing.distribution === exact.distribution && existing.version === exact.version)
+      return existing
+    const expected = input.expectedVersion ?? existing.version
+    let query = this.#dbApi
+      .update({ distribution: exact.distribution, version: exact.version, config_schema: null })
+      .eq('peer_id', exact.peer_id)
+      .eq('name', exact.name)
+      .eq('version', expected)
+    // Resolving a legacy pin must not replace a selection made by another Host.
+    query =
+      existing.distribution === null
+        ? query.is('distribution', null)
+        : query.eq('distribution', existing.distribution)
+    const response = await query.select(PARTICIPATION_PROJECTION).maybeSingle()
+    assertSuccess(response, 'select version')
+    if (!response.data)
+      throw new ExtensionPersistenceError(
+        'select version',
+        new Error('The Peer selection changed; refresh and retry.')
+      )
+    return this.fromRow(response.data)
+  }
+
+  async setEnabled(enabled: boolean): Promise<ExtensionParticipationModel> {
+    return this.updateExact({ enabled }, enabled ? 'enable Peer' : 'disable Peer')
+  }
+
+  async updateConfigSchema(
+    config_schema: Record<string, unknown> | null
+  ): Promise<ExtensionParticipationModel> {
+    return this.updateExact({ config_schema }, 'update config schema')
+  }
+
+  async remove(): Promise<void> {
+    const response = await ExtensionParticipationModel.#dbApi
+      .from()
+      .delete()
+      .eq('peer_id', this.peer_id)
+      .eq('name', this.name)
+      .eq('enabled', false)
+      .eq('version', this.version)
+      .select('name')
+    assertSuccess(response, 'remove participation')
+    if (response.data?.length !== 1)
+      throw new ExtensionPersistenceError(
+        'remove participation',
+        new Error('Disable this Peer or refresh its selection first.')
+      )
+  }
+
+  private async updateExact(
+    values: Record<string, unknown>,
+    operation: string
+  ): Promise<ExtensionParticipationModel> {
+    let query = ExtensionParticipationModel.#dbApi
+      .update(values)
+      .eq('peer_id', this.peer_id)
+      .eq('name', this.name)
+      .eq('version', this.version)
+    query =
+      this.distribution === null
+        ? query.is('distribution', null)
+        : query.eq('distribution', this.distribution)
+    const response = await query.select(PARTICIPATION_PROJECTION).maybeSingle()
+    assertSuccess(response, operation)
+    if (!response.data)
+      throw new ExtensionPersistenceError(
+        operation,
+        new Error('The Peer selection changed; refresh and retry.')
+      )
+    return ExtensionParticipationModel.fromRow(response.data)
+  }
+
+  private static fromRow(row: unknown): ExtensionParticipationModel {
+    return new ExtensionParticipationModel(ExtensionParticipationSchema.parse(row))
+  }
+}
+
 function assertSuccess(response: { error?: { message: string } | null }, operation: string): void {
-  if (response.error) {
+  if (response.error)
     throw new ExtensionPersistenceError(
       operation,
       new APIError(response.error.message, 0, response.error)
     )
-  }
 }
 
 /** Setup UI contributed by one already-running Web Extension. */

@@ -53,7 +53,7 @@ if (command === 'ensure') {
       ready: true,
       identity: state.identity,
       runtime_instance: state.runtime_instance ?? state.identity,
-      owner_repository: state.owner_repository ?? 'InKCre/client-web',
+      owner_repository: state.owner_repository ?? 'InKCre/impl-ts',
       contract_revision: state.contract_revision,
       core_image: state.core_image,
       profile: state.binding?.profile ?? `${runtimeDirectory(instance)}/profile.json`,
@@ -70,7 +70,7 @@ if (command === 'ensure') {
   const state = await runtimeState(instance)
   if (state.provider.kind === 'external') {
     throw new Error(
-      `runtime ${state.runtime_instance} is owned by core-py; reset it through the owner`
+      `runtime ${state.runtime_instance} is owned by impl-py; reset it through the owner`
     )
   }
   if (state.profile !== 'development') {
@@ -103,7 +103,7 @@ if (command === 'ensure') {
       ready,
       identity: state.identity,
       runtime_instance: state.runtime_instance ?? state.identity,
-      owner_repository: state.owner_repository ?? 'InKCre/client-web',
+      owner_repository: state.owner_repository ?? 'InKCre/impl-ts',
       contract_revision: state.contract_revision,
       core_image: state.core_image,
       provider: state.provider.kind,

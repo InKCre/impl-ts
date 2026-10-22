@@ -22,7 +22,7 @@ try {
       ready: true,
       identity: state.identity,
       runtime_instance: state.runtime_instance ?? state.identity,
-      owner_repository: state.owner_repository ?? 'InKCre/client-web',
+      owner_repository: state.owner_repository ?? 'InKCre/impl-ts',
       contract_revision: state.contract_revision,
       provider: state.provider.kind,
       profile: state.profile,

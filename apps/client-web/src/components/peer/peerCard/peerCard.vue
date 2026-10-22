@@ -4,7 +4,13 @@ import { useI18n } from 'vue-i18n'
 import { InkButton, InkDialog, InkInput, type JsonEditorValidation } from '@inkcre/ui-web'
 import { toast } from '@/components/toast/toast'
 import SchemaConfigEditor from '@/components/schemaConfigEditor/schemaConfigEditor.vue'
-import { configStore, ExtensionModel, Peer, PeerConfigSchema, PeerManager } from '@inkcre/core'
+import {
+  configStore,
+  ExtensionParticipationModel,
+  Peer,
+  PeerConfigSchema,
+  PeerManager,
+} from '@inkcre/core'
 import { peerCardEmits, peerCardProps } from './peerCard'
 import { currentWebPeer } from '@/core'
 
@@ -97,9 +103,10 @@ const onConfirmDelete = async () => {
       emit('updated')
       return
     }
-    const extensions = await ExtensionModel.list()
+    const extensions = await ExtensionParticipationModel.list(props.peer.id)
     for (const extension of extensions) {
-      if (extension.enabled.includes(props.peer.id)) await extension.disablePeer(props.peer.id)
+      if (extension.enabled) await extension.setEnabled(false)
+      await (await ExtensionParticipationModel.get(props.peer.id, extension.name))?.remove()
     }
     await props.peer.delete()
     deleteOpen.value = false

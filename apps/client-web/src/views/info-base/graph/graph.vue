@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { VueFlow, useNodesInitialized, useVueFlow, type NodeDragEvent } from '@vue-flow/core'
 import { InkButton, InkDropdown, InkForm, InkLoading, InkPlaceholder } from '@inkcre/ui-web'
 import dagre from '@dagrejs/dagre'
-import { extensionHostRestoreState } from '@/core'
 import { forceSimulation, forceManyBody, forceLink, forceCollide, forceCenter, forceRadial } from 'd3-force'
 import {
   CapabilityDelegationUnavailable,
+  configStore,
+  UnknownResolverError,
   getInfoBaseRouter,
   GraphNavigationRetrievalManager,
   LexicalRetrievalManager,
@@ -20,6 +21,7 @@ import {
   type Relation,
 } from '@inkcre/core'
 
+import { extensionHostRestoreState, getExtensionHost } from '@/core'
 import BlockNodeComponent from '@/components/info-base/BlockNode/BlockNode.vue'
 import RelationEdgeComponent from '@/components/info-base/RelationEdge/RelationEdge.vue'
 import BlockInspectorPopup from '@/components/info-base/BlockInspectorPopup/BlockInspectorPopup.vue'
@@ -208,45 +210,85 @@ function setGraph(graph: GraphModel): void {
   }, 100)
 }
 
+interface PendingPreview {
+  block: Block
+  relations: Relation[]
+  owns: () => boolean
+}
+const pendingPreviews = shallowRef<PendingPreview[]>([])
+
+function updatePreviewReady(): void {
+  previewReady.value = nodes.value.every((node) => node.data.previewStatus !== 'loading')
+}
+async function resolvePreview(entry: PendingPreview, allowRestoreRetry: boolean): Promise<void> {
+  if (!entry.owns()) return
+  const lookupBeforeRestore =
+    allowRestoreRetry && ['idle', 'restoring'].includes(extensionHostRestoreState.value)
+  try {
+    const resolver = await ResolverCache.getResolver(entry.block, entry.relations)
+    const solvedContent = await resolver.getSolvedContent({ materializeMissing: false })
+    if (!entry.owns()) return
+    nodes.value = nodes.value.map((node) =>
+      node.data.block.id === entry.block.id
+        ? { ...node, data: { ...node.data, resolver, solvedContent, previewStatus: 'success' } }
+        : node
+    )
+  } catch (cause) {
+    if (!entry.owns()) return
+    if (lookupBeforeRestore && cause instanceof UnknownResolverError) {
+      pendingPreviews.value = [...pendingPreviews.value, entry]
+      return
+    }
+    console.error(`[InfoBase] Failed to resolve preview for Block ${entry.block.id}.`, cause)
+    nodes.value = nodes.value.map((node) =>
+      node.data.block.id === entry.block.id
+        ? { ...node, data: { ...node.data, previewStatus: 'error' } }
+        : node
+    )
+  }
+  if (entry.owns()) updatePreviewReady()
+}
+
+// Both registration completion and a late early-lookup failure can make a retry ready.
+watch([extensionHostRestoreState, pendingPreviews], ([state]) => {
+  if (!['restored', 'failed'].includes(state) || pendingPreviews.value.length === 0) return
+  const pending = pendingPreviews.value
+  pendingPreviews.value = []
+  for (const entry of pending) void resolvePreview(entry, false)
+})
+onUnmounted(() => {
+  generation += 1
+  pendingPreviews.value = []
+})
+
 async function loadPreviews(
   blocks: Block[],
   incident: Map<number, Relation[]>,
   current: number
 ): Promise<void> {
   previewReady.value = false
+  const meta = { ...configStore.metaConfig }
+  const host = getExtensionHost()
+  const owns = () =>
+    current === generation &&
+    getExtensionHost() === host &&
+    configStore.metaConfig.INKCRE_PEER_ID === meta.INKCRE_PEER_ID &&
+    configStore.metaConfig.INKCRE_PGREST_URL === meta.INKCRE_PGREST_URL &&
+    configStore.metaConfig.INKCRE_JWT_SECRET === meta.INKCRE_JWT_SECRET
   let index = 0
   async function worker(): Promise<void> {
     while (index < blocks.length) {
       const block = blocks[index++]!
-      try {
-        const resolver = await ResolverCache.getResolver(block, incident.get(block.id) ?? [])
-        const solvedContent = await resolver.getSolvedContent({ materializeMissing: false })
-        if (current !== generation) return
-        nodes.value = nodes.value.map((node) =>
-          node.data.block.id === block.id
-            ? {
-                ...node,
-                data: { ...node.data, resolver, solvedContent, previewStatus: 'success' },
-              }
-            : node
-        )
-      } catch (cause) {
-        if (current !== generation) return
-        console.error(`[InfoBase] Failed to resolve preview for Block ${block.id}.`, cause)
-        nodes.value = nodes.value.map((node) =>
-          node.data.block.id === block.id
-            ? { ...node, data: { ...node.data, previewStatus: 'error' } }
-            : node
-        )
-      }
+      await resolvePreview({ block, relations: incident.get(block.id) ?? [], owns }, true)
     }
   }
   await Promise.all(Array.from({ length: Math.min(4, blocks.length) }, () => worker()))
-  if (current === generation) previewReady.value = true
+  if (owns()) updatePreviewReady()
 }
 
 async function loadScene(): Promise<void> {
   const current = ++generation
+  pendingPreviews.value = []
   // Only show full loading state when graph is empty (first load).
   // During smooth transitions, keep the existing graph visible while new data loads.
   const isFirstLoad = nodes.value.length === 0

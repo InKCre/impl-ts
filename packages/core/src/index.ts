@@ -21,6 +21,13 @@ export {
   InstalledExtensionSchema,
   InstallExtensionInputSchema,
   ExtensionModel,
+  NativeDistributionSchema,
+  ExtensionParticipationSchema,
+  ExtensionParticipationModel,
+  ExtensionRuntimeStatusSchema,
+  type NativeDistribution,
+  type ExtensionParticipation,
+  type ExtensionRuntimeStatus,
   ExtensionPersistenceError,
   type ExtensionModule,
   type ExtensionSetupContribution,
@@ -71,6 +78,8 @@ export {
 } from './semantic-retrieval'
 export {
   LexicalRetrievalManager,
+  presentLexicalMatches,
+  type RecallGroup,
   LexicalRetrievalDelegationError,
   LexicalRetrievalRequestSchema,
   LexicalRetrievalResultSchema,
@@ -154,6 +163,7 @@ export {
   makeRelationRefProp,
   // Resolver protocols
   type ResolverContentState,
+  type RecallTarget,
   type SolvedContentRendererProps,
   type InfoBaseRoute,
   type InfoBaseSceneAddress,

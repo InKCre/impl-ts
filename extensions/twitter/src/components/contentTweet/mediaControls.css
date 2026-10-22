@@ -1,0 +1,8 @@
+.tweet-media__expand {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+:deep(.ink-image__thumbnail) {
+  cursor: zoom-in;
+}

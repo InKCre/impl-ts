@@ -39,22 +39,23 @@ export class ResolverCache {
     block: Block,
     relations?: Relation[]
   ): Promise<T> {
+    // A disabled or replaced native module cannot serve its old cached resolver.
+    const resolverClass = Resolver.getClass(block.resolver)
     const cached = this.cache.get(block.id)
 
     // Check if cache is valid (block hasn't been updated)
     if (cached) {
       const cachedTime = cached.blockUpdatedAt.getTime()
       const currentTime = block.updated_at?.getTime() ?? 0
-      if (cachedTime === currentTime) {
+      if (cachedTime === currentTime && cached.resolver.constructor === resolverClass) {
         return cached.resolver as T
       }
-      // Block was updated, invalidate cache entry
+      // Block content or its registered native implementation changed.
       void cached.resolver.dispose()
       this.cache.delete(block.id)
     }
 
     // Create new resolver and cache it
-    const resolverClass = Resolver.getClass(block.resolver)
     const resolver = new resolverClass(block, relations)
 
     this.cache.set(block.id, {

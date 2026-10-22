@@ -9,6 +9,18 @@ compatible `@inkcre/core` Host SDK range.
 
 ## Release Intent and Versioning
 
+Before SDK 1.0, each Core `0.y` line is a native compatibility boundary. Compatible additions can
+ship in a patch release within that line; a new minor requires an explicit consumer migration.
+Core 0.4.1 adds optional recall presentation APIs while retaining the 0.4 public surface and existing
+native ranges. The deprecated `peerJwtContract.maximum_lifetime_seconds` field (also available at
+`databaseRuntimeContract.jwt`) retains the historical signing default, not a database admission
+limit. The generated database contract remains the authority for the actual protocol.
+
+A targeted release uses Changesets to generate the selected units' versions and changelogs. A
+compatible SDK bump need not release MF consumers whose only generated change is dependency
+propagation: they do not bundle Core (`import: false`) and keep their declared Host SDK range.
+Consumers that bundle changed code or require a newer minimum SDK must be released with it.
+
 Contributors record intent with `pnpm changeset`, selecting only affected independently releasable
 Extension packages. On a protected `main` push,
 [`.github/workflows/extension-release.yml`](../../.github/workflows/extension-release.yml) runs the
@@ -18,13 +30,16 @@ Extension packages. On a protected `main` push,
   Extension Version PR. That PR owns generated package versions and changelogs; contributors do not
   edit those outputs separately. The reconciliation step does not publish, create GitHub Releases,
   or push tags.
-- After the Version PR is merged and no changesets remain, the candidate job checks out that exact
-  release revision, installs the frozen workspace, and builds `@inkcre/core` plus every
+- The candidate job checks out the exact protected-main revision, installs the frozen workspace,
+  and builds `@inkcre/core` plus every
   `extensions/*` producer itself. It saves the selected plan, original prepare descriptors, full ZIP
   snapshots and SHA-256 digests as the immutable `first-party-extension-candidate` Actions artifact.
   No Registry writes occur until that artifact is retained and checked.
-- Producers are discovered from package metadata. A published Release with an existing Module
-  Federation association is a historical no-op at candidate selection. Missing associations become
+- Producers are discovered from package metadata. A producer with its own direct pending Changeset
+  is not selected, including a new producer whose initial coordinate does not yet exist. Dependency
+  bumps inferred by Changesets do not count as direct intent. This allows an independently prepared
+  version to publish while other packages still have pending changesets. A published Release with
+  an existing Module Federation association is a historical no-op at candidate selection. Missing MF native coordinates become
   fixed candidates; the publish job downloads this run's exact artifact, prepares them with their
   saved provenance, uploads, publishes, and verifies every candidate from the public Registry.
   It never consumes pull-request CI artifacts or rebuilds a publication candidate.
@@ -39,11 +54,66 @@ replace this gate with an empty-check merge or a broader credential.
 Client checks, Pages production, and Pages preview are separate application lifecycles. They cannot
 publish first-party Extensions. Local development and local verification must never publish either.
 
-Python and Module Federation producers for one Extension must target the same exact Release when
-both Hosts are needed. A published Python-only Release may receive its missing Module Federation
-association through the normal publish workflow; existing associations are not overwritten. Select
-the Changesets increment that reaches that Release rather than downgrading the shared installation
-or manually editing generated package versions.
+Python and Module Federation are independent native releases. Each producer owns
+`(extension name, distribution, version)` and publishes only that distribution through Registry v2.
+The Web workflow does not read Core source or a Core version plan. Python publication neither
+selects nor waits for MF, and MF publication neither selects nor waits for Python. Host SDK ranges
+remain native loading requirements; they do not describe cross-distribution business compatibility.
+
+Pages pull-request previews are the deliberate exception to building directly from pending package
+versions: the trusted preview controller runs the existing Changesets version command in an isolated
+copy so the preview can load a mutually compatible Host and MF when a change raises the MF's minimum
+Host SDK. This produces temporary derived versions for preview only. It neither consumes the pending
+changesets in the PR nor replaces the normal Version PR and protected-main release lifecycle.
+
+The Workspace contract check applies the same preparation after `pnpm check` has validated the
+original checkout. It builds the isolated candidate Host and MF before inspecting the native
+snapshot, and records the exact checked-out commit SHA in the job summary. For pull requests that
+SHA can be GitHub's synthetic merge commit; it identifies the source actually exported by
+`git archive`, while static, typed, and package checks still run on the original checkout first.
+
+A plugin owns compatibility of its shared configuration, state, Source/Job parameters and stored
+information. Changesets record MF changes even when no Python change is necessary. Published native
+coordinates and saved candidate bytes are immutable; repairs require a new native version.
+
+## Native SDK 0.4 cutover
+
+The Peer-participation protocol removes the SDK's global Extension version and enabled array.
+New first-party MF releases therefore require `@inkcre/core >=0.4.0 <0.5.0`; historical MF releases
+keep their existing declared range and are not silently repinned or declared compatible. Shared
+configuration and business data remain preserved when the user chooses a supported native release.
+
+This breaking cutover prepares the SDK and its in-repository consumers in the same reviewed change.
+The existing `pnpm release:version` command consumes the already-admitted UI intents and the native
+participation intent once, generating SDK 0.4 and independent MF patch releases. The resulting
+Version outputs are committed; no duplicate pending intent remains for the next reconciliation.
+This is the one-time delivery boundary for this cutover. Ordinary feature work continues to submit
+Changesets and use the automated Version PR described above.
+
+Client Web consumes the official Runtime SDK 0.4.1 tarball and Toolkit 0.5 wheel through exact GitHub
+Release asset URLs and lock-file integrity. Consumers install prebuilt packages without checking
+out Registry SDK source or running its SDK preparation. Runtime SDK 0.4.1 also qualifies its own
+build with the official Core SDK 0.4 prebuilt asset, removing the earlier Git-package bootstrap.
+The Core SDK publishes independently through its protected-main GitHub Release lane; its source
+remains a workspace dependency inside this repository, while external producers consume the
+prebuilt package. Runtime 0.4.1 preserves the 0.4 API and Host SDK range. Dependency publication,
+candidate qualification and production Extension publication remain separate delivery boundaries.
+
+The first production candidate for this cutover uses that final Runtime 0.4.1 qualification input.
+Its API and Host SDK range are unchanged, and the prepared App and MF versions still carry the
+already-consumed cutover intent. This dependency substitution occurs before those MF coordinates
+are published or have a saved production candidate; it does not create a second version intent.
+If either a published coordinate or a saved candidate exists, preserve its original bytes instead
+of rebuilding the same version. Subsequent producer changes continue to use ordinary Changesets.
+
+Required database checks normally resolve the protected Core `stable` artifact. During this cutover,
+`contracts/core-release.json` can admit a `canonical_candidate` with an existing canonical Core
+image digest, its protected-main source SHA and exact database contract revision. The consumer
+checks the image-owned manifest against both expected values and rejects tags, other registries,
+source mismatches and contract mismatches. This reference is populated only after the existing Core
+canonical artifact lane publishes it; a local or preview image is qualification evidence and cannot
+be entered as that canonical candidate. Omitting the entry continues to use stable. This admission
+does not move stable, deploy Core or migrate a production database.
 
 ## Registry Authority and Secret Boundary
 
@@ -55,7 +125,7 @@ the endpoint through repository variable `INKCRE_EXTENSION_REGISTRY_URL`.
 
 The workflow records `source_repository`, `source_revision`, and a release-workflow `build_id` in
 the Module Federation distribution before upload. These Web-distribution provenance facts remain
-independent of any Python distribution attached to the same Registry Release.
+independent of Python release provenance.
 
 Hosted documentation is discovered separately for the exact Release. Browser code follows the
 absolute entry or snapshot URL returned by Registry and never derives a content hostname from the

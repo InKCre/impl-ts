@@ -7,7 +7,7 @@ import {
   inspectCoreRelease,
   projectDatabaseCompatibilityContract,
   readJson,
-  resolveCoreRelease,
+  resolveConfiguredCoreRelease,
   stableJson,
   validateCoreReleaseConfig,
 } from './core-release-lib.mjs'
@@ -28,8 +28,8 @@ const config = validateCoreReleaseConfig(await readJson(`${repoRoot}/contracts/c
 const provider = resolveDatabaseProviderConfig()
 const runDocker = (dockerArgs, options) => runDatabaseDocker(provider, dockerArgs, options)
 const release = requestedImage
-  ? inspectCoreRelease(runDocker, requestedImage)
-  : resolveCoreRelease(runDocker, config.stable_image)
+  ? inspectCoreRelease(runDocker, requestedImage, { allowLocalImage: true })
+  : resolveConfiguredCoreRelease(runDocker, config)
 const instance = `typegen-${createHash('sha256')
   .update(`${repoRoot}/${process.pid}/${Date.now()}`)
   .digest('hex')

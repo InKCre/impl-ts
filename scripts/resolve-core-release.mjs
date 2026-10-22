@@ -1,14 +1,18 @@
 import { appendFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
-import { readJson, resolveCoreRelease, validateCoreReleaseConfig } from './core-release-lib.mjs'
+import {
+  readJson,
+  resolveConfiguredCoreRelease,
+  validateCoreReleaseConfig,
+} from './core-release-lib.mjs'
 import { resolveDatabaseProviderConfig, runDatabaseDocker } from './database-provider.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const config = validateCoreReleaseConfig(await readJson(`${repoRoot}/contracts/core-release.json`))
 const provider = resolveDatabaseProviderConfig()
 const runDocker = (args, options) => runDatabaseDocker(provider, args, options)
-const release = resolveCoreRelease(runDocker, config.stable_image)
+const release = resolveConfiguredCoreRelease(runDocker, config)
 
 if (process.env.GITHUB_OUTPUT) {
   await appendFile(

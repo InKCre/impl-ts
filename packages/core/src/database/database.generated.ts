@@ -366,33 +366,66 @@ export type Database = {
           },
         ]
       }
-      extensions: {
+      extension_peer_participations: {
         Row: {
-          config: Json
           config_schema: Json | null
-          enabled: string[]
+          distribution: string | null
+          enabled: boolean
           name: string
-          nickname: string | null
-          state: Json
+          peer_id: string
           version: string
         }
         Insert: {
-          config?: Json
           config_schema?: Json | null
-          enabled?: string[]
+          distribution?: string | null
+          enabled?: boolean
           name: string
-          nickname?: string | null
-          state?: Json
+          peer_id: string
           version: string
         }
         Update: {
-          config?: Json
           config_schema?: Json | null
-          enabled?: string[]
+          distribution?: string | null
+          enabled?: boolean
+          name?: string
+          peer_id?: string
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'extension_peer_participations_name_fkey'
+            columns: ['name']
+            isOneToOne: false
+            referencedRelation: 'extensions'
+            referencedColumns: ['name']
+          },
+          {
+            foreignKeyName: 'extension_peer_participations_peer_id_fkey'
+            columns: ['peer_id']
+            isOneToOne: false
+            referencedRelation: 'peers'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      extensions: {
+        Row: {
+          config: Json
+          name: string
+          nickname: string | null
+          state: Json
+        }
+        Insert: {
+          config?: Json
+          name: string
+          nickname?: string | null
+          state?: Json
+        }
+        Update: {
+          config?: Json
           name?: string
           nickname?: string | null
           state?: Json
-          version?: string
         }
         Relationships: []
       }
@@ -826,24 +859,6 @@ export type Database = {
       renew_peer_lease: {
         Args: { peer: string; ttl_seconds: number }
         Returns: string
-      }
-      set_extension_peer_enabled: {
-        Args: { p_enabled: boolean; p_name: string; p_peer_id: string }
-        Returns: {
-          config: Json
-          config_schema: Json | null
-          enabled: string[]
-          name: string
-          nickname: string | null
-          state: Json
-          version: string
-        }[]
-        SetofOptions: {
-          from: '*'
-          to: 'extensions'
-          isOneToOne: false
-          isSetofReturn: true
-        }
       }
     }
     Enums: {

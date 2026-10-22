@@ -63,11 +63,21 @@ Web、mail、twitter 和 ext-dev-utils 锁定同一正式 UI 版本；生产构�
 The web settings UI owns the PostgREST URL, technical Peer ID, user-supplied JWT signing
 credential, language, and full-browser import/export. The selected Peer's database row owns its Extension Registry URL and
 other Peer configuration. A fresh browser origin has no environment selection. The explicit export includes the credential
-so another browser can restore the same experience. No InKCre service origin, Peer identity, or JWT
-credential may enter source, source maps, Vite variables, Cloudflare bindings, or the built web and
-extension artifacts. The executable checks are
-[`scripts/check-local-runtime-contract.mjs`](../../scripts/check-local-runtime-contract.mjs) and
-[`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs).
+so another browser can restore the same experience.
+
+部署实例的连接地址、固定 Peer 身份和 JWT 凭据不能成为提交到仓库的默认值，也不能进入 source map、
+Vite 变量、Cloudflare bindings 或浏览器产物。业务链接、第三方 API 地址、文档示例及公共产品 Registry
+默认地址不选择用户连接的 InKCre 部署，无需逐条 URL 白名单。可执行检查入口为
+[`scripts/check-local-runtime-contract.mjs`](../../scripts/check-local-runtime-contract.mjs) 和
+[`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs)。
+
+源码检查按用途检查 bootstrap/Peer 配置字段的赋值与默认值、数据库客户端地址、Registry 覆盖配置、
+数据库签名凭据及浏览器扩展 API 默认值。它分析 JavaScript、TypeScript 和 Vue script 中的语法，
+跟踪同文件字符串常量与 schema 默认值。同一个自定义域名用作业务链接时通过，写入部署配置时拒绝；
+URL 路径和托管商域名都不是部署身份。跨模块导入的常量及任意跨模块数据流仍由代码审查负责。
+`pnpm check:runtime` 先运行判定规则的行为回归，再检查所有浏览器消费者和原生扩展。
+产物检查和正式 Web release 检查也先执行源码检查，再验证静态产物结构及已知凭据、旧配置通道的泄漏特征，
+不根据托管商域名封锁业务链接。
 
 ## Database Providers and Ownership
 
@@ -79,18 +89,18 @@ owns provider parsing and transport safety.
 - `ssh` uses one alias from the user's SSH configuration. The repository owns no hostname, user,
   key path, or remote Docker path. The remote engine allocates ports, and an instance-owned OpenSSH
   control tunnel exposes them locally; the optional forwarding host defaults to remote loopback.
-- `external` attaches to one absolute, machine-local core-py `runtime.json` descriptor. Attachment
-  succeeds only for a development runtime owned by `InKCre/core-py` when its runtime instance,
+- `external` attaches to one absolute, machine-local impl-py `runtime.json` descriptor. Attachment
+  succeeds only for a development runtime owned by `InKCre/impl-py` when its runtime instance,
   Compose project, Docker daemon, contract revision, migration head, source fingerprint, descriptor,
   and live readiness agree.
 
-For a client-owned `local` or `ssh` runtime, the database provisioner resolves core-py's admitted
+For a client-owned `local` or `ssh` runtime, the database provisioner resolves impl-py's admitted
 `stable` channel once to an immutable digest. The selected image supplies the raw schema and role
 artifact; fresh pgvector PostgreSQL is restored before that exact core service reconciles runtime
 credentials and development data, with PostgREST serving the resulting database. The PostgreSQL
 health check uses TCP so the temporary socket-only initialization server cannot release the restore
 step before the final server is listening. Client-web owns no
-migration SQL, role definitions, seed ordering, or startup sleeps. Those semantics remain a core-py
+migration SQL, role definitions, seed ordering, or startup sleeps. Those semantics remain an impl-py
 capability boundary. [`runtime/database.compose.yml`](../../runtime/database.compose.yml),
 [`contracts/core-release.json`](../../contracts/core-release.json), and
 [`scripts/database-runtime-lib.mjs`](../../scripts/database-runtime-lib.mjs) are the executable
@@ -110,6 +120,11 @@ which proves the checked client remains compatible with current delivery. A brea
 revision requires the coordinated producer-first migration defined by the shared contract.
 Pull-request evidence does not establish source-branch or migration equality between repositories.
 
+尚未发布的候选 Core 可用 `pnpm contract:sync --image sha256:<完整的本地镜像 ID>` 生成投影，再用相同参数追加
+`--check` 核对。镜像必须已存在于所选 local/ssh Docker daemon，工具核对 ID 并使用同一不可变镜像创建、清理
+独占的 typegen 数据库，不接受可移动 tag，也不会拉取本地 ID。此入口不支持 external provider；需选择构建候选的
+同一 provider。`contracts/core-release.json` 仍只接纳已发布的 GHCR digest，本地生成不能代替发布产物验收。
+
 ## Operator Commands
 
 Run these from the repository root; [`package.json`](../../package.json) owns their exact carriers.
@@ -126,3 +141,16 @@ pnpm db:reset
 pnpm contract:sync
 pnpm test:e2e
 ```
+
+Twitter 与本地 Core 镜像的候选验收保存在 `scripts/tests/`，不加入默认 `check`、`test:e2e` 或 CI 门禁。可独立执行：
+
+```bash
+pnpm verify:core-release
+pnpm verify:twitter --list
+pnpm verify:twitter
+```
+
+Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter MF 产物，并设置
+`INKCRE_E2E_CORE_URL`、`INKCRE_E2E_POSTGREST_URL`、`INKCRE_E2E_WEB_URL`、
+`INKCRE_E2E_JWT_SECRET`。它会安装或启用浏览器 Peer 的 Twitter 扩展、写入测试数据并提交词法索引 Job，
+不会自动清理数据；应使用独立验收信息库。截图保存在 `test-results/twitter-acceptance/`。

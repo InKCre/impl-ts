@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "revision": "peer-runtime-identity-v1",
+  "revision": "peer-jwt-signing-defaults-v1",
   "protocol": {
     "format": 1,
     "schema": "inkcre"
@@ -9,7 +9,6 @@
     "algorithm": "HS256",
     "audience": "inkcre-api",
     "issuer": "inkcre-peer",
-    "maximum_lifetime_seconds": 86400,
     "required_claims": ["role", "iss", "aud", "iat", "exp"],
     "role": "authenticated"
   }

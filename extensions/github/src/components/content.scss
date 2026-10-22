@@ -1,0 +1,75 @@
+.github-content {
+  display: grid;
+  gap: sys-var(space, md);
+  min-width: 0;
+  color: sys-var(color, text, base);
+  overflow-wrap: anywhere;
+  h2 {
+    margin: 0;
+    @include apply-font(title-lg);
+  }
+  h3 {
+    margin: 0;
+    @include apply-font(label-lg);
+  }
+  p {
+    margin: 0;
+    @include apply-font(body-md);
+  }
+  a {
+    color: sys-var(color, text, base);
+    text-underline-offset: 0.2em;
+  }
+  .github-metadata,
+  .github-empty {
+    color: sys-var(color, text, subtle);
+    @include apply-font(body-sm);
+  }
+  .github-account-heading {
+    display: flex;
+    align-items: center;
+    gap: sys-var(space, md);
+  }
+  .github-account-heading img {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .github-topics,
+  .github-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: sys-var(space, sm);
+  }
+  .github-topics {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    @include apply-font(label-md);
+  }
+  .github-related {
+    display: grid;
+    gap: sys-var(space, sm);
+  }
+  .github-related ul {
+    margin: 0;
+    padding-left: sys-var(space, lg);
+  }
+  .github-related li + li {
+    margin-top: sys-var(space, sm);
+  }
+  &--compact {
+    gap: sys-var(space, sm);
+    max-width: 360px;
+    h2 {
+      @include apply-font(label-lg);
+    }
+    .github-description {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  }
+}

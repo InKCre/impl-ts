@@ -73,12 +73,20 @@ async function request(url, options, fetchImplementation) {
 }
 
 function releaseUrl(registryUrl, name, version) {
-  return new URL(`/v1/extensions/${name}/releases/${version}`, registryUrl)
+  return new URL(
+    `/v2/extensions/${name}/distributions/module_federation/releases/${version}`,
+    registryUrl
+  )
 }
 
 async function publicRelease(url, fetchImplementation) {
   try {
     const release = await request(url, {}, fetchImplementation)
+    assert.equal(
+      release.distribution,
+      'module_federation',
+      'Registry returned a different native distribution'
+    )
     assert.equal(release.state, 'published', `cannot deliver a ${release.state} Release`)
     return release
   } catch (error) {
@@ -92,6 +100,7 @@ export async function captureCandidates({
   deliveryDirectory,
   registryUrl,
   provenance,
+  pendingPackages = new Set(),
   fetchImplementation = fetch,
 }) {
   await mkdir(deliveryDirectory, { recursive: true })
@@ -109,6 +118,12 @@ export async function captureCandidates({
       throw error
     }
     if (!manifest.inkcre?.module_federation) continue
+    if (pendingPackages.has(manifest.name)) {
+      console.log(
+        `${manifest.inkcre.name}: release intent is still pending; no publication selected.`
+      )
+      continue
+    }
     const existing = await publicRelease(
       releaseUrl(registryUrl, manifest.inkcre.name, manifest.version),
       fetchImplementation
@@ -231,7 +246,10 @@ export async function publishCandidates(options) {
     const prepare = await readFile(path.join(candidateDirectory, 'prepare.json'))
     // prepare is idempotent and also checks immutable provenance before a resumed publication.
     await request(
-      new URL(`/v1/extensions/${candidate.name}/releases`, registryUrl),
+      new URL(
+        `/v2/extensions/${candidate.name}/distributions/module_federation/releases`,
+        registryUrl
+      ),
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -335,8 +353,23 @@ async function main() {
       build_id: `client-web-extension-release-${runId}`,
     },
   }
-  if (command === 'capture') await captureCandidates(options)
-  else if (command === 'check') await checkCandidates(options)
+  if (command === 'capture') {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'inkcre-release-intent-'))
+    try {
+      const statusPath = path.join(temporary, 'status.json')
+      execFileSync('pnpm', ['exec', 'changeset', 'status', '--output', statusPath], {
+        cwd: options.workspace,
+        stdio: 'inherit',
+      })
+      const status = await readJson(statusPath)
+      const pendingPackages = new Set(
+        status.changesets.flatMap((changeset) => changeset.releases.map((release) => release.name))
+      )
+      await captureCandidates({ ...options, pendingPackages })
+    } finally {
+      await rm(temporary, { recursive: true, force: true })
+    }
+  } else if (command === 'check') await checkCandidates(options)
   else if (command === 'publish')
     await publishCandidates({ ...options, token: process.env.INKCRE_EXTENSION_REGISTRY_TOKEN })
   else throw new Error(`unsupported command: ${command}`)

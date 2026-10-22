@@ -41,7 +41,7 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
 
   core-release:
-    name: Resolve stable core release
+    name: Resolve admitted Core release
     runs-on: ubuntu-latest
     outputs:
       contract_revision: ${{ steps.release.outputs.contract_revision }}
@@ -64,7 +64,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve stable once to an immutable release
+      - name: Verify canonical candidate admission boundaries
+        run: node --test scripts/test-core-release.mjs
+
+      - name: Resolve admitted Core once to an immutable release
         id: release
         run: node scripts/resolve-core-release.mjs
 
@@ -121,8 +124,12 @@ jobs:
           --core-package packages/core/package.json
           --artifact-directory extensions/twitter/dist/client-web
 
-      - name: Verify publication recovery over HTTP
-        run: node --test scripts/test-extension-publication.mjs
+      - name: Verify independent MF publication
+        run: >-
+          node --test scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs
+          scripts/tests/independent-extension-release.test.mjs
+          scripts/tests/release-checkout.test.mjs
+          scripts/tests/core-sdk-compatibility.test.mjs
 
   peer-database:
     name: client-web E2E

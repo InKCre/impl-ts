@@ -1,5 +1,14 @@
 # @inkcre/client-webext
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [7307dda]
+- Updated dependencies
+- Updated dependencies [7307dda]
+  - @inkcre/core@0.4.0
+
 ## 0.1.2
 
 ### Patch Changes

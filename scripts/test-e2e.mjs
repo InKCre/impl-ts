@@ -95,6 +95,7 @@ try {
   const baseline = ownsRuntime ? developmentFingerprint(instance) : null
 
   run('pnpm', ['--filter', '@inkcre/client-web', 'build-only'])
+  run('pnpm', ['--filter', '@inkcre/ext-github...', 'build'])
   const webPort = await availablePort()
   const webUrl = `http://127.0.0.1:${webPort}/`
   preview = spawn(
@@ -120,15 +121,19 @@ try {
   await waitForWeb(webUrl)
 
   credentials = await runtimeCredentials(instance)
-  run('pnpm', ['exec', 'playwright', 'test', '--project', 'web-database'], {
-    env: {
-      ...process.env,
-      INKCRE_E2E_CORE_URL: state.urls.core,
-      INKCRE_E2E_POSTGREST_URL: state.urls.postgrest,
-      INKCRE_E2E_WEB_URL: webUrl,
-      INKCRE_E2E_JWT_SECRET: credentials.JWT_SECRET,
-    },
-  })
+  run(
+    'pnpm',
+    ['exec', 'playwright', 'test', '--project', 'web-database', ...process.argv.slice(2)],
+    {
+      env: {
+        ...process.env,
+        INKCRE_E2E_CORE_URL: state.urls.core,
+        INKCRE_E2E_POSTGREST_URL: state.urls.postgrest,
+        INKCRE_E2E_WEB_URL: webUrl,
+        INKCRE_E2E_JWT_SECRET: credentials.JWT_SECRET,
+      },
+    }
+  )
 
   if (ownsRuntime) {
     compose(instance, [

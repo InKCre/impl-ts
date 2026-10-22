@@ -128,6 +128,32 @@ test('Mail is used through the generic InfoBase navigation host', async ({ page 
     })
   ).toBeVisible()
 
+  // Keep native restore behind the initial content lookup to exercise a cold deep link.
+  let releaseNativeModule!: () => void
+  const nativeModuleReady = new Promise<void>((resolve) => {
+    releaseNativeModule = resolve
+  })
+  const nativeEntryPattern = '**/remoteEntry.js'
+  await page.route(nativeEntryPattern, async (route) => {
+    await nativeModuleReady
+    await route.continue()
+  })
+  try {
+    await page.goto(`/info-base/graph/blocks/${graph.email}/content`)
+    await expect(page.locator('.solved-content-popup')).toContainText(
+      'Unknown resolver ID: extensions.mail.email.v1'
+    )
+    releaseNativeModule()
+    await expect(
+      page.getByRole('heading', {
+        name: 'Re: A deep module is measured by the promise it hides',
+      })
+    ).toBeVisible()
+  } finally {
+    releaseNativeModule()
+    await page.unroute(nativeEntryPattern)
+  }
+
   const html = page.frameLocator('iframe[title="Email HTML body"]')
   await expect(
     html.getByRole('heading', { name: 'Deep modules preserve a small promise' })

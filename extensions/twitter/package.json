@@ -1,6 +1,6 @@
 {
   "name": "@inkcre/ext-twitter",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,11 +10,12 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@inkcre/core": "workspace:*"
+    "@inkcre/core": "workspace:*",
+    "@inkcre/extension-runtime-client-web": "https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz"
   },
   "devDependencies": {
     "@inkcre/ext-dev-utils": "workspace:*",
-    "@inkcre/ui-web": "2.2.1",
+    "@inkcre/ui-web": "2.3.0",
     "@module-federation/vite": "^1.1.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vitejs/plugin-vue-jsx": "^5.1.2",
@@ -36,7 +37,7 @@
     "nickname": "Twitter",
     "module_federation": {
       "host_sdk": "@inkcre/core",
-      "host_sdk_version": ">=0.2.0 <0.4.0"
+      "host_sdk_version": ">=0.4.0 <0.5.0"
     }
   },
   "intent": {

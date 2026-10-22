@@ -78,9 +78,9 @@ The application shell mounts immediately with its header and menu. A configured 
 complete canonical Peer row once before business views mount; a new identity must first be
 inserted. Business pages then remain available while runtime-owned version/schema registration and
 the initial database-time lease complete in the background. The browser Job worker starts only after
-that lease succeeds. The application shell also restores the Extension Host only after lease
-success; the Extensions management page can read installed state earlier but does not independently
-restore runtimes. A connecting or failed notice distinguishes page access from a running Peer;
+that lease succeeds. The local Extension Host restores after the canonical Peer identity and MF Host are prepared,
+independently of the initial lease. Local readiness does not advertise a live lease or start the Job
+worker; the management view shares the same restore promise. A connecting or failed notice distinguishes page access from a running Peer;
 failure preserves the database view and offers Retry and Settings. Optional telemetry runs after
 lease adoption and does not delay either business views or the worker. Route views load on demand.
 
@@ -107,8 +107,9 @@ Worker, or runtime-config endpoint fallback.
 The signing secret is masked during ordinary display, excluded from logs, and retained only in
 browser-owned runtime state. The explicit full-browser export includes the secret so importing it can
 restore the same connection, identity, and local preferences in another browser. Signed JWTs are memory-only. The auth store derives algorithm,
-issuer, audience, role, and maximum lifetime from the generated Peer runtime contract, regenerates
-the token when the secret changes, and clears it when the secret is removed. PostgREST JSON access,
+issuer, audience, and role from the generated Peer runtime contract. Ordinary Web tokens use the
+browser signer's 24-hour default lifetime, independently of database admission policy. The store
+regenerates the token when the secret changes and clears it when the secret is removed. PostgREST JSON access,
 raw byte access, and Peer HTTP delegation reuse this single authentication authority.
 
 Web Peer registration publishes the client-web application version and a best-effort browser/version/system
@@ -123,7 +124,8 @@ against the original database connection.
 
 The browser signer backdates `iat` by five seconds and derives `exp` from that adjusted value. This
 absorbs ordinary sub-second or small deployment clock skew at the authentication boundary without
-increasing the shared maximum lifetime or leaking retries into PostgREST/domain callers.
+moving retries into PostgREST/domain callers. The lifetime is the browser signer's policy;
+database admission does not impose a shared maximum lifetime.
 
 ## Browser Background Participation
 
@@ -135,8 +137,11 @@ delay accepting pending Jobs and recognizing an offline browser.
 
 Zero disables background participation. The browser still registers its canonical Peer identity and
 can use database pages and outbound capability delegation, but does not renew its lease, start the
-Job worker, initialize optional telemetry, or automatically restore the Extension Host. Disabling an
-existing runtime cancels local active Jobs and waits for cleanup before closing Extension resources.
+Job worker, or initialize optional telemetry. Its enabled local MF selections still restore for
+reading and other explicit local features. Disabling background participation cancels local active
+Jobs and waits for worker and telemetry cleanup; it does not close the same connection’s Extension
+Host. Database URL, signing secret or Peer identity changes, and explicit shutdown, drain and dispose
+the old Host.
 It does not revoke an existing lease: PostgreSQL expiry still controls when others see the Peer as
 offline. Explicit actions, open Job detail polling, and normal page queries remain possible requests.
 

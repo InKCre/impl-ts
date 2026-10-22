@@ -10,7 +10,7 @@ import {
   InkPicker,
   type DropdownOption,
 } from '@inkcre/ui-web'
-import type { Cron, Source } from '@inkcre/core'
+import { type Cron, type Source } from '@inkcre/core'
 import {
   discoverCoreCandidates,
   readTwitterOAuthAppConfig,
@@ -182,8 +182,7 @@ async function enableSelectedCore(): Promise<void> {
   if (!api.value || !selectedCandidate.value) return
   await run('enable-core', async () => {
     const extension = await api.value!.enableCore(lifecycle.signal)
-    selectedCandidate.value!.extension = extension
-    selectedCandidate.value!.enabled = extension.enabled.includes(selectedCandidate.value!.peer.id)
+    selectedCandidate.value!.enabled = extension.enabled
     await reloadStatus()
   })
 }
@@ -339,19 +338,16 @@ onBeforeUnmount(() => {
     <template v-else>
       <p v-if="error" class="twitter-setup__error" role="alert">{{ error }}</p>
       <div v-if="currentStep === 0" class="twitter-setup__panel">
-        <h3>Choose a collection Peer</h3>
-        <p class="twitter-setup__hint">
-          This Core Peer handles authorization and bookmark collection.
-        </p>
+        <h3>Choose an authorization Peer</h3>
         <InkForm v-if="candidates.length" layout="col">
           <InkDropdown
             v-model="selectedPeerId"
             :options="peerOptions"
-            label="Core Peer"
+            label="Authorization Peer"
             :editable="!busy"
           />
         </InkForm>
-        <p v-else>No available Core Peer has the Twitter extension installed.</p>
+        <p v-else>No authorization Peer is available.</p>
         <div class="twitter-setup__actions">
           <InkButton
             v-if="selectedCandidate && !selectedCoreEnabled"
@@ -481,7 +477,6 @@ onBeforeUnmount(() => {
               (value: Date) => value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             "
           />
-          <p class="twitter-setup__hint">Time uses the collection Peer's timezone.</p>
           <InkButton
             text="Continue"
             theme="primary"
@@ -499,9 +494,7 @@ onBeforeUnmount(() => {
           <dt>Bookmark Source</dt>
           <dd>{{ selectedSource?.nickname || `#${selectedSource?.id}` }}</dd>
           <dt>Collection</dt>
-          <dd>
-            Daily at {{ collectionTime }} <span class="twitter-setup__hint">· Peer timezone</span>
-          </dd>
+          <dd>Daily at {{ collectionTime }}</dd>
         </dl>
         <p v-if="setupReady" role="status">Bookmarks will be collected on this schedule.</p>
         <p v-else class="twitter-setup__hint">
@@ -524,6 +517,19 @@ onBeforeUnmount(() => {
           />
         </div>
       </div>
+      <section v-if="status?.x_monkey_base_url" class="twitter-setup__x-monkey">
+        <h3>Connect x-monkey storage</h3>
+        <p class="twitter-setup__hint">
+          Open the selected Core's x-monkey account page to connect this browser. This is separate
+          from X bookmark authorization.
+        </p>
+        <p v-if="status?.x_monkey_base_url" class="twitter-setup__hint">
+          x-monkey service address: <code>{{ status.x_monkey_base_url }}</code>
+        </p>
+        <a :href="`${status.x_monkey_base_url}/account`" target="_blank" rel="noopener noreferrer"
+          >Open x-monkey account</a
+        >
+      </section>
     </template>
     <div class="twitter-setup__toolbar">
       <InkButton text="Close" theme="subtle" :disabled="busy" @click="close" />

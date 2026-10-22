@@ -13,6 +13,7 @@ import { useI18n } from 'vue-i18n'
 import { configStore } from '@inkcre/core'
 import {
   currentWebPeer,
+  extensionHostConnectionReady,
   webPeerConnectionState,
   initializeCore,
   shouldLoadPeerConfigAtBootstrap,
@@ -49,8 +50,8 @@ onMounted(async () => {
   })
 })
 
-watch([startupState, webPeerConnectionState], ([startup, connection]) => {
-  if (startup !== 'ready' || connection !== 'ready') return
+watch([startupState, extensionHostConnectionReady], ([startup, connectionReady]) => {
+  if (startup !== 'ready' || !connectionReady) return
   void startExtensionHost().catch((error: unknown) => {
     console.error('[Web Extension Host] Startup failed:', error)
   })

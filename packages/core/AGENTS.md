@@ -16,7 +16,7 @@ Shared models, Peer protocols, storage/resolver mechanics, and native Extension 
 - Keep Peer transport generic and capability managers domain-specific. Never retry ambiguous dispatch or silently substitute a different exact target.
 - Preserve exact, versioned Resolver IDs and the distinction between unknown, unsupported, supported-null, and authored-empty outcomes.
 - Treat storage content as opaque bytes/pointers; Resolver semantics and browser runtime handles remain separate.
-- `database.generated.ts` is generated from core-py's admitted schema artifact; `generated.ts` and runtime-contract adapters are the stable local boundary. Do not hand-edit generated projections.
+- `database.generated.ts` is generated from impl-py's admitted schema artifact; `generated.ts` and runtime-contract adapters are the stable local boundary. Do not hand-edit generated projections.
 - Keep runtime source and ESM distribution free of environment profiles, service origins, Peer identity, and credentials. Do not add CommonJS without a named consumer and explicit contract change.
 - Preserve Extension lifecycle compensation across `initialize`, `activate`, `deactivate`, and `dispose`.
 

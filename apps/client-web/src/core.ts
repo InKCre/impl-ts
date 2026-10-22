@@ -147,6 +147,8 @@ type ClientExtensionManager = ExtensionManager<ClientExtensionModule>
 
 let extensionHost: ClientExtensionManager | null = null
 let extensionHostStartup: Promise<void> | null = null
+let extensionHostConnection: MetaConfig | null = null
+export const extensionHostConnectionReady = Vue.ref(false)
 export const extensionHostRestoreState = Vue.ref<'idle' | 'restoring' | 'restored' | 'failed'>(
   'idle'
 )
@@ -162,6 +164,7 @@ export const webPeerConnectionState = Vue.ref<
 export function initializeExtensionHost(): ClientExtensionManager {
   extensionHostStartup = null
   extensionHostRestoreState.value = 'idle'
+  extensionHostConnection = { ...configStore.metaConfig }
   extensionRegistryOrigin = new ExtensionRegistryOriginResolver(
     () => configStore.peerConfig.extension_registry_url
   )
@@ -171,6 +174,7 @@ export function initializeExtensionHost(): ClientExtensionManager {
     hostSdk: { name: '@inkcre/core', version: corePackageJson.version },
   })
   extensionHost = new ExtensionManager<ClientExtensionModule>({
+    peerId: configStore.metaConfig.INKCRE_PEER_ID,
     releases: extensionRegistry,
     moduleFederation,
   })
@@ -179,12 +183,14 @@ export function initializeExtensionHost(): ClientExtensionManager {
 
 /** Share one initial runtime restore across the app shell and management view. */
 export function startExtensionHost(): Promise<void> {
-  if (webPeerConnectionState.value !== 'ready') {
-    return Promise.reject(new Error('Web Peer lease is not ready for Extension Host startup.'))
+  if (!extensionHostConnectionReady.value) {
+    return Promise.reject(
+      new Error('Extension Host connection and Peer identity are not prepared.')
+    )
   }
   if (extensionHostStartup) return extensionHostStartup
-  const host = getExtensionHost()
   extensionHostRestoreState.value = 'restoring'
+  const host = getExtensionHost()
   const startup = host.startup(configStore.metaConfig.INKCRE_PEER_ID)
   const restore = startup.then(
     () => {
@@ -200,7 +206,7 @@ export function startExtensionHost(): Promise<void> {
     }
   )
   extensionHostStartup = restore
-  return extensionHostStartup
+  return restore
 }
 
 export function getExtensionHost(): ClientExtensionManager {
@@ -239,8 +245,20 @@ export async function adoptWebPeerRuntime(runtime: WebPeerRuntime): Promise<void
   await applyWebPeerParticipation(runtime, { ...configStore.metaConfig })
 }
 
+/** Call only after this connection's canonical Peer was prepared or registered. */
+function prepareLocalExtensionHost(meta: MetaConfig): void {
+  if (
+    extensionHostConnection?.INKCRE_PEER_ID !== meta.INKCRE_PEER_ID ||
+    extensionHostConnection?.INKCRE_PGREST_URL !== meta.INKCRE_PGREST_URL ||
+    extensionHostConnection?.INKCRE_JWT_SECRET !== meta.INKCRE_JWT_SECRET
+  )
+    initializeExtensionHost()
+  extensionHostConnectionReady.value = true
+}
+
 async function applyWebPeerParticipation(runtime: WebPeerRuntime, meta: MetaConfig): Promise<void> {
   if (!ownsWebPeerConnection(runtime, meta)) return
+  prepareLocalExtensionHost(meta)
   if (meta.peer_lease_renew_interval_seconds === 0) {
     webPeerConnectionState.value = 'connecting'
     await JobManager.stopWorker()
@@ -300,11 +318,10 @@ async function finishWebPeerConnection(runtime: WebPeerRuntime, meta: MetaConfig
   }
 }
 
-export async function stopWebPeerRuntime(): Promise<void> {
+async function stopWebPeerBackgroundRuntime(): Promise<void> {
   webPeerRuntime?.stop()
   webPeerRuntime = null
   webPeerConnectionState.value = 'idle'
-  currentWebPeer.value = null
   await JobManager.stopWorker()
   if (webPeerRuntime !== null) return
   // Finish queued initialization before shutdown so a late read cannot reopen telemetry.
@@ -313,6 +330,13 @@ export async function stopWebPeerRuntime(): Promise<void> {
   })
   if (webPeerRuntime !== null) return
   await shutdownTelemetry()
+  if (webPeerRuntime !== null) return
+}
+
+export async function stopWebPeerRuntime(): Promise<void> {
+  extensionHostConnectionReady.value = false
+  currentWebPeer.value = null
+  await stopWebPeerBackgroundRuntime()
   if (webPeerRuntime !== null) return
   await extensionHostStartup?.catch(() => {})
   if (webPeerRuntime !== null) return
@@ -329,7 +353,8 @@ export async function prepareWebPeerConfigurationChange(next: MetaConfig): Promi
     next.INKCRE_PGREST_URL === current.INKCRE_PGREST_URL &&
     next.INKCRE_PEER_ID === current.INKCRE_PEER_ID &&
     next.INKCRE_JWT_SECRET === current.INKCRE_JWT_SECRET
-  if (!sameConnection || next.peer_lease_renew_interval_seconds === 0) await stopWebPeerRuntime()
+  if (!sameConnection) await stopWebPeerRuntime()
+  else if (next.peer_lease_renew_interval_seconds === 0) await stopWebPeerBackgroundRuntime()
 }
 
 /** Settings can recover its connection independently of the business bootstrap. */
@@ -349,6 +374,7 @@ export async function startConfiguredWebPeerRuntime(): Promise<void> {
     if (!ownsWebPeerConnection(candidate, meta)) return
     configStore.peerConfig = PeerConfigSchema.parse(peer.config)
     currentWebPeer.value = { id: peer.id, name: peer.name }
+    prepareLocalExtensionHost(meta)
     void finishWebPeerConnection(candidate, meta)
   } catch (error) {
     candidate.stop()
@@ -446,6 +472,8 @@ export function shouldLoadPeerConfigAtBootstrap(pathname: string): boolean {
 
 export async function initializeCore(options: { loadPeerConfig?: boolean } = {}): Promise<void> {
   await configStore.initializeMeta(localStorageAdapter)
+  await configStore.saveMeta()
+  let preparedMeta: MetaConfig | null = null
   const requirePeerConnection = options.loadPeerConfig ?? true
   if (
     requirePeerConnection &&
@@ -461,6 +489,7 @@ export async function initializeCore(options: { loadPeerConfig?: boolean } = {})
       if (!ownsWebPeerConnection(candidate, meta)) return
       configStore.peerConfig = PeerConfigSchema.parse(peer.config)
       currentWebPeer.value = { id: peer.id, name: peer.name }
+      preparedMeta = meta
       void finishWebPeerConnection(candidate, meta)
     } catch (error) {
       candidate.stop()
@@ -472,6 +501,7 @@ export async function initializeCore(options: { loadPeerConfig?: boolean } = {})
   setupResolvers()
   initializeModuleFederation()
   initializeExtensionHost()
+  if (preparedMeta) prepareLocalExtensionHost(preparedMeta)
   console.log('[Core] Initialization complete')
 }
 
