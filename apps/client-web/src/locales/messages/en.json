@@ -256,7 +256,13 @@
     "sourceLoadFailed": "Unable to load the source.",
     "title": "Job Details",
     "jobId": "Job ID",
-    "status": "Status",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
     "source": "Source",
     "createdAt": "Created At",
     "startedAt": "Started At",
@@ -270,14 +276,7 @@
     "notAvailable": "N/A",
     "notFound": "Job not found",
     "sourceNotFound": "Source not found",
-    "openDiagnostics": "Open diagnostics (search by Job ID)",
-    "status": {
-      "pending": "Pending",
-      "running": "Running",
-      "success": "Success",
-      "failed": "Failed",
-      "cancelled": "Cancelled"
-    }
+    "openDiagnostics": "Open diagnostics (search by Job ID)"
   },
   "logs": {
     "loading": "Loading logs…",
@@ -295,7 +294,7 @@
     "id": "ID",
     "current": "This browser",
     "versionUnknown": "Version unknown",
-    "capabilities": "{count} capabilities",
+    "capabilities": "Capabilities",
     "statusOnline": "Online",
     "statusOffline": "Offline",
     "statusUnknown": "Unknown",
@@ -327,7 +326,6 @@
     "readinessIssues": "Device has readiness issues. Check details.",
     "deviceInfo": "Device Info",
     "deviceId": "Device ID",
-    "capabilities": "Capabilities",
     "capabilitiesCount": "{count} items",
     "capabilitiesList": "Capabilities List",
     "showDetails": "Show Details",
@@ -433,9 +431,9 @@
       },
       "layoutAlgorithm": "Layout algorithm",
       "layout": {
-        "radial": "Radial (circle)",
-        "force": "Force-directed",
-        "hierarchical": "Hierarchical (tree)"
+        "radial": "Radial",
+        "force": "Force Directed",
+        "hierarchical": "Hierarchical"
       },
       "community": {
         "all": "All groups",
@@ -444,24 +442,6 @@
         "nodeCount": "{count} entries",
         "previous": "Previous group",
         "next": "Next group"
-      },
-      "layout": {
-        "auto": "Auto Layout",
-        "force": "Force Directed",
-        "dagre": "Hierarchical",
-        "circular": "Circular",
-        "radial": "Radial",
-        "grid": "Grid",
-        "detected": "Detected"
-      },
-      "topology": {
-        "tree": "Tree",
-        "dag": "DAG",
-        "star": "Star",
-        "linear": "Linear",
-        "cyclic": "Cyclic",
-        "disconnected": "Disconnected",
-        "unknown": "Unknown"
       }
     }
   }

@@ -119,7 +119,6 @@
     "prevPage": "上一页",
     "nextPage": "下一页",
     "pageInfo": "第 {page} 页，共 {total} 页",
-    "checkRunningJob": "查看运行中的采集任务",
     "listFailed": "无法加载数据源。",
     "empty": "还没有数据源。创建后即可开始采集。",
     "create": "创建数据源",
@@ -156,7 +155,6 @@
     "backToSources": "返回数据源",
     "created": "创建时间",
     "updated": "更新时间",
-    "actions": "操作",
     "view": "查看",
     "tab": {
       "overview": "概览",
@@ -258,7 +256,13 @@
     "sourceLoadFailed": "无法读取来源。",
     "title": "任务详情",
     "jobId": "任务 ID",
-    "status": "状态",
+    "status": {
+      "pending": "等待中",
+      "running": "运行中",
+      "success": "成功",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
     "source": "数据源",
     "createdAt": "创建时间",
     "startedAt": "开始时间",
@@ -272,14 +276,7 @@
     "notAvailable": "不可用",
     "notFound": "未找到任务",
     "sourceNotFound": "未找到数据源",
-    "openDiagnostics": "打开诊断入口（使用 Job ID 查询）",
-    "status": {
-      "pending": "等待中",
-      "running": "运行中",
-      "success": "成功",
-      "failed": "失败",
-      "cancelled": "已取消"
-    }
+    "openDiagnostics": "打开诊断入口（使用 Job ID 查询）"
   },
   "logs": {
     "loading": "正在读取日志…",
@@ -297,7 +294,7 @@
     "id": "ID",
     "current": "当前浏览器",
     "versionUnknown": "版本未知",
-    "capabilities": "{count} 项能力",
+    "capabilities": "能力",
     "statusOnline": "在线",
     "statusOffline": "离线",
     "statusUnknown": "未知",
@@ -329,7 +326,6 @@
     "readinessIssues": "设备存在就绪问题，请查看详情。",
     "deviceInfo": "设备信息",
     "deviceId": "设备 ID",
-    "capabilities": "能力",
     "capabilitiesCount": "{count} 项",
     "capabilitiesList": "能力列表",
     "showDetails": "显示详情",
