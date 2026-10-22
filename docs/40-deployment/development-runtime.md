@@ -179,12 +179,13 @@ Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter 
 3. 将上述六项输入注入运行进程，执行 `pnpm verify:twitter`。不要 source dotenv 文件或把凭据写进提交、命令输出、
    截图和 trace。Core Cookie 连接需要真实安全浏览器上下文；本专项保留 Secure Cookie 和关闭 trace 的设置。
 4. 查看本次测试目录的 `run.json`：它保留准备／提交／读取／索引／搜索／重开阶段、结果、Web 实际构建身份、Core 的
-   声明源码与实际 Peer/version、数据库合同／head、实际 MF entry URL／摘要及资源 URL、fixture native IDs 与 Job／Block IDs。
+   声明源码与实际 Peer/version、原生 Distribution 的选择／加载／运行状态、数据库合同／head、实际 MF entry URL／摘要及资源 URL、fixture native IDs 与 Job／Block IDs。
    Core SHA 是部署 owner 的输入声明，脚本不把它冒充运行时独立读取的 SHA。失败时已写记录仍保留并标出阶段。
 5. owner 在不再需要现场后清理整个独占信息库，例如关闭本次 Python PR 触发既有 Preview 清理。脚本不会根据
    标题、时间范围或前缀批删共享数据；保留现场时，下一轮使用新的 fixture stamp，记录也说明清理责任。
 
-脚本先检查 Core readiness、信息库中匹配该 Core endpoint 的 live Peer，以及 Web 构建身份，再开始账户连接。
+脚本先检查 Core readiness、信息库中匹配该 Core endpoint 的 live Peer、该 Peer 已加载并运行所选 Python Distribution，
+以及 Web 构建身份，再开始账户连接。原生 status 只证明选择与运行状态，不独立证明 wheel 字节来自候选 Registry。
 它会安装或启用本次 Web Peer 的 Twitter MF、写入测试数据并提交词法索引 Job，最后关闭原页并在新页从持久信息库
 重开正文。页面重开没有注入初始配置，使用该浏览器实际保存的连接和 Peer 意图。截图和运行记录保存在
 `test-results/twitter-acceptance/`，其中 `reopened.png` 对应这次重开。

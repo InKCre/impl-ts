@@ -279,6 +279,60 @@ test('Core self-hosted connection writes native records that the real Twitter MF
       }
     )
     .toBe(1)
+  const nativeResponse = await fetch(new URL('extension-management/v2', coreBase()), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${await databaseToken()}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'status', extension: 'inkcre/twitter' }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!nativeResponse.ok)
+    throw new Error(`Native Distribution status returned HTTP ${nativeResponse.status}`)
+  const nativeStatus = await nativeResponse.json()
+  const nativeRows = nativeStatus.extensions.filter(
+    (row: { name: string }) => row.name === 'inkcre/twitter'
+  )
+  const nativeDistributions = nativeRows.map(
+    (row: {
+      name: string
+      distribution: string
+      version: string
+      loaded_version: string | null
+      enabled: boolean
+      running: boolean
+      restart_required: boolean
+      operation: string | null
+    }) => ({
+      peer_id: nativeStatus.peer_id,
+      name: row.name,
+      distribution: row.distribution,
+      version: row.version,
+      loaded_version: row.loaded_version,
+      enabled: row.enabled,
+      running: row.running,
+      restart_required: row.restart_required,
+      operation: row.operation,
+    })
+  )
+  await recordPhase('preflight', { native_distributions: nativeDistributions })
+  expect(nativeStatus.peer_id, 'Native status must belong to the observed Core Peer').toBe(
+    corePeers[0].id
+  )
+  expect(nativeDistributions, 'The owner must select and enable the Python Distribution').toEqual([
+    {
+      peer_id: corePeers[0].id,
+      name: 'inkcre/twitter',
+      distribution: 'python',
+      version: expect.stringMatching(/\S/),
+      loaded_version: nativeDistributions[0]?.version,
+      enabled: true,
+      running: true,
+      restart_required: false,
+      operation: null,
+    },
+  ])
   await recordPhase('connecting', {
     core_peer: { id: corePeers[0].id, application_version: corePeers[0].application_version },
     database_contract: readiness.database.contract,
