@@ -64,6 +64,12 @@
 
 - **Next Step**：Human 走查 audit 修复结果，决定是否继续深挖或关闭任务包。
 
+- **CI 修复与 main 合并**（2026-10-22）：
+  1. **丢失文件恢复**：分支推送时遗漏了 6 个新文件（`toast.ts`、`ToastHost.scss`、`InfoBaseViewTabs.vue`、`utils/format.ts`、`utils/cron.ts`、`styles/entity-card.scss`），导致 CI 构建失败（`ENOENT: ToastHost.scss`）。这些文件从本地 `stash@{0}` 的 untracked 部分原样恢复，未重写。
+  2. **同步 main**：分支落后 main 19 个提交（含 #144 的 `presentLexicalMatches`/`RecallGroup` core 实现），而分支代码已引用这些 API。合并 `origin/main` 并解决 7 个文件冲突（`core.ts`、`extensions.vue`、`extensionCard.*`、`graph.vue`、两个 locale JSON）。冲突解决原则：main 的结构演进为基（participation 流程、Peers 文案、连接准备流），分支的增量保留（toast 反馈、prepared-statement 重试、关闭时优雅 shutdown、平滑/增量扩展模式）。
+  3. **locale 对齐**：合并后 en/zh-CN key 集合不一致（en 多出 main 的 `topology.*` 与 `layout.{auto,circular,grid,dagre,detected}`，zh 多出分支的 `layout.hierarchical`、`source.actions`、`source.checkRunningJob`）。按"合并后代码实际引用的 key"对齐为 `layout.{radial,force,hierarchical}`，删除双方未引用 key。
+  4. **ui#63 联动**：inkInput 密码切换按钮的 aria-label 原本硬编码英文，已改为库内既有 `useOptionalI18n` + `locales/{en,zh-CN}.ts` fallback 模式（`input.showPassword`/`input.hidePassword`）。
+
 ## Task-map Projection
 
 五条 Track 各自可独立推进、独立纵向展开。当前没有跨 Track 的真实集成屏障——Human 授权就是节奏控制。
