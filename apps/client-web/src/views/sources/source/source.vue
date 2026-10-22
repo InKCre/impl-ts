@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef, watch } from 'vue'
+import { computed, ref, useTemplateRef } from 'vue'
 import {
   RouterLink,
   onBeforeRouteLeave,
@@ -18,14 +18,16 @@ import {
   InkInput,
   InkForm,
   InkTabs,
-  type JsonEditorValidation,
 } from '@inkcre/ui-web'
 import SourceForm from '@/components/source/sourceForm/sourceForm.vue'
 import SchemaConfigEditor from '@/components/schemaConfigEditor/schemaConfigEditor.vue'
 import JobCard from '@/components/job/JobCard/JobCard.vue'
 import { humanizeCron } from '@/utils/cron'
-import { Cron, CronForm, Job, JobManager, JobStatus, Source } from '@inkcre/core'
+import { Source } from '@inkcre/core'
 import { usePageObjectTitle } from '@/composables/use-page-object-title'
+import { useSourceDetail } from './use-source-detail'
+import { useJobCreator } from './use-job-creator'
+import { useCronManager } from './use-cron-manager'
 
 type TabId = 'overview' | 'config' | 'schedules' | 'jobs'
 
@@ -33,31 +35,90 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const sourceId = computed(() => Number(route.params.id))
-const source = ref<Source | null>(null)
+
+const {
+  source,
+  draft,
+  sourceLoading,
+  sourceLoadError,
+  sourceSaving,
+  sourceError,
+  sourceSaved,
+  deleteOpen,
+  sourceDeleting,
+  deleteError,
+  jobs,
+  jobsLoading,
+  jobsError,
+  crons,
+  cronsLoading,
+  cronsError,
+  loadSource,
+  loadJobs,
+  loadCrons,
+  sourceTypeFull,
+  lastJob,
+  lastJobStatus,
+  lastJobTime,
+  cronCount,
+  enabledCronCount,
+  jobCount,
+  runningJob,
+} = useSourceDetail(sourceId)
+
 usePageObjectTitle(
   computed(() =>
     source.value?.id === sourceId.value ? source.value.nickname || undefined : undefined
   )
 )
-const draft = ref<Source | null>(null)
+
 const editor = useTemplateRef('editor')
-const sourceLoading = ref(false)
-const sourceLoadError = ref(false)
-const sourceSaving = ref(false)
-const sourceError = ref('')
-const sourceSaved = ref(false)
-const deleteOpen = ref(false)
-const sourceDeleting = ref(false)
-const deleteError = ref('')
-const jobs = ref<Job[]>([])
-const jobsLoading = ref(false)
-const jobsError = ref(false)
-const crons = ref<Cron[]>([])
-const cronsLoading = ref(false)
-const cronsError = ref(false)
-let sourceRequest = 0
-let jobsRequest = 0
-let cronsRequest = 0
+
+const {
+  jobKind,
+  jobConfig,
+  jobValidation,
+  jobError,
+  jobSaving,
+  newJobOpen,
+  canCreateJob,
+  onNewJob,
+  onCloseJob,
+  onCreateJob,
+} = useJobCreator({
+  sourceId,
+  jobs,
+  isBusy: () => busy.value,
+  onCreated: (job) => router.push(`/jobs/${job.id}`),
+})
+
+const {
+  cronSchedule,
+  cronCreateError,
+  cronSaving,
+  cronAction,
+  newCronOpen,
+  cronToDelete,
+  cronError,
+  onNewCron,
+  onCloseCron,
+  onCreateCron,
+  onRunCron,
+  onRequestDeleteCron,
+  onDeleteCron,
+} = useCronManager({ sourceId, crons, isBusy: () => busy.value })
+
+const busy = computed(
+  () =>
+    sourceLoading.value ||
+    sourceSaving.value ||
+    sourceDeleting.value ||
+    jobsLoading.value ||
+    cronsLoading.value ||
+    jobSaving.value ||
+    cronSaving.value ||
+    Boolean(cronAction.value)
+)
 
 // Tabs state
 const activeTab = ref<TabId>('overview')
@@ -77,118 +138,6 @@ function getTabId(value: string): string {
 function setTab(tab: string) {
   activeTab.value = tab as TabId
 }
-
-// Each region loads independently; late responses must not replace another source's context.
-async function loadSource() {
-  const request = ++sourceRequest
-  sourceLoading.value = true
-  sourceLoadError.value = false
-  try {
-    const loaded = await Source.get(sourceId.value)
-    if (request !== sourceRequest) return
-    source.value = loaded
-    draft.value = Source.parse(loaded)
-  } catch {
-    if (request === sourceRequest) sourceLoadError.value = true
-  } finally {
-    if (request === sourceRequest) sourceLoading.value = false
-  }
-}
-async function loadJobs() {
-  const request = ++jobsRequest
-  jobsLoading.value = true
-  jobsError.value = false
-  try {
-    const loaded = await Job.getBySource(sourceId.value)
-    if (request === jobsRequest) jobs.value = loaded
-  } catch {
-    if (request === jobsRequest) jobsError.value = true
-  } finally {
-    if (request === jobsRequest) jobsLoading.value = false
-  }
-}
-async function loadCrons() {
-  const request = ++cronsRequest
-  cronsLoading.value = true
-  cronsError.value = false
-  try {
-    const loaded = await Cron.getBySource(sourceId.value)
-    if (request === cronsRequest) crons.value = loaded
-  } catch {
-    if (request === cronsRequest) cronsError.value = true
-  } finally {
-    if (request === cronsRequest) cronsLoading.value = false
-  }
-}
-
-watch(
-  sourceId,
-  () => {
-    void loadSource()
-    void loadJobs()
-    void loadCrons()
-  },
-  { immediate: true }
-)
-
-const busy = computed(
-  () =>
-    sourceLoading.value ||
-    sourceSaving.value ||
-    sourceDeleting.value ||
-    jobsLoading.value ||
-    cronsLoading.value ||
-    jobSaving.value ||
-    cronSaving.value ||
-    Boolean(jobAction.value) ||
-    Boolean(cronAction.value)
-)
-
-// Create/edit state
-const jobKind = ref<'ordinary' | 'backfill'>('ordinary')
-const jobConfig = ref('{}')
-const jobValidation = ref<JsonEditorValidation>()
-const jobError = ref('')
-const jobSaving = ref(false)
-const jobAction = ref<{ id: number; kind: 'run' | 'delete' } | null>(null)
-const newJobOpen = ref(false)
-const canCreateJob = computed(
-  () => jobConfig.value.trim() !== '' && (!jobValidation.value || jobValidation.value.valid)
-)
-const cronSchedule = ref('0 * * * *')
-const cronCreateError = ref('')
-const cronSaving = ref(false)
-const cronAction = ref<{ id: number; kind: 'run' | 'delete' } | null>(null)
-const newCronOpen = ref(false)
-const cronToDelete = ref<Cron | null>(null)
-const cronError = ref('')
-
-// Derived values for display
-const sourceTypeFull = computed(() => source.value?.type || '')
-
-// Overview tab data
-const lastJob = computed(() => {
-  if (!jobs.value.length) return null
-  return jobs.value[0]
-})
-
-const lastJobStatus = computed(() => {
-  if (!lastJob.value) return null
-  return lastJob.value.status
-})
-
-const lastJobTime = computed(() => {
-  if (!lastJob.value) return null
-  return lastJob.value.created_at
-})
-
-const runningJob = computed(() =>
-  jobs.value.find((job) => job.status === JobStatus.PENDING || job.status === JobStatus.RUNNING)
-)
-
-const cronCount = computed(() => crons.value.length)
-const enabledCronCount = computed(() => crons.value.filter((c) => c.enabled).length)
-const jobCount = computed(() => jobs.value.length)
 
 function canLeave(): boolean {
   const dirty =
@@ -217,11 +166,13 @@ async function onSaveSource() {
     sourceSaving.value = false
   }
 }
+
 function onRequestDeleteSource() {
   if (busy.value) return
   deleteError.value = ''
   deleteOpen.value = true
 }
+
 async function onDeleteSource() {
   if (busy.value || !source.value) return
   sourceDeleting.value = true
@@ -237,99 +188,6 @@ async function onDeleteSource() {
   deleteOpen.value = false
   draft.value = null
   await router.push('/sources')
-}
-function onNewJob() {
-  jobKind.value = 'ordinary'
-  jobConfig.value = '{}'
-  jobValidation.value = undefined
-  jobError.value = ''
-  newJobOpen.value = true
-}
-function onCloseJob() {
-  if (jobSaving.value) return
-  if (jobConfig.value !== '{}' && !window.confirm(t('source.discardChanges'))) return
-  newJobOpen.value = false
-}
-async function onCreateJob() {
-  if (busy.value || !canCreateJob.value) return
-  jobSaving.value = true
-  jobError.value = ''
-  let created: Job
-  try {
-    created = await JobManager.create(
-      jobKind.value === 'ordinary' ? 'core.source.collect.v1' : 'core.source.backfill.v1',
-      { source: sourceId.value, config: JSON.parse(jobConfig.value) }
-    )
-    jobs.value = [created, ...jobs.value]
-    newJobOpen.value = false
-  } catch {
-    jobError.value = t('source.runFailed')
-    return
-  } finally {
-    jobSaving.value = false
-  }
-  await router.push(`/jobs/${created.id}`)
-}
-function onNewCron() {
-  cronSchedule.value = '0 * * * *'
-  cronCreateError.value = ''
-  newCronOpen.value = true
-}
-function onCloseCron() {
-  if (cronSaving.value) return
-  if (cronSchedule.value !== '0 * * * *' && !window.confirm(t('source.discardChanges'))) return
-  newCronOpen.value = false
-}
-async function onCreateCron() {
-  if (busy.value) return
-  cronSaving.value = true
-  cronCreateError.value = ''
-  try {
-    const created = await new CronForm({
-      schedule: cronSchedule.value,
-      enabled: true,
-      job_type: 'core.source.collect.v1',
-      job_parameters: { source: sourceId.value },
-      job_timeout_seconds: null,
-    }).create()
-    crons.value = [...crons.value, created]
-    newCronOpen.value = false
-  } catch {
-    cronCreateError.value = t('source.scheduleFailed')
-  } finally {
-    cronSaving.value = false
-  }
-}
-async function onRunCron(cron: Cron) {
-  if (busy.value) return
-  cronAction.value = { id: cron.id, kind: 'run' }
-  cronError.value = ''
-  try {
-    await cron.runNow()
-  } catch {
-    cronError.value = t('source.runFailed')
-  } finally {
-    cronAction.value = null
-  }
-}
-function onRequestDeleteCron(cron: Cron) {
-  if (busy.value) return
-  cronError.value = ''
-  cronToDelete.value = cron
-}
-async function onDeleteCron() {
-  if (busy.value || !cronToDelete.value) return
-  const cron = cronToDelete.value
-  cronAction.value = { id: cron.id, kind: 'delete' }
-  try {
-    await cron.delete()
-    crons.value = crons.value.filter((item) => item.id !== cron.id)
-    cronToDelete.value = null
-  } catch {
-    cronError.value = t('source.deleteFailed')
-  } finally {
-    cronAction.value = null
-  }
 }
 </script>
 
