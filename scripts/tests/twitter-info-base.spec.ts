@@ -122,7 +122,7 @@ async function expectPostSearchResult(
     .locator('.info-base-list-view__matches li')
     // Excerpts vary with the query; the collapsed Details retain the exact Block identity.
     .filter({
-      has: page.locator('details button').filter({ hasText: new RegExp(`^#${blockId}\\s+·`) }),
+      has: page.locator('details button').filter({ hasText: new RegExp(`^\\s*#${blockId}\\s+·`) }),
     })
   await expect(result).toBeVisible({ timeout: 30_000 })
   return result
