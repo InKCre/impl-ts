@@ -178,7 +178,7 @@ Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter 
    `INKCRE_E2E_WEB_URL` 使用这个 URL，脚本据此配置本次新 Web Peer 的 Registry。
 3. 将上述六项输入注入运行进程，执行 `pnpm verify:twitter`。不要 source dotenv 文件或把凭据写进提交、命令输出、
    截图和 trace。Core Cookie 连接需要真实安全浏览器上下文；本专项保留 Secure Cookie 和关闭 trace 的设置。
-4. 查看本次测试目录的 `run.json`：它保留准备／提交／读取／索引／重开阶段、结果、Web 实际构建身份、Core 的
+4. 查看本次测试目录的 `run.json`：它保留准备／提交／读取／索引／搜索／重开阶段、结果、Web 实际构建身份、Core 的
    声明源码与实际 Peer/version、数据库合同／head、实际 MF entry URL／摘要及资源 URL、fixture native IDs 与 Job／Block IDs。
    Core SHA 是部署 owner 的输入声明，脚本不把它冒充运行时独立读取的 SHA。失败时已写记录仍保留并标出阶段。
 5. owner 在不再需要现场后清理整个独占信息库，例如关闭本次 Python PR 触发既有 Preview 清理。脚本不会根据

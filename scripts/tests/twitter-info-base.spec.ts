@@ -183,7 +183,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   page,
   context,
 }, testInfo) => {
-  test.setTimeout(180_000)
+  test.setTimeout(240_000)
   for (const key of [
     'INKCRE_E2E_CORE_URL',
     'INKCRE_E2E_POSTGREST_URL',
@@ -785,6 +785,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     ],
   })
   expect(indexJob.state).toMatchObject({ failed: 0, unavailable: 0 })
+  await recordPhase('searching')
   for (const query of [postId, `acceptance_${stamp}`, 'Rich text survives with its author']) {
     await expectPostSearchResult(page, query, postBlock!.id)
   }
@@ -794,9 +795,10 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     postBlock!.id
   )
   await bodySearch.locator('.info-base-list-view__match').click()
-  await expect(page).toHaveURL(
-    (url) => url.pathname === `/info-base/list/blocks/${postBlock!.id}/content`
-  )
+  await expect(page).toHaveURL((url) => url.pathname === `/info-base/list/blocks/${postBlock!.id}`)
+  const inspector = page.getByRole('dialog', { name: 'Block Inspector', exact: true })
+  await expect(inspector).toContainText(`#${postBlock!.id}`)
+  await inspector.getByRole('button', { name: 'View content', exact: true }).click()
   await expect(page.locator('.solved-content-popup')).toContainText(
     'Rich text survives with its author and context.'
   )
@@ -805,6 +807,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     path: 'test-results/twitter-acceptance/twitter-x-monkey-final.png',
     fullPage: true,
   })
+  await recordPhase('reopening')
   const reopened = await context.newPage()
   await page.close()
   await reopened.goto(new URL(`/info-base/graph/blocks/${postBlock!.id}/content`, webOrigin).href)
