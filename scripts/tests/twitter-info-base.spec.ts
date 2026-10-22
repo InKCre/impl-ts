@@ -1,5 +1,6 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { SignJWT } from 'jose'
 
@@ -13,6 +14,12 @@ function getArchiveBase(): URL {
 type BlockRow = { id: number; resolver: string; content: string }
 type RelationRow = { from_: number; to_: number; content: string }
 type LexicalJob = { id: number; status: string; state: Record<string, unknown> }
+type CorePeerRow = {
+  id: string
+  application_version: string
+  lease_expires_at: string
+  capabilities: Array<{ id: string; inbound: { parameters: { url?: string } } }>
+}
 
 const CORE_LEXICAL_MAINTAIN_JOB = 'core.feature_retrieval.lexical.maintain.v1'
 
@@ -33,6 +40,7 @@ async function databaseToken(): Promise<string> {
 async function databaseRows<Row>(path: string): Promise<Row[]> {
   const response = await fetch(new URL(path, postgrestUrl), {
     headers: { Authorization: `Bearer ${await databaseToken()}` },
+    signal: AbortSignal.timeout(15_000),
   })
   const body = await response.text()
   expect(response.ok, body).toBe(true)
@@ -92,13 +100,124 @@ async function expectPostSearchResult(
   return result
 }
 
+test.afterEach(async ({ page: _page }, testInfo) => {
+  const path = testInfo.outputPath('run.json')
+  let record: Record<string, unknown>
+  try {
+    record = JSON.parse(await readFile(path, 'utf8'))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+  await writeFile(path, `${JSON.stringify({ ...record, result: testInfo.status }, null, 2)}\n`)
+  await testInfo.attach('candidate and fixture record', { path, contentType: 'application/json' })
+})
+
 test('Core self-hosted connection writes native records that the real Twitter MF can read', async ({
   page,
-}) => {
+  context,
+}, testInfo) => {
   test.setTimeout(180_000)
+  for (const key of [
+    'INKCRE_E2E_CORE_URL',
+    'INKCRE_E2E_POSTGREST_URL',
+    'INKCRE_E2E_WEB_URL',
+    'INKCRE_E2E_JWT_SECRET',
+    'INKCRE_E2E_CORE_SOURCE_SHA',
+    'INKCRE_E2E_INFO_BASE_OWNER',
+  ]) {
+    if (!process.env[key])
+      throw new Error(`${key} is required before this journey can write fixtures`)
+  }
+  if (!/^[a-f0-9]{40}$/.test(process.env.INKCRE_E2E_CORE_SOURCE_SHA!)) {
+    throw new Error(
+      'INKCRE_E2E_CORE_SOURCE_SHA must identify the Core candidate reported by its deployment owner'
+    )
+  }
+  for (const value of [coreUrl, postgrestUrl, process.env.INKCRE_E2E_WEB_URL!]) {
+    const url = new URL(value)
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      throw new Error(
+        'Acceptance endpoints must be HTTP(S) URLs without embedded credentials, query or fragment'
+      )
+    }
+  }
   const archiveBase = getArchiveBase()
   const webOrigin = new URL(process.env.INKCRE_E2E_WEB_URL!).origin
   const stamp = `${Date.now()}`
+  const record: Record<string, unknown> = {
+    started_at: new Date().toISOString(),
+    core_url: coreUrl,
+    postgrest_url: postgrestUrl,
+    web_url: process.env.INKCRE_E2E_WEB_URL,
+    declared_core_source_revision: process.env.INKCRE_E2E_CORE_SOURCE_SHA,
+    info_base_owner: process.env.INKCRE_E2E_INFO_BASE_OWNER,
+    fixture_stamp: stamp,
+    cleanup:
+      'The isolated info-base owner removes this run data; this script does not delete shared rows.',
+  }
+  await mkdir(testInfo.outputDir, { recursive: true })
+  async function recordPhase(phase: string, observations: Record<string, unknown> = {}) {
+    Object.assign(record, observations, { phase })
+    await writeFile(testInfo.outputPath('run.json'), `${JSON.stringify(record, null, 2)}\n`)
+  }
+  await recordPhase('preflight')
+  const ready = await fetch(new URL('readyz', coreBase()), { signal: AbortSignal.timeout(15_000) })
+  if (!ready.ok) throw new Error(`Core readiness returned HTTP ${ready.status}`)
+  const readiness = await ready.json()
+  const candidateResponse = await fetch(new URL('preview-candidate.json', webOrigin), {
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!candidateResponse.ok)
+    throw new Error('Web candidate metadata is required; select a prepared Preview snapshot')
+  const candidate = (await candidateResponse.json()) as {
+    source_revision: string
+    build_id: string
+    distributions: Array<{ manifest: string; sha256: string }>
+  }
+  const twitterCandidate = candidate.distributions?.find((item) =>
+    item.manifest.startsWith('/extensions/inkcre/twitter/')
+  )
+  if (!/^[a-f0-9]{40}$/.test(candidate.source_revision) || !twitterCandidate) {
+    throw new Error('Web snapshot must identify its source and Twitter MF distribution')
+  }
+  let corePeers: CorePeerRow[] = []
+  await expect
+    .poll(
+      async () => {
+        const peers = await databaseRows<CorePeerRow>(
+          'peers?select=id,application_version,lease_expires_at,capabilities'
+        )
+        corePeers = peers.filter(
+          (peer) =>
+            Date.parse(peer.lease_expires_at) > Date.now() &&
+            peer.capabilities.some(
+              (capability) =>
+                capability.id === 'core.extension.management.v2' &&
+                capability.inbound?.parameters?.url ===
+                  new URL('extension-management/v2', coreBase()).href
+            )
+        )
+        return corePeers.length
+      },
+      {
+        timeout: 30_000,
+        message: 'PostgREST must expose the live Core Peer selected for this journey',
+      }
+    )
+    .toBe(1)
+  await recordPhase('connecting', {
+    core_peer: { id: corePeers[0].id, application_version: corePeers[0].application_version },
+    database_contract: readiness.contract,
+    migration: readiness.migration,
+    web_candidate: candidate,
+  })
   const userId = `${stamp}01`
   const postId = `${stamp}02`
   const quoteId = `${stamp}03`
@@ -124,7 +243,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     encodeURIComponent(jwtSecret),
     JSON.stringify(jwtSecret).slice(1, -1),
   ]
-  page.on('request', (request) => {
+  context.on('request', (request) => {
     // Fulfilled media routes may never deliver extra headers; audit these synchronously.
     const payload = [request.url(), JSON.stringify(request.headers()), request.postData() ?? '']
     secretTransmitted ||= payload.some((value) =>
@@ -274,6 +393,19 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     summary: { accepted: number; failed: number; total: number }
   }
   expect(submitted.summary).toMatchObject({ accepted: 8, failed: 0, total: 8 })
+  await recordPhase('submitted', {
+    native_ids: [
+      userId,
+      postId,
+      quoteId,
+      replyId,
+      mediaId,
+      failedMediaId,
+      videoId,
+      alternateMediaId,
+    ],
+    submit_summary: submitted.summary,
+  })
 
   const query = await page.request.post(new URL('api/v1/archive/query', archiveBase).toString(), {
     headers: { 'x-tweet-db-client': 'x-monkey' },
@@ -316,8 +448,12 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     { webOrigin, postgrestUrl, jwtSecret, peerId }
   )
   const twitterRemoteEntries: import('@playwright/test').Response[] = []
-  page.on('response', (response) => {
+  const moduleResources: Array<{ url: string; status: number }> = []
+  context.on('response', (response) => {
     const url = new URL(response.url())
+    if (url.pathname.includes('/extensions/inkcre/twitter/')) {
+      moduleResources.push({ url: response.url(), status: response.status() })
+    }
     if (
       url.pathname.includes('/extensions/inkcre/twitter/') &&
       url.pathname.endsWith('/remoteEntry.js')
@@ -361,6 +497,16 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   const remoteEntry = twitterRemoteEntries.at(-1)!
   expect(remoteEntry.ok()).toBe(true)
   expect(new URL(remoteEntry.url()).origin).toBe(webOrigin)
+  await recordPhase('reading', {
+    web_peer_id: peerId,
+    registry_origin: webOrigin,
+    remote_entry: {
+      url: remoteEntry.url(),
+      sha256: createHash('sha256')
+        .update(await remoteEntry.body())
+        .digest('hex'),
+    },
+  })
   const posts = await databaseRows<BlockRow>(
     'blocks?select=id,resolver,content&resolver=eq.extensions.twitter.tweet.v2&order=id.desc&limit=100'
   )
@@ -558,6 +704,16 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   )
 
   const indexJob = await maintainLexicalIndex(page)
+  await recordPhase('indexed', {
+    lexical_job_id: indexJob.id,
+    post_block_id: postBlock!.id,
+    media_block_ids: [
+      mediaBlock!.id,
+      failedMediaBlock!.id,
+      videoBlock!.id,
+      alternateMediaBlock!.id,
+    ],
+  })
   expect(indexJob.state).toMatchObject({ failed: 0, unavailable: 0 })
   for (const query of [postId, `acceptance_${stamp}`, 'Rich text survives with its author']) {
     await expectPostSearchResult(page, query, postBlock!.id)
@@ -579,4 +735,16 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     path: 'test-results/twitter-acceptance/twitter-x-monkey-final.png',
     fullPage: true,
   })
+  const reopened = await context.newPage()
+  await page.close()
+  await reopened.goto(new URL(`/info-base/graph/blocks/${postBlock!.id}/content`, webOrigin).href)
+  await expect(reopened.locator('.solved-content-popup')).toContainText(
+    'Rich text survives with its author and context.',
+    { timeout: 30_000 }
+  )
+  await expect(reopened.locator('.solved-content-popup')).toContainText('Archive Acceptance Author')
+  expect(moduleResources.every((resource) => new URL(resource.url).origin === webOrigin)).toBe(true)
+  expect(secretTransmitted, 'Application requests must not transmit JWT_SECRET.').toBe(false)
+  await reopened.screenshot({ path: testInfo.outputPath('reopened.png'), fullPage: true })
+  await recordPhase('reopened', { module_resources: moduleResources, reopened_url: reopened.url() })
 })
