@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 
 import {
   availablePort,
@@ -125,6 +125,8 @@ try {
     'pnpm',
     ['exec', 'playwright', 'test', '--project', 'web-database', ...process.argv.slice(2)],
     {
+      // Playwright owns its suite deadline so reporters and teardown can finish.
+      timeout: 0,
       env: {
         ...process.env,
         INKCRE_E2E_CORE_URL: state.urls.core,
@@ -170,14 +172,17 @@ try {
     await writeFile(`${evidenceDirectory}/compose-log-error.txt`, `${redact(message)}\n`)
   }
 
-  throw error
+  console.error(redact(failure))
+  process.exitCode = 1
 } finally {
   preview?.kill('SIGTERM')
   try {
     if (await exists(`${runtimeDirectory(instance)}/runtime.json`)) {
       await stopDatabaseRuntime(instance)
     }
-  } finally {
-    await rm(runtimeDirectory(instance), { recursive: true, force: true })
+  } catch (cleanupError) {
+    // Keep the descriptor when cleanup fails, and preserve the original test failure above.
+    console.error(`E2E cleanup failed for ${instance}: ${redact(String(cleanupError))}`)
+    process.exitCode = 1
   }
 }
