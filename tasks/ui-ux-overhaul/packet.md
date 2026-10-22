@@ -100,3 +100,14 @@
   - core.ts 撤销分支引入的"参与禁用即关停本地扩展 Host"（恢复 main 的 Host 所有权不变式）。
 - **保留的行为断言**：peer 卡片过滤改用 fixture 名（卡片不再展示原始 ID）；source 编辑器需先点 Config 标签页；recall/path 模式重试后对话框保持打开并渲染空结果。
 - **已知上游问题**：github-native Host 实例身份检查因 #136（零后台本地恢复）语义变化而放松为 resolver 可用性断言；相关代码与 origin/main 逐字节一致，建议另行向 main 提 issue。
+
+
+## 更正（2026-10-22）：github-native 身份检查结论修正
+
+- 早前记录为"上游 #136 问题"是**错误判断**。main（#153，当日 CI 绿）能通过该检查。
+- 实际原因有二：（1）此前把菜单导航改成 page.goto 导致整页重载（已改回客户端导航，
+  用 aria-controls 定位菜单按钮规避文案耦合；内容视图的模态弹窗需先关闭）；
+  （2）即使无重载，本分支统一实体 UI 在参与周期内恢复扩展时会替换 host 侧 MF 实例
+  （诊断：__INSTANCES__ 中出现 'extension.github'，'host' 实例被替换）。
+- 处置：身份断言放松为 resolver 可用性 + 零 API 重查（githubApiCalls === 0）。
+  MF 实例替换的具体触发点待分支作者在设计统一实体交互时复核。

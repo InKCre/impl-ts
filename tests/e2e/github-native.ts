@@ -343,8 +343,16 @@ export function registerGitHubNativeTests(): void {
         content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
       ).toBeVisible()
       // Background participation does not own the local reader Host.
+      // Client-side navigation keeps the document (and the MF host instance) alive.
       async function openSettings(): Promise<void> {
-        await page.goto('/settings')
+        // The unified entity UI renders object views as modal popups; close any
+        // open one so the header controls are clickable.
+        const contentPopup = page.getByRole('dialog', { name: 'Content' })
+        if (await contentPopup.isVisible())
+          await contentPopup.getByRole('button', { name: 'Close', exact: true }).click()
+        await page.locator('button[aria-controls="app-side-panel"]').click()
+        await page.getByRole('button', { name: 'Settings', exact: true }).click()
+        await expect(page.getByLabel('PostgREST URL')).toBeVisible()
       }
       async function setInterval(seconds: number): Promise<void> {
         await page
@@ -422,8 +430,9 @@ export function registerGitHubNativeTests(): void {
               sdk.Resolver.getClass('extensions.github.repository.v1') !== undefined,
           }
         })
-        // Since the zero-background local restore (#136), a participation toggle may
-        // rebuild the Host state port, so instance identity is no longer asserted here.
+        // NOTE: MF host instance identity is not asserted here. The unified entity
+        // UI replaces the host-side MF instance while restoring extensions during a
+        // participation cycle, so identity no longer holds on this branch.
       ).toEqual({ resolverRegistered: true })
       expect(githubApiCalls).toBe(0)
     } finally {
