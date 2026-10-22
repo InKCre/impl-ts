@@ -117,6 +117,7 @@ async function expectPostSearchResult(
   await expect(page.locator('.app-connection')).toBeHidden({ timeout: 30_000 })
   await search.fill(query)
   await page.getByRole('button', { name: 'Search', exact: true }).click()
+  await expect(page).toHaveURL((url) => url.searchParams.get('q') === query)
   const result = page
     .locator('.info-base-list-view__matches li')
     .filter({ hasText: `https://x.com/i/status/${postId}` })
