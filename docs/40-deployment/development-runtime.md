@@ -112,6 +112,16 @@ accepts only a ready development runtime, and resets only this worktree's client
 resources. Client-web refuses to reset or stop an external core-py runtime; recovery and cleanup
 must go through core-py. Browser E2E always creates and removes its own isolated database runtime.
 
+`svc dev status database --repo . --json` 的 probe 输出区分 descriptor、contract 和 transport 阶段。
+descriptor 失败应先核对 `svc.local.json` 指向的 owner 与 `runtime.json`；contract 失败会指出 readiness
+与 descriptor 中不一致的字段；transport 输出分别列出 tunnel、Core `/readyz` 和 PostgREST 的探测结果。
+成功输出还包含实际源码 fingerprint、migration head 和 contract revision。外接 descriptor 只证明它与
+owner 已保存的 readiness 一致；当前 Python 工作树是否已收敛，仍应在 owner 仓运行同一 status 命令确认
+`source_matches`。不要用 stop／reset 修复连接或候选错配，它们可能删除已有数据。
+
+`pnpm doctor` 由已安装的 `svc status` 判断 SVC 配置有效性，不另行固定旧 schema／corpus 版本。
+doctor 的 provider 检查不代表服务已就绪；业务验收前仍需检查上述 runtime probe。
+
 The checked database projection records the contract revision intentionally adopted by this
 consumer. Update it with `pnpm contract:sync` when client work adopts a newer compatible revision;
 an unrelated pull request does not chase a moving `stable` channel. CI still resolves `stable` once

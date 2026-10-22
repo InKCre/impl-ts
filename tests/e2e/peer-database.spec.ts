@@ -145,7 +145,7 @@ test('startup shows pending and failed states without trapping a deep link', asy
     await expect(loading).toHaveCount(0)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
 })
 
@@ -181,7 +181,7 @@ test('optional telemetry does not delay opening a business page', async ({ page 
     await expect(page.getByRole('status', { name: 'Starting InKCre…' })).toHaveCount(0)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
 })
 
@@ -231,7 +231,7 @@ test('existing Peer pages open before registration finishes and report a backgro
     expect(workerRequests).toBe(0)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
 })
 
@@ -300,7 +300,7 @@ test('a pending initial lease does not block pages or admit the browser worker',
     ).toHaveCount(0)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
 })
 
@@ -360,7 +360,7 @@ test('reset invalidates pending registration before it can renew or start the wo
     await expect(page.getByText('This Web Peer could not connect.')).toHaveCount(0)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
 })
 
@@ -442,7 +442,7 @@ test('switching connections cannot renew a pending old registration against eith
     expect(newLeaseRequests).toBe(1)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
 })
 
@@ -505,7 +505,7 @@ test('a new browser identity waits for insertion before opening business pages',
     await expect.poll(() => leaseRequests).toBe(1)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
 })
 
@@ -657,7 +657,7 @@ test('disabling while registration is pending prevents its later lease or worker
     expect(scans).toBe(0)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
 })
 
@@ -789,7 +789,7 @@ test('disabling participation drains a dispatched claim before saving configurat
     ).toBe(0)
   } finally {
     release()
-    await page.unrouteAll({ behavior: 'wait' })
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
     if (id !== undefined)
       await fetch(`${postgrestUrl}jobs?id=eq.${id}`, { method: 'DELETE', headers })
     await fetch(`${postgrestUrl}job_types?id=eq.${type}`, { method: 'DELETE', headers })
