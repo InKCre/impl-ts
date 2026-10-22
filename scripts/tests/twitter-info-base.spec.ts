@@ -109,7 +109,7 @@ async function maintainLexicalIndex(onCreated: (id: number) => Promise<void>): P
 async function expectPostSearchResult(
   page: import('@playwright/test').Page,
   query: string,
-  blockId: number
+  postId: string
 ): Promise<import('@playwright/test').Locator> {
   if (new URL(page.url()).pathname !== '/') await page.goto('/')
   const search = page.getByRole('searchbox', { name: 'Search the info base' })
@@ -119,7 +119,7 @@ async function expectPostSearchResult(
   await page.getByRole('button', { name: 'Search', exact: true }).click()
   const result = page
     .locator('.info-base-list-view__matches li')
-    .filter({ hasText: `#${blockId} · extensions.twitter.tweet.v2` })
+    .filter({ hasText: `https://x.com/i/status/${postId}` })
   await expect(result).toBeVisible({ timeout: 30_000 })
   return result
 }
@@ -782,17 +782,17 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   })
   expect(indexJob.state).toMatchObject({ failed: 0, unavailable: 0 })
   for (const query of [postId, `acceptance_${stamp}`, 'Rich text survives with its author']) {
-    await expectPostSearchResult(page, query, postBlock!.id)
+    await expectPostSearchResult(page, query, postId)
   }
   const bodySearch = await expectPostSearchResult(
     page,
     'Rich text survives with its author',
-    postBlock!.id
+    postId
   )
   await bodySearch.locator('.info-base-list-view__match').click()
-  await expect(page).toHaveURL((url) => url.pathname === `/info-base/list/blocks/${postBlock!.id}`)
-  await expect(page.locator('.block-inspector-popup')).toContainText(`#${postBlock!.id}`)
-  await page.locator('.block-inspector-popup').getByRole('button', { name: 'View content' }).click()
+  await expect(page).toHaveURL(
+    (url) => url.pathname === `/info-base/list/blocks/${postBlock!.id}/content`
+  )
   await expect(page.locator('.solved-content-popup')).toContainText(
     'Rich text survives with its author and context.'
   )
