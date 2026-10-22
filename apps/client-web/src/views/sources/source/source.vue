@@ -19,7 +19,6 @@ import {
   InkForm,
   InkTabs,
   type JsonEditorValidation,
-  type InkTabsExpose,
 } from '@inkcre/ui-web'
 import SourceForm from '@/components/source/sourceForm/sourceForm.vue'
 import SchemaConfigEditor from '@/components/schemaConfigEditor/schemaConfigEditor.vue'
@@ -62,13 +61,18 @@ let cronsRequest = 0
 
 // Tabs state
 const activeTab = ref<TabId>('overview')
-const tabsRef = ref<InkTabsExpose | null>(null)
 const tabs = computed(() => [
   { value: 'overview' as TabId, label: t('source.tab.overview') },
   { value: 'config' as TabId, label: t('source.tab.config') },
   { value: 'schedules' as TabId, label: t('source.tab.schedules') },
   { value: 'jobs' as TabId, label: t('source.tab.jobs') },
 ])
+
+// Generate unique IDs for ARIA associations
+const baseId = `source-tabs-${Math.random().toString(36).substr(2, 9)}`
+function getTabId(value: string): string {
+  return `${baseId}-tab-${value}`
+}
 
 function setTab(tab: string) {
   activeTab.value = tab as TabId
@@ -374,7 +378,7 @@ async function onDeleteCron() {
           v-if="activeTab === 'overview'"
           class="source-view__tab-panel"
           role="tabpanel"
-          :aria-labelledby="tabsRef?.getTabId('overview')"
+          :aria-labelledby="getTabId('overview')"
         >
           <div class="source-view__overview-grid">
             <div class="source-view__overview-card">
@@ -455,7 +459,7 @@ async function onDeleteCron() {
         </section>
 
         <!-- Config Tab -->
-        <section v-if="activeTab === 'config'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="tabsRef?.getTabId('config')">
+        <section v-if="activeTab === 'config'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="getTabId('config')">
           <div class="source-view__config-section">
             <h2>{{ t('source.editConfig') }}</h2>
             <SourceForm ref="editor" :model-value="draft" :disabled="busy" @submit="onSaveSource">
@@ -482,7 +486,7 @@ async function onDeleteCron() {
         </section>
 
         <!-- Schedules Tab -->
-        <section v-if="activeTab === 'schedules'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="tabsRef?.getTabId('schedules')">
+        <section v-if="activeTab === 'schedules'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="getTabId('schedules')">
           <div class="source-view__schedules-section">
             <div class="source-view__section-header">
               <h2>{{ t('source.schedules') }}</h2>
@@ -545,7 +549,7 @@ async function onDeleteCron() {
         </section>
 
         <!-- Jobs Tab -->
-        <section v-if="activeTab === 'jobs'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="tabsRef?.getTabId('jobs')">
+        <section v-if="activeTab === 'jobs'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="getTabId('jobs')">
           <div class="source-view__jobs-section">
             <div class="source-view__section-header">
               <h2>{{ t('source.jobs') }}</h2>
