@@ -1,54 +1,63 @@
-# InKCre Web Monorepo
+# InKCre TypeScript Implementation
 
-Vue web, WXT browser-extension, shared-core, and Module Federation clients for InKCre.
+The InKCre implemented in TypeScript. Ships the Vue web peer, the WXT browser-extension peer, and TypeScript-implemented first-party extensions, all consuming a shared `@inkcre/core` package.
 
-Reason in English. Communicate with humans in Chinese.
+## Mental Model
+
+InKCre is a system of heterogeneous peers sharing one info-base. Peers differ in runtime capability, not in authority: no fixed frontend/backend hierarchy exists.
+
+A single admitted database protocol carries both deployment state and persisted information. Every authenticated peer can operate the full protocol surface, submit jobs, and claim work it can execute. `impl-py` owns the authoritative database schema and migrations; that does not make it a controller of other peers.
+
+Collection, organization, and application are three distinct activities around shared information. Information and business state do not belong to any executing node and do not disappear when a node stops.
+
+Extensions add capabilities to the peer they run on. Different Distributions of the same extension participate in the shared system under one business and data contract; no Distribution is the "central" implementation.
+
+Before choosing a design, identify shared state, business contracts, and each participant's capability. Then pick direct read/write, job execution, or peer delegation. The authoritative model is in [unit topology](docs/_shared/20-product-tdd/unit-topology.md), [system state and authority](docs/_shared/20-product-tdd/system-state-and-authority.md), and the [knowledge capability contract](docs/_shared/20-product-tdd/knowledge-capability-contract.md).
 
 ## Knowledge Owners
 
-- Repository topology and package boundaries: `ARCHITECTURE.md`.
-- Physical layout: `FILESYSTEM.md`.
-- Logical Unit internals: `docs/30-unit-tdd/`.
-- Runtime, development capabilities, and delivery: `docs/40-deployment/`.
-- Shared product truth and cross-unit contracts: the read-only `docs/_shared/` Hub reference.
-- Physical-subtree hazards: the nearest local `AGENTS.md`.
-- Volatile work state: the active packet under `tasks/`.
+`impl-ts` is an SVC Spoke and an internal monorepo. Shared Hub truth is mounted read-only at `docs/_shared/` (git submodule → `InKCre/docs`).
 
-UI 工作先读取 `apps/client-web/node_modules/@inkcre/ui-web/DESIGN.md` 与 `skills/ui-web/SKILL.md`，按所用组件进入同版本参考和迁移说明。扩展单独工作时使用其自身 node_modules 中的同一版本。包拥有设计与 API 规则，本仓库拥有业务流程和布局；纯后端任务无需加载这些 UI 文档。
+- Product behavior and language: `docs/_shared/10-prd/`
+- Cross-unit contracts and topology: `docs/_shared/20-product-tdd/`
+- Repository topology and package boundaries: `ARCHITECTURE.md`
+- Physical layout and entrypoints: `FILESYSTEM.md`
+- Logical Unit internals: `docs/30-unit-tdd/`
+- Runtime, development capabilities, and delivery: `docs/40-deployment/`
+- Volatile task state: `tasks/`
+- Mechanically enforceable facts: code, configuration, schemas, tests, and CI
+- Subtree-specific hazards: the nearest local `AGENTS.md`
 
-当前 UI 2.0 迁移入口为 [task packet](tasks/ui-v2-migration/packet.md)。
+## Repository Map
 
-## Working Protocol
+- `apps/client-web/`: static Vue SPA (the web peer)
+- `apps/client-webext/`: WXT browser extension (the browser-extension peer)
+- `packages/core/`: shared models, protocols, storage/resolver mechanics, Extension Host
+- `packages/ext-dev-utils/`: extension development utilities
+- `extensions/`: independently versioned native Module Federation producers (mail, memos, twitter)
+- `contracts/`: checked upstream release and compatibility inputs (generated, do not hand-edit)
+- `runtime/`: portable local and SSH database topology
+- `scripts/`: development orchestration, contract generation, verification, release tooling
+- `docs/30-unit-tdd/`: logical Unit design
+- `docs/40-deployment/`: runtime and delivery truth
 
-- Run `svc status . --json`, then use `svc lookup --keyword` and `svc lookup --path` only for guidance required by the current pressure.
-- Follow the organization-wide [Git and GitHub Governance](https://github.com/InKCre/.github/blob/main/GOVERNANCE.md)
-  and [contribution workflow](https://github.com/InKCre/.github/blob/main/CONTRIBUTING.md) for branches, pull requests,
-  release authority, and delivery boundaries; repository-local documents own exact commands.
-- Read the active Task Packet, relevant durable owner, and nearest local `AGENTS.md` before editing.
-- Resolve one semantic owner before adding durable material. Prefer code, types, configuration, and CI for mechanically enforceable truth.
-- Before a reference-sensitive, logic-altering, or non-obviously-local durable mutation, state the target, objective `From -> To`, operation, blast radius, invariants, verification, and uncertainty.
-- Search before creating a type, utility, document, or abstraction.
-- Keep Task Packets compact and disposable. Add supporting entries only when a distinct owner and coordination pressure exist.
+For UI work, read the installed `@inkcre/ui-web` package's `DESIGN.md` and `skills/ui-web/SKILL.md` under the consuming app's `node_modules/`. The package owns design and API rules; this repository owns business flows and layout. Backend-only tasks do not need the UI docs.
 
-## Engineering Workflow
+**UI Source Development**: When modifying `@inkcre/ui-web` source, see [UI Development Pitfalls](../ui/docs/ui-development-pitfalls.md) for common traps and the correct workflow. Use `pnpm dev:ui --ui-source ../ui/packages/web` or set `INKCRE_UI_SOURCE_ROOT` with a full InkUI build.
 
-- Runtime: Node.js 22.22.3; package manager: pnpm 11.11.0.
-- Install: `pnpm install --frozen-lockfile`.
-- Diagnose: `pnpm run doctor` (`pnpm doctor` is a different pnpm command).
-- Develop: `pnpm dev`, `pnpm dev:all`, or an explicit source lane documented in `docs/40-deployment/development-runtime.md`.
-- Required verification: `pnpm check`; required production outputs: `pnpm build`.
-- Optional local migration probes: `pnpm lint:type-aware` and `pnpm type-check:ts7`.
-- Follow the organization-wide [Verification and Test Policy](https://github.com/InKCre/.github/blob/main/TESTING.md).
-  The admitted Playwright E2E suites do not authorize new automation by analogy.
+## Development Constraints
+
+- Runtime: Node.js 22.22.3; package manager: pnpm 11.11.0. Exact commands live in `package.json` and `docs/40-deployment/`.
+- `.env` files are dotenv data, not shell scripts. Load them through the application because values may contain shell metacharacters.
+- Generated contracts under `contracts/` are checked-in projections. Change their source and regenerate; do not edit them directly.
+- The `apps/client-webext/` WXT extension and the `apps/client-web/` Vue SPA share `@inkcre/core` but run in different security contexts. Changes that cross the seam must be validated against both runtimes.
 - Follow `.agents/prompts/code-for-human.md` for source changes.
-- Require explicit Human authorization before modifying source code and before commit, push, or external publication. Task Packet maintenance is exempt from the source gate.
 
-## Multi-Repo Boundary
+## Governance And Workflow
 
-- This repository is a Spoke and an internal monorepo. Treat `docs/_shared/` as read-only.
-- Capture missing shared truth in the active packet, then use `.agents/skills/edit-svc-shared-docs/SKILL.md` to change the Hub source and publish it before updating this reference.
-- Never mix Hub edits, a shared-reference bump, and Spoke-local work in one commit.
-
+- Git and GitHub workflow: [Git and GitHub Governance](https://github.com/InKCre/.github/blob/main/GOVERNANCE.md) and [Contributing](https://github.com/InKCre/.github/blob/main/CONTRIBUTING.md)
+- Verification and test selection: [Verification and Test Policy](https://github.com/InKCre/.github/blob/main/TESTING.md)
+- Hub-Spoke shared-doc workflow: `.agents/skills/edit-svc-shared-docs/`
 
 <!-- svc:begin -->
 ## SVC
@@ -56,9 +65,6 @@ UI 工作先读取 `apps/client-web/node_modules/@inkcre/ui-web/DESIGN.md` 与 `
 Use `svc --help` or `svc <command> --help`.
 
 - `svc status`: inspect project state
-- `svc lookup`: read SVC guidance
-- `svc task init`: create a task packet
-- `svc task grow`: inspect packet shape without changing files
 - `svc dev`: manage declared development targets
 
 If `AGENTS.local.md` exists, read it after this file. It is ignored local guidance; shared rules belong here.
