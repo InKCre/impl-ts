@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { InkForm, InkInput, InkButton, InkDoubleCheck, InkDropdown, InkSwitch } from '@inkcre/ui-web'
+import {
+  InkForm,
+  InkInput,
+  InkButton,
+  InkDoubleCheck,
+  InkDropdown,
+  InkSwitch,
+} from '@inkcre/ui-web'
 import { toast } from '@/components/toast/toast'
 import { configStore, MetaConfigSchema, type MetaConfig } from '@inkcre/core'
 import { z } from 'zod'

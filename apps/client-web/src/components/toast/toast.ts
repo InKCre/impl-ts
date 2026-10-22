@@ -39,7 +39,8 @@ function dismiss(id: number): void {
 
 function push(kind: ToastKind, message: string, durationMs?: number): number {
   const id = nextId++
-  const effectiveDuration = durationMs ?? (kind === 'error' ? ERROR_DURATION_MS : DEFAULT_DURATION_MS)
+  const effectiveDuration =
+    durationMs ?? (kind === 'error' ? ERROR_DURATION_MS : DEFAULT_DURATION_MS)
   state.items.push({ id, kind, message, durationMs: effectiveDuration })
   if (effectiveDuration > 0) {
     timers.set(

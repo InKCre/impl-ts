@@ -50,21 +50,21 @@ const browseError = ref<string | null>(null)
 // Helper to format user-friendly error messages
 function formatErrorMessage(error: unknown, fallbackKey: string): string {
   const message = error instanceof Error ? error.message : String(error)
-  
+
   // Don't expose raw HTML or technical details to users
   if (message.includes('<!doctype') || message.includes('<html') || message.length > 200) {
     return t(fallbackKey)
   }
-  
+
   // Clean up common technical error patterns
   if (message.includes('prepared statement')) {
     return t('common.databaseError')
   }
-  
+
   if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
     return t('common.networkError')
   }
-  
+
   return message
 }
 const installRequested = computed(
@@ -274,11 +274,15 @@ watch(
 )
 
 // Watch for connection state changes and reload when connected
-watch(connected, (isConnected) => {
-  if (isConnected) {
-    refreshAll()
-  }
-}, { immediate: true })
+watch(
+  connected,
+  (isConnected) => {
+    if (isConnected) {
+      refreshAll()
+    }
+  },
+  { immediate: true }
+)
 
 onMounted(() => {
   void loadBrowseUrl()

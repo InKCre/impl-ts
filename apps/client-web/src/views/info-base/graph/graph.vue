@@ -4,7 +4,14 @@ import { useI18n } from 'vue-i18n'
 import { VueFlow, useNodesInitialized, useVueFlow, type NodeDragEvent } from '@vue-flow/core'
 import { InkButton, InkDropdown, InkForm, InkLoading, InkPlaceholder } from '@inkcre/ui-web'
 import dagre from '@dagrejs/dagre'
-import { forceSimulation, forceManyBody, forceLink, forceCollide, forceCenter, forceRadial } from 'd3-force'
+import {
+  forceSimulation,
+  forceManyBody,
+  forceLink,
+  forceCollide,
+  forceCenter,
+  forceRadial,
+} from 'd3-force'
 import {
   CapabilityDelegationUnavailable,
   configStore,
@@ -73,7 +80,17 @@ watch(layoutAlgorithm, (algo) => {
   localStorage.setItem(LAYOUT_KEY, algo)
 })
 
-const { fitView, zoomIn, zoomOut, getNodes, onMoveStart, updateNodeInternals, setCenter, setViewport, getViewport } = useVueFlow()
+const {
+  fitView,
+  zoomIn,
+  zoomOut,
+  getNodes,
+  onMoveStart,
+  updateNodeInternals,
+  setCenter,
+  setViewport,
+  getViewport,
+} = useVueFlow()
 const nodesInitialized = useNodesInitialized()
 onMoveStart(() => {
   pendingCamera.value = false
@@ -442,14 +459,27 @@ function layoutForce(): void {
 
   // Prepare links for simulation
   const simLinks = edges.value
-    .filter(e => simNodes.some(n => n.id === e.source) && simNodes.some(n => n.id === e.target))
-    .map(e => ({ source: e.source, target: e.target }))
+    .filter(
+      (e) => simNodes.some((n) => n.id === e.source) && simNodes.some((n) => n.id === e.target)
+    )
+    .map((e) => ({ source: e.source, target: e.target }))
 
   // Create force simulation
   const simulation = forceSimulation(simNodes)
     .force('charge', forceManyBody().strength(-800))
-    .force('link', forceLink(simLinks).id((d: any) => d.id).distance(250).strength(0.5))
-    .force('collide', forceCollide().radius((d: any) => d.radius + 40).iterations(2))
+    .force(
+      'link',
+      forceLink(simLinks)
+        .id((d: any) => d.id)
+        .distance(250)
+        .strength(0.5)
+    )
+    .force(
+      'collide',
+      forceCollide()
+        .radius((d: any) => d.radius + 40)
+        .iterations(2)
+    )
     .force('center', forceCenter(centerX, centerY))
     .stop()
 
@@ -548,7 +578,7 @@ function layoutRadial(): void {
   // Prepare nodes with target radius
   const simNodes = nodes.value.map((node) => {
     const depth = ringDepth.get(node.id) ?? 1
-    const targetRadius = depth === 0 ? 0 : depthRadius.get(depth) ?? baseRadius
+    const targetRadius = depth === 0 ? 0 : (depthRadius.get(depth) ?? baseRadius)
     return {
       id: node.id,
       x: byId.get(node.id)?.position.x ?? centerX + (Math.random() - 0.5) * 400,
@@ -560,14 +590,27 @@ function layoutRadial(): void {
 
   // Prepare links
   const simLinks = edges.value
-    .filter(e => simNodes.some(n => n.id === e.source) && simNodes.some(n => n.id === e.target))
-    .map(e => ({ source: e.source, target: e.target }))
+    .filter(
+      (e) => simNodes.some((n) => n.id === e.source) && simNodes.some((n) => n.id === e.target)
+    )
+    .map((e) => ({ source: e.source, target: e.target }))
 
   // Create simulation with radial force
   const simulation = forceSimulation(simNodes)
     .force('charge', forceManyBody().strength(-500))
-    .force('link', forceLink(simLinks).id((d: any) => d.id).distance(200).strength(0.3))
-    .force('collide', forceCollide().radius((d: any) => d.radius + 30).iterations(2))
+    .force(
+      'link',
+      forceLink(simLinks)
+        .id((d: any) => d.id)
+        .distance(200)
+        .strength(0.3)
+    )
+    .force(
+      'collide',
+      forceCollide()
+        .radius((d: any) => d.radius + 30)
+        .iterations(2)
+    )
     .force('radial', forceRadial((d: any) => d.targetRadius, centerX, centerY).strength(0.8))
     .stop()
 
@@ -678,11 +721,15 @@ async function realizeScene(): Promise<void> {
   }
 }
 
-watch([sceneKey, scale], () => {
-  // In incremental mode, scene changes are handled by mergeGraph; skip full reload.
-  if (expansionMode.value === 'incremental' && status.value === 'ready') return
-  void loadScene()
-}, { immediate: true })
+watch(
+  [sceneKey, scale],
+  () => {
+    // In incremental mode, scene changes are handled by mergeGraph; skip full reload.
+    if (expansionMode.value === 'incremental' && status.value === 'ready') return
+    void loadScene()
+  },
+  { immediate: true }
+)
 watch(direction, applyPresentation)
 watch(layoutAlgorithm, () => {
   // Re-layout when algorithm changes
@@ -770,7 +817,11 @@ async function loadIncrementalRelation(relation: number): Promise<void> {
   }
 }
 
-function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRelation?: number): void {
+function mergeGraph(
+  graph: GraphModel,
+  newFocalBlock: number | null,
+  newFocalRelation?: number
+): void {
   const existingBlockIds = new Set(nodes.value.map((n) => n.data.block.id))
   const existingRelationIds = new Set(edges.value.map((e) => e.data.relation.id))
 
@@ -841,7 +892,7 @@ function mergeGraph(graph: GraphModel, newFocalBlock: number | null, newFocalRel
   // Set skipLayout to prevent realizeScene from re-layouting all nodes
   skipLayout.value = true
   setTimeout(() => {
-    layoutNewNodes(newBlocks.map(b => b.id))
+    layoutNewNodes(newBlocks.map((b) => b.id))
     updateNodeInternals(nodes.value.map((n) => n.id))
     void nextTick(() => {
       routeEdges()
@@ -866,22 +917,25 @@ function focusCameraOnNode(blockId: number): void {
   const container = document.querySelector('.vue-flow')
   const rect = container?.getBoundingClientRect()
   const currentZoom = getViewport()?.zoom ?? 1
-  void setViewport({
-    x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
-    y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
-    zoom: currentZoom,
-  }, {
-    duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400,
-  })
+  void setViewport(
+    {
+      x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
+      y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
+      zoom: currentZoom,
+    },
+    {
+      duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400,
+    }
+  )
 }
 
 // Layout only new nodes, positioning them near their connected existing nodes
 function layoutNewNodes(newBlockIds: number[]): void {
   if (newBlockIds.length === 0) return
 
-  const newNodeIds = new Set(newBlockIds.map(id => String(id)))
-  const existingNodes = nodes.value.filter(n => !newNodeIds.has(n.id))
-  const newNodes = nodes.value.filter(n => newNodeIds.has(n.id))
+  const newNodeIds = new Set(newBlockIds.map((id) => String(id)))
+  const existingNodes = nodes.value.filter((n) => !newNodeIds.has(n.id))
+  const newNodes = nodes.value.filter((n) => newNodeIds.has(n.id))
 
   if (existingNodes.length === 0) {
     // No existing nodes, layout all nodes with dagre
@@ -906,8 +960,9 @@ function layoutNewNodes(newBlockIds: number[]): void {
   for (const newNode of newNodes) {
     // Find edges connecting this new node to existing nodes
     const connectedEdges = edges.value.filter(
-      e => (e.source === newNode.id && existingPositions.has(e.target)) ||
-           (e.target === newNode.id && existingPositions.has(e.source))
+      (e) =>
+        (e.source === newNode.id && existingPositions.has(e.target)) ||
+        (e.target === newNode.id && existingPositions.has(e.source))
     )
 
     if (connectedEdges.length > 0) {
@@ -930,7 +985,8 @@ function layoutNewNodes(newBlockIds: number[]): void {
     }
 
     // No connected edges, position near center of existing nodes
-    let sumX = 0, sumY = 0
+    let sumX = 0,
+      sumY = 0
     for (const pos of existingPositions.values()) {
       sumX += pos.x
       sumY += pos.y
@@ -938,7 +994,10 @@ function layoutNewNodes(newBlockIds: number[]): void {
     const centerX = sumX / existingPositions.size
     const centerY = sumY / existingPositions.size
     const fallbackIndex = newNodes.indexOf(newNode)
-    positions.set(newNode.id, { x: centerX + nodeWidth + spacing, y: centerY + fallbackIndex * (nodeHeight + 50) })
+    positions.set(newNode.id, {
+      x: centerX + nodeWidth + spacing,
+      y: centerY + fallbackIndex * (nodeHeight + 50),
+    })
   }
 
   // Apply positions to new nodes only
@@ -1021,7 +1080,9 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
           @click="inspectRelation(focalRelation)"
         />
         <details v-if="focalBlock !== null" class="graph-view__options">
-          <summary class="graph-view__options-summary">{{ t('infoBase.graph.viewOptions') }}</summary>
+          <summary class="graph-view__options-summary">
+            {{ t('infoBase.graph.viewOptions') }}
+          </summary>
           <InkForm layout="col">
             <InkDropdown
               v-model="scale"
@@ -1146,11 +1207,7 @@ function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): bool
     </VueFlow>
 
     <!-- Transparent scrim for side panels -->
-    <div
-      v-if="isSidePanelOpen"
-      class="graph-view__scrim"
-      @click="closeSidePanel"
-    />
+    <div v-if="isSidePanelOpen" class="graph-view__scrim" @click="closeSidePanel" />
 
     <BlockInspectorPopup
       v-if="isRoute(currentRoute, 'block') && currentRoute?.name === 'block'"

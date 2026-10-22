@@ -68,13 +68,13 @@
 
 五条 Track 各自可独立推进、独立纵向展开。当前没有跨 Track 的真实集成屏障——Human 授权就是节奏控制。
 
-| Track | 关注点 | 当前紧迫度 | 预计首个 Slice 工作量 |
-| --- | --- | --- | --- |
-| [track-foundation](track-foundation.md) | 拆除最严重问题（通知条、原生 alert/confirm、缺 h1、黑底按钮、原生 checkbox） | 最高 | ~30 分钟 |
-| [track-ia](track-ia.md) | 信息架构（导航、标题、面包屑、视图切换、全局搜索入口） | 高 | ~1-2 小时 |
-| [track-content](track-content.md) | 内容呈现（卡片统一、空态、错误态、反馈 toast、加载态） | 中 | ~1-2 小时 |
-| [track-copy](track-copy.md) | 文案与元叙述清洗（i18n、用户任务语言、概念翻译） | 中 | ~1 小时 |
-| [track-a11y](track-a11y.md) | 可访问性与动效（焦点、reduced-motion、标题层级、触控目标） | 中 | ~1 小时 |
+| Track                                   | 关注点                                                                       | 当前紧迫度 | 预计首个 Slice 工作量 |
+| --------------------------------------- | ---------------------------------------------------------------------------- | ---------- | --------------------- |
+| [track-foundation](track-foundation.md) | 拆除最严重问题（通知条、原生 alert/confirm、缺 h1、黑底按钮、原生 checkbox） | 最高       | ~30 分钟              |
+| [track-ia](track-ia.md)                 | 信息架构（导航、标题、面包屑、视图切换、全局搜索入口）                       | 高         | ~1-2 小时             |
+| [track-content](track-content.md)       | 内容呈现（卡片统一、空态、错误态、反馈 toast、加载态）                       | 中         | ~1-2 小时             |
+| [track-copy](track-copy.md)             | 文案与元叙述清洗（i18n、用户任务语言、概念翻译）                             | 中         | ~1 小时               |
+| [track-a11y](track-a11y.md)             | 可访问性与动效（焦点、reduced-motion、标题层级、触控目标）                   | 中         | ~1 小时               |
 
 **推荐推进次序**：track-foundation → track-ia → track-content → track-copy → track-a11y。但每条 Track 都是开放的，未来发现新问题时回到对应 Track 加 Slice。
 

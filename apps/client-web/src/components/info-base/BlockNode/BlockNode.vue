@@ -60,7 +60,9 @@ const inspect = () => emit('inspect', props.data.block.id)
         :resolver="data.resolver"
         :solved-content="data.solvedContent"
       />
-      <span v-else class="block-node__preview-error">{{ t('infoBase.graph.previewUnavailable') }}</span>
+      <span v-else class="block-node__preview-error">{{
+        t('infoBase.graph.previewUnavailable')
+      }}</span>
     </div>
     <footer>
       <span class="block-node__identity">#{{ data.block.id }}</span>

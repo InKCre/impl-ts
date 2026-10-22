@@ -459,12 +459,19 @@ async function onDeleteCron() {
         </section>
 
         <!-- Config Tab -->
-        <section v-if="activeTab === 'config'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="getTabId('config')">
+        <section
+          v-if="activeTab === 'config'"
+          class="source-view__tab-panel"
+          role="tabpanel"
+          :aria-labelledby="getTabId('config')"
+        >
           <div class="source-view__config-section">
             <h2>{{ t('source.editConfig') }}</h2>
             <SourceForm ref="editor" :model-value="draft" :disabled="busy" @submit="onSaveSource">
               <p v-if="sourceError" role="alert" class="text-feedback-error">{{ sourceError }}</p>
-              <p v-else-if="sourceSaved && !editor?.isDirty" role="status">{{ t('source.saved') }}</p>
+              <p v-else-if="sourceSaved && !editor?.isDirty" role="status">
+                {{ t('source.saved') }}
+              </p>
               <div class="source-view__actions">
                 <InkButton
                   :text="t('source.delete')"
@@ -486,7 +493,12 @@ async function onDeleteCron() {
         </section>
 
         <!-- Schedules Tab -->
-        <section v-if="activeTab === 'schedules'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="getTabId('schedules')">
+        <section
+          v-if="activeTab === 'schedules'"
+          class="source-view__tab-panel"
+          role="tabpanel"
+          :aria-labelledby="getTabId('schedules')"
+        >
           <div class="source-view__schedules-section">
             <div class="source-view__section-header">
               <h2>{{ t('source.schedules') }}</h2>
@@ -549,7 +561,12 @@ async function onDeleteCron() {
         </section>
 
         <!-- Jobs Tab -->
-        <section v-if="activeTab === 'jobs'" class="source-view__tab-panel" role="tabpanel" :aria-labelledby="getTabId('jobs')">
+        <section
+          v-if="activeTab === 'jobs'"
+          class="source-view__tab-panel"
+          role="tabpanel"
+          :aria-labelledby="getTabId('jobs')"
+        >
           <div class="source-view__jobs-section">
             <div class="source-view__section-header">
               <h2>{{ t('source.jobs') }}</h2>

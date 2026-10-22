@@ -173,7 +173,9 @@ const formatCapability = (cap: unknown): string => {
     </header>
 
     <div class="entity-card__meta">
-      <span>{{ peer.application_version ? `v${peer.application_version}` : t('peer.versionUnknown') }}</span>
+      <span>{{
+        peer.application_version ? `v${peer.application_version}` : t('peer.versionUnknown')
+      }}</span>
     </div>
 
     <p v-if="saveError" role="alert" class="peer-card__save-error text-feedback-error">
@@ -226,16 +228,18 @@ const formatCapability = (cap: unknown): string => {
           {{ showRawCapabilities ? t('peer.viewFormatted') : t('peer.viewRaw') }}
         </button>
       </div>
-      
+
       <!-- Formatted view -->
       <ul v-if="!showRawCapabilities" class="peer-card__capabilities-list">
         <li v-for="(cap, index) in peer.capabilities" :key="index">
           <code>{{ formatCapability(cap) }}</code>
         </li>
       </ul>
-      
+
       <!-- Raw JSON view -->
-      <pre v-else class="peer-card__capabilities-raw">{{ JSON.stringify(peer.capabilities, null, 2) }}</pre>
+      <pre v-else class="peer-card__capabilities-raw">{{
+        JSON.stringify(peer.capabilities, null, 2)
+      }}</pre>
     </InkDialog>
 
     <!-- Delete dialog -->
