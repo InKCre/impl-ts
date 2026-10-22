@@ -124,3 +124,15 @@
     拖拽与导航胶水。
 - `document.querySelector('.vue-flow')` 改为 container 作用域查询。
 - realizeScene 的过期守卫从 generation 改为组合式函数暴露的 epoch（语义等价）。
+
+## source.vue / extensionCard.vue 拆分（2026-10-22）
+
+- `source.vue` 684 → 543 行：数据层 `use-source-detail.ts`（三个区域独立请求
+  计数器）、`use-job-creator.ts`、`use-cron-manager.ts`；视图保留 tabs、脏检查
+  导航、保存/删除。删除从未赋值的死状态 `jobAction`。
+- `extensionCard.vue` 701 → 315 行：`use-extension-peer-runtime.ts`（状态观测、
+  enable/uninstall、perform 时序守卫、目录事实、setup contribution）、
+  `use-extension-version-dialog.ts`（版本选择 + PeerOutcomeUnknown 独立复验）、
+  `use-extension-info-dialogs.ts`（文档 + 共享配置）。删除未使用的
+  webPeerConnectionState 导入（peerSelectionDisabled 实为 props）。
+- 纯重构，E2E 25/25 + pnpm check 验证。
