@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import { expect, test } from '@playwright/test'
 import { SignJWT } from 'jose'
 
@@ -47,25 +48,48 @@ async function databaseRows<Row>(path: string): Promise<Row[]> {
   return JSON.parse(body) as Row[]
 }
 
-async function maintainLexicalIndex(page: import('@playwright/test').Page): Promise<LexicalJob> {
+async function archiveRequest(
+  page: import('@playwright/test').Page,
+  url: string,
+  data?: unknown
+): Promise<{ status: number; body: string }> {
+  return page.evaluate(
+    async ({ url, data }) => {
+      const response = await fetch(url, {
+        method: data === undefined ? 'GET' : 'POST',
+        headers: { 'x-tweet-db-client': 'x-monkey', 'Content-Type': 'application/json' },
+        body: data === undefined ? undefined : JSON.stringify(data),
+        signal: AbortSignal.timeout(15_000),
+      })
+      return { status: response.status, body: await response.text() }
+    },
+    { url, data }
+  )
+}
+
+async function maintainLexicalIndex(onCreated: (id: number) => Promise<void>): Promise<LexicalJob> {
   const authorization = { Authorization: `Bearer ${await databaseToken()}` }
-  const created = await page.request.post(new URL('jobs', coreBase()).toString(), {
-    headers: authorization,
-    data: {
+  const created = await fetch(new URL('jobs', coreBase()), {
+    method: 'POST',
+    headers: { ...authorization, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
       type: CORE_LEXICAL_MAINTAIN_JOB,
       parameters: { options: { max_records: 1000 } },
-    },
+    }),
+    signal: AbortSignal.timeout(15_000),
   })
   const createdBody = await created.text()
-  expect(created.status(), createdBody).toBe(201)
+  expect(created.status, createdBody).toBe(201)
   const initial = JSON.parse(createdBody) as LexicalJob
+  await onCreated(initial.id)
 
   const read = async (): Promise<LexicalJob> => {
-    const response = await page.request.get(new URL(`jobs/${initial.id}`, coreBase()).toString(), {
+    const response = await fetch(new URL(`jobs/${initial.id}`, coreBase()), {
       headers: authorization,
+      signal: AbortSignal.timeout(15_000),
     })
     const body = await response.text()
-    expect(response.ok(), body).toBe(true)
+    expect(response.ok, body).toBe(true)
     return JSON.parse(body) as LexicalJob
   }
   const deadline = Date.now() + 120_000
@@ -111,6 +135,44 @@ test.afterEach(async ({ page: _page }, testInfo) => {
   }
   await writeFile(path, `${JSON.stringify({ ...record, result: testInfo.status }, null, 2)}\n`)
   await testInfo.attach('candidate and fixture record', { path, contentType: 'application/json' })
+})
+
+test('HTTP transport failures do not log signed credentials or browser Cookies', async ({
+  page,
+  context,
+}) => {
+  const sentinel = 'FAKE_ACCEPTANCE_CREDENTIAL_SENTINEL'
+  let sawAuthorization = false
+  let sawCookie = false
+  const server = createServer((request, response) => {
+    if (request.url === '/disconnect') {
+      sawAuthorization ||= request.headers.authorization === `Bearer ${sentinel}`
+      sawCookie ||= request.headers.cookie?.includes(sentinel) ?? false
+      request.socket.destroy()
+    } else response.end('<!doctype html><title>Acceptance transport check</title>')
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address() as { port: number }
+  const base = `http://127.0.0.1:${address.port}`
+  try {
+    const signedError = await fetch(`${base}/disconnect`, {
+      headers: { Authorization: `Bearer ${sentinel}` },
+    }).catch((error: Error) => error)
+    expect(signedError).toBeInstanceOf(Error)
+    expect(String(signedError)).not.toContain(sentinel)
+    await context.addCookies([{ name: 'acceptance', value: sentinel, url: base }])
+    await page.goto(base)
+    const cookieError = await archiveRequest(page, `${base}/disconnect`).catch(
+      (error: Error) => error
+    )
+    expect(cookieError).toBeInstanceOf(Error)
+    expect(String(cookieError)).not.toContain(sentinel)
+    expect(sawAuthorization).toBe(true)
+    expect(sawCookie).toBe(true)
+  } finally {
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
 })
 
 test('Core self-hosted connection writes native records that the real Twitter MF can read', async ({
@@ -171,6 +233,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   const ready = await fetch(new URL('readyz', coreBase()), { signal: AbortSignal.timeout(15_000) })
   if (!ready.ok) throw new Error(`Core readiness returned HTTP ${ready.status}`)
   const readiness = await ready.json()
+  expect(readiness.database.status, 'Core must report an admitted database').toBe('ok')
   const candidateResponse = await fetch(new URL('preview-candidate.json', webOrigin), {
     signal: AbortSignal.timeout(15_000),
   })
@@ -214,8 +277,8 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     .toBe(1)
   await recordPhase('connecting', {
     core_peer: { id: corePeers[0].id, application_version: corePeers[0].application_version },
-    database_contract: readiness.contract,
-    migration: readiness.migration,
+    database_contract: readiness.database.contract,
+    migration: readiness.database.migration,
     web_candidate: candidate,
   })
   const userId = `${stamp}01`
@@ -282,11 +345,9 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   expect(connectHeaders.origin).toBe(archiveBase.origin)
   expect(Boolean(connectHeaders.authorization?.startsWith('Bearer '))).toBe(true)
   await expect(page.getByText('Connected', { exact: true })).toBeVisible()
-  const session = await page.request.get(new URL('api/v1/session', archiveBase).toString(), {
-    headers: { 'x-tweet-db-client': 'x-monkey' },
-  })
-  expect(session.ok()).toBe(true)
-  expect(((await session.json()) as { authenticated: boolean }).authenticated).toBe(true)
+  const session = await archiveRequest(page, new URL('api/v1/session', archiveBase).toString())
+  expect(session.status, session.body).toBe(200)
+  expect((JSON.parse(session.body) as { authenticated: boolean }).authenticated).toBe(true)
   const sessionCookie = (
     await page.context().cookies(new URL('account', archiveBase).toString())
   ).find((cookie) => cookie.name === 'inkcre_twitter_archive')
@@ -312,9 +373,22 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     mask: [secretInput],
   })
 
-  const submit = await page.request.post(new URL('api/v1/archive/submit', archiveBase).toString(), {
-    headers: { 'x-tweet-db-client': 'x-monkey' },
-    data: {
+  await recordPhase('submitting', {
+    native_ids: [
+      userId,
+      postId,
+      quoteId,
+      replyId,
+      mediaId,
+      failedMediaId,
+      videoId,
+      alternateMediaId,
+    ],
+  })
+  const submit = await archiveRequest(
+    page,
+    new URL('api/v1/archive/submit', archiveBase).toString(),
+    {
       users: [
         {
           id: userId,
@@ -385,38 +459,28 @@ test('Core self-hosted connection writes native records that the real Twitter MF
           alt: 'Alternate CDN image metadata',
         },
       ],
-    },
-  })
-  const submitBody = await submit.text()
-  expect(submit.status(), submitBody).toBe(200)
-  const submitted = JSON.parse(submitBody) as {
+    }
+  )
+  expect(submit.status, submit.body).toBe(200)
+  const submitted = JSON.parse(submit.body) as {
     summary: { accepted: number; failed: number; total: number }
   }
   expect(submitted.summary).toMatchObject({ accepted: 8, failed: 0, total: 8 })
   await recordPhase('submitted', {
-    native_ids: [
-      userId,
-      postId,
-      quoteId,
-      replyId,
-      mediaId,
-      failedMediaId,
-      videoId,
-      alternateMediaId,
-    ],
     submit_summary: submitted.summary,
   })
 
-  const query = await page.request.post(new URL('api/v1/archive/query', archiveBase).toString(), {
-    headers: { 'x-tweet-db-client': 'x-monkey' },
-    data: {
+  const query = await archiveRequest(
+    page,
+    new URL('api/v1/archive/query', archiveBase).toString(),
+    {
       users: [userId],
       posts: [postId],
       media: [mediaId, failedMediaId, videoId, alternateMediaId],
-    },
-  })
-  expect(query.status()).toBe(200)
-  const queried = (await query.json()) as {
+    }
+  )
+  expect(query.status, query.body).toBe(200)
+  const queried = JSON.parse(query.body) as {
     posts: Array<{ id: string; status: string; data?: unknown }>
   }
   expect(queried.posts).toEqual([
@@ -703,7 +767,9 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     )
   )
 
-  const indexJob = await maintainLexicalIndex(page)
+  const indexJob = await maintainLexicalIndex((id) =>
+    recordPhase('indexing', { lexical_job_id: id })
+  )
   await recordPhase('indexed', {
     lexical_job_id: indexJob.id,
     post_block_id: postBlock!.id,

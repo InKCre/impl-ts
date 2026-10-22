@@ -170,6 +170,9 @@ Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter 
 
 1. 选择独占的 Python Preview／信息库，取得其成功交付的 Core、PostgREST、SHA 和获授权凭据。
    owner 在自己的 Python Peer 选择、启用该候选 Registry 的 Twitter Python Distribution，并确认账户页可达。
+   首次选择需要安装 wheel 时，宿主可能报告 `operation: restarting`；等待 readiness 恢复且该操作清空后再启用，
+   不要把此时启用得到的 HTTP 409 当成安装失败。
+   Core 镜像更新后，未启用的选择可能仍存在而 wheel 已不在新环境中；此时重新选择该精确版本完成安装，再等待重启并启用。
    不改其他 Peer 的选择；Python facade 与 Web MF facade 分别由各自 Peer 使用。
 2. 从 TS Preview 摘要选择本次不可变 deployment URL，确认其 `/preview-candidate.json` 包含需要的 Twitter MF。
    `INKCRE_E2E_WEB_URL` 使用这个 URL，脚本据此配置本次新 Web Peer 的 Registry。
