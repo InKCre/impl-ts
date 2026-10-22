@@ -115,8 +115,8 @@
 
 - 1228 行 SFC 拆为三个模块，纯行为重构（E2E 25/25 验证无回归）：
   - `graph-layouts.ts`（323 行）：三种布局算法纯函数化（hierarchical/force/radial
-    + 增量合并定位），D3 类型从 any 改为 SimulationNodeDatum，节点尺寸常量化
-    （GRAPH_NODE_WIDTH/HEIGHT、FALLBACK_*），拖拽节点位置保留逻辑内聚。
+    - 增量合并定位），D3 类型从 any 改为 SimulationNodeDatum，节点尺寸常量化
+      （GRAPH_NODE_WIDTH/HEIGHT、FALLBACK_*），拖拽节点位置保留逻辑内聚。
   - `useGraphScene.ts`（553 行）：场景状态、路由寻址、数据加载（整图替换 +
     增量合并）、预览并发解析（generation/connection 双重视属守卫）、焦点呈现；
     通过 GraphSceneHooks 回调与 Vue Flow 解耦。
