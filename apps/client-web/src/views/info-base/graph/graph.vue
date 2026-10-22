@@ -1,147 +1,81 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { VueFlow, useNodesInitialized, useVueFlow, type NodeDragEvent } from '@vue-flow/core'
 import { InkButton, InkDropdown, InkForm, InkLoading, InkPlaceholder } from '@inkcre/ui-web'
-import dagre from '@dagrejs/dagre'
-import {
-  forceSimulation,
-  forceManyBody,
-  forceLink,
-  forceCollide,
-  forceCenter,
-  forceRadial,
-} from 'd3-force'
-import {
-  CapabilityDelegationUnavailable,
-  configStore,
-  UnknownResolverError,
-  getInfoBaseRouter,
-  GraphNavigationRetrievalManager,
-  LexicalRetrievalManager,
-  presentLexicalMatches,
-  ResolverCache,
-  type Block,
-  type GraphDirection,
-  type GraphModel,
-  type InfoBaseRoute,
-  type Relation,
-} from '@inkcre/core'
+import { getInfoBaseRouter, type InfoBaseRoute } from '@inkcre/core'
 
-import { extensionHostRestoreState, getExtensionHost } from '@/core'
 import BlockNodeComponent from '@/components/info-base/BlockNode/BlockNode.vue'
 import RelationEdgeComponent from '@/components/info-base/RelationEdge/RelationEdge.vue'
 import BlockInspectorPopup from '@/components/info-base/BlockInspectorPopup/BlockInspectorPopup.vue'
 import RelationInspectorPopup from '@/components/info-base/RelationInspectorPopup/RelationInspectorPopup.vue'
 import SolvedContentPopup from '@/components/info-base/SolvedContentPopup/SolvedContentPopup.vue'
-import { blockNode, relationEdge, type BlockNode, type RelationEdge } from './graph-model'
 import { openRecallSearch } from '@/components/recall/recall-search'
+import type { BlockNode, RelationEdge } from './graph-model'
+import {
+  layoutForce,
+  layoutHierarchical,
+  layoutNewNodes,
+  layoutRadial,
+  type MeasuredNode,
+} from './graph-layouts'
+import { useGraphScene } from './useGraphScene'
 
-type SceneScale = 'compact' | 'standard' | 'broad'
-type SceneStatus = 'loading' | 'ready' | 'empty' | 'missing' | 'not-found' | 'limit' | 'error'
-type ExpansionMode = 'smooth' | 'incremental'
-type LayoutAlgorithm = 'hierarchical' | 'radial' | 'force'
-
-const SCALE_LIMITS: Record<SceneScale, number> = { compact: 8, standard: 20, broad: 50 }
-const EXPANSION_MODE_KEY = 'inkcre.graph.expansionMode'
-const LAYOUT_KEY = 'inkcre.graph.layout'
-const container = ref<HTMLElement | null>(null)
-const infoBaseRouter = getInfoBaseRouter()
 const { t } = useI18n()
-const currentRoute = computed(() => infoBaseRouter.current.value)
-const nodes = shallowRef<BlockNode[]>([])
-const edges = shallowRef<RelationEdge[]>([])
-const status = ref<SceneStatus>('loading')
-const delegationUnavailable = ref(false)
-const scale = ref<SceneScale>('standard')
-const direction = ref<GraphDirection>('both')
-const expansionMode = ref<ExpansionMode>(
-  (localStorage.getItem(EXPANSION_MODE_KEY) as ExpansionMode) || 'smooth'
-)
-const layoutAlgorithm = ref<LayoutAlgorithm>(
-  (localStorage.getItem(LAYOUT_KEY) as LayoutAlgorithm) || 'radial'
-)
-const previewReady = ref(false)
-const pendingCamera = ref(false)
-const transitioning = ref(false)
-const realizing = ref(false)
-const skipLayout = ref(false)
-const selectedBlock = ref<number | null>(null)
-const positionCache = new Map<string, { x: number; y: number }>()
-const draggedNodes = new Set<string>()
-let generation = 0
-let realizationRequested = false
+const container = ref<HTMLElement | null>(null)
 
-watch(expansionMode, (mode) => {
-  localStorage.setItem(EXPANSION_MODE_KEY, mode)
+// ---------------------------------------------------------------------------
+// Scene state (data loading, previews, presentation) lives in the composable;
+// this view owns everything that requires the Vue Flow instance: measurement,
+// layout application, edge routing, and the camera.
+// ---------------------------------------------------------------------------
+
+const scene = useGraphScene({
+  layoutAndRoute: () => {
+    layoutMeasuredNodes()
+    updateNodeInternals(nodes.value.map((node) => node.id))
+    void nextTick(() => routeEdges())
+  },
+  layoutMergedAndRoute: (newBlockIds: number[], focusBlock: number | null) => {
+    const laidOut = layoutNewNodes(layoutContext(), new Set(newBlockIds.map(String)))
+    if (laidOut) {
+      nodes.value = laidOut
+    } else {
+      // No existing nodes to anchor to: run the selected full layout.
+      layoutMeasuredNodes()
+    }
+    updateNodeInternals(nodes.value.map((node) => node.id))
+    void nextTick(() => {
+      routeEdges()
+      if (focusBlock !== null) focusCameraOnNode(focusBlock)
+    })
+  },
 })
-
-watch(layoutAlgorithm, (algo) => {
-  localStorage.setItem(LAYOUT_KEY, algo)
-})
-
 const {
-  fitView,
-  zoomIn,
-  zoomOut,
-  getNodes,
-  onMoveStart,
-  updateNodeInternals,
-  setCenter,
-  setViewport,
-  getViewport,
-} = useVueFlow()
-const nodesInitialized = useNodesInitialized()
-onMoveStart(() => {
-  pendingCamera.value = false
-})
+  nodes,
+  edges,
+  status,
+  delegationUnavailable,
+  scale,
+  direction,
+  expansionMode,
+  layoutAlgorithm,
+  pendingCamera,
+  skipLayout,
+  selectedBlock,
+  positionCache,
+  draggedNodes,
+  currentRoute,
+  sceneKey,
+  focalBlock,
+  focalRelation,
+  sceneDescription,
+  applyPresentation,
+  loadScene,
+  focusBlock,
+  focusRelation,
+} = scene
 
-const sceneAddress = computed(() => {
-  const route = currentRoute.value
-  if (!route) return null
-  if (route.path_from !== undefined && route.path_to !== undefined) {
-    return { type: 'path' as const, from: route.path_from, to: route.path_to }
-  }
-  if (route.focal_relation !== undefined) {
-    return { type: 'relation' as const, relation: route.focal_relation }
-  }
-  if (route.focal_block !== undefined) {
-    return { type: 'block' as const, block: route.focal_block }
-  }
-  if (route.q) return { type: 'recall' as const, query: route.q }
-  if (route.name === 'relation') return { type: 'relation' as const, relation: route.relation }
-  if (route.name === 'block' || route.name === 'solved-content') {
-    return { type: 'block' as const, block: route.block }
-  }
-  return { type: 'random' as const }
-})
-
-const sceneKey = computed(() => JSON.stringify(sceneAddress.value))
-// Restore may register reading destinations after the initial query has already returned.
-watch(extensionHostRestoreState, (state) => {
-  if (['restored', 'failed'].includes(state) && sceneAddress.value?.type === 'recall') {
-    void loadScene()
-  }
-})
-const focalBlock = computed(() => {
-  const address = sceneAddress.value
-  return address?.type === 'block' ? address.block : null
-})
-const focalRelation = computed(() => {
-  const address = sceneAddress.value
-  return address?.type === 'relation' ? address.relation : null
-})
-
-const sceneDescription = computed(() => {
-  const address = sceneAddress.value
-  if (address?.type === 'block') return t('infoBase.graph.scene.block', { block: address.block })
-  if (address?.type === 'relation')
-    return t('infoBase.graph.scene.relation', { relation: address.relation })
-  if (address?.type === 'path')
-    return t('infoBase.graph.scene.path', { from: address.from, to: address.to })
-  if (address?.type === 'recall') return t('infoBase.graph.scene.recall', { query: address.query })
-  return t('infoBase.graph.scene.default')
-})
 const scaleOptions = computed(() => [
   { value: 'compact', label: t('infoBase.graph.scale.compact') },
   { value: 'standard', label: t('infoBase.graph.scale.standard') },
@@ -162,484 +96,47 @@ const layoutAlgorithmOptions = computed(() => [
   { value: 'hierarchical', label: t('infoBase.graph.layout.hierarchical') },
 ])
 
-function activeRelation(relation: Relation): boolean {
-  if (direction.value === 'both') return true
-  if (focalRelation.value === relation.id) return true
-  if (focalBlock.value === null) return true
-  return direction.value === 'out'
-    ? relation.from_ === focalBlock.value
-    : relation.to_ === focalBlock.value
-}
+const {
+  fitView,
+  zoomIn,
+  zoomOut,
+  getNodes,
+  onMoveStart,
+  updateNodeInternals,
+  setViewport,
+  getViewport,
+} = useVueFlow()
+const nodesInitialized = useNodesInitialized()
+onMoveStart(() => {
+  pendingCamera.value = false
+})
 
-function applyPresentation(): void {
-  const activeBlocks = new Set<number>()
-  if (focalBlock.value !== null) activeBlocks.add(focalBlock.value)
-  for (const edge of edges.value) {
-    if (activeRelation(edge.data.relation)) {
-      activeBlocks.add(edge.data.relation.from_)
-      activeBlocks.add(edge.data.relation.to_)
-    }
-  }
-  edges.value = edges.value.map((edge) => ({
-    ...edge,
-    data: {
-      ...edge.data,
-      focal: edge.data.relation.id === focalRelation.value,
-      muted: !activeRelation(edge.data.relation),
-    },
-  }))
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    data: {
-      ...node.data,
-      focal: node.data.block.id === focalBlock.value,
-      muted: direction.value !== 'both' && !activeBlocks.has(node.data.block.id),
-    },
+function measuredNodes(): MeasuredNode[] {
+  return getNodes.value.map((node) => ({
+    id: node.id,
+    position: node.position,
+    dimensions: node.dimensions,
   }))
 }
 
-function setGraph(graph: GraphModel): void {
-  const incident = new Map<number, Relation[]>()
-  for (const relation of graph.relations) {
-    incident.set(relation.from_, [...(incident.get(relation.from_) ?? []), relation])
-    incident.set(relation.to_, [...(incident.get(relation.to_) ?? []), relation])
-  }
-  nodes.value = graph.blocks.map((block) =>
-    blockNode(block, {
-      focal: block.id === focalBlock.value,
-      muted: false,
-      position: positionCache.get(String(block.id)),
-    })
-  )
-  edges.value = graph.relations.map((relation) =>
-    relationEdge(relation, {
-      focal: relation.id === focalRelation.value,
-      muted: false,
-    })
-  )
-  applyPresentation()
-  void loadPreviews(graph.blocks, incident, generation)
-  // Layout after a short delay to allow Vue Flow to measure nodes.
-  setTimeout(() => {
-    layoutMeasuredNodes()
-    updateNodeInternals(nodes.value.map((node) => node.id))
-    void nextTick(() => routeEdges())
-  }, 100)
-}
-
-interface PendingPreview {
-  block: Block
-  relations: Relation[]
-  owns: () => boolean
-}
-const pendingPreviews = shallowRef<PendingPreview[]>([])
-
-function updatePreviewReady(): void {
-  previewReady.value = nodes.value.every((node) => node.data.previewStatus !== 'loading')
-}
-async function resolvePreview(entry: PendingPreview, allowRestoreRetry: boolean): Promise<void> {
-  if (!entry.owns()) return
-  const lookupBeforeRestore =
-    allowRestoreRetry && ['idle', 'restoring'].includes(extensionHostRestoreState.value)
-  try {
-    const resolver = await ResolverCache.getResolver(entry.block, entry.relations)
-    const solvedContent = await resolver.getSolvedContent({ materializeMissing: false })
-    if (!entry.owns()) return
-    nodes.value = nodes.value.map((node) =>
-      node.data.block.id === entry.block.id
-        ? { ...node, data: { ...node.data, resolver, solvedContent, previewStatus: 'success' } }
-        : node
-    )
-  } catch (cause) {
-    if (!entry.owns()) return
-    if (lookupBeforeRestore && cause instanceof UnknownResolverError) {
-      pendingPreviews.value = [...pendingPreviews.value, entry]
-      return
-    }
-    console.error(`[InfoBase] Failed to resolve preview for Block ${entry.block.id}.`, cause)
-    nodes.value = nodes.value.map((node) =>
-      node.data.block.id === entry.block.id
-        ? { ...node, data: { ...node.data, previewStatus: 'error' } }
-        : node
-    )
-  }
-  if (entry.owns()) updatePreviewReady()
-}
-
-// Both registration completion and a late early-lookup failure can make a retry ready.
-watch([extensionHostRestoreState, pendingPreviews], ([state]) => {
-  if (!['restored', 'failed'].includes(state) || pendingPreviews.value.length === 0) return
-  const pending = pendingPreviews.value
-  pendingPreviews.value = []
-  for (const entry of pending) void resolvePreview(entry, false)
-})
-onUnmounted(() => {
-  generation += 1
-  pendingPreviews.value = []
-})
-
-async function loadPreviews(
-  blocks: Block[],
-  incident: Map<number, Relation[]>,
-  current: number
-): Promise<void> {
-  previewReady.value = false
-  const meta = { ...configStore.metaConfig }
-  const host = getExtensionHost()
-  const owns = () =>
-    current === generation &&
-    getExtensionHost() === host &&
-    configStore.metaConfig.INKCRE_PEER_ID === meta.INKCRE_PEER_ID &&
-    configStore.metaConfig.INKCRE_PGREST_URL === meta.INKCRE_PGREST_URL &&
-    configStore.metaConfig.INKCRE_JWT_SECRET === meta.INKCRE_JWT_SECRET
-  let index = 0
-  async function worker(): Promise<void> {
-    while (index < blocks.length) {
-      const block = blocks[index++]!
-      await resolvePreview({ block, relations: incident.get(block.id) ?? [], owns }, true)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(4, blocks.length) }, () => worker()))
-  if (owns()) updatePreviewReady()
-}
-
-async function loadScene(): Promise<void> {
-  const current = ++generation
-  pendingPreviews.value = []
-  // Only show full loading state when graph is empty (first load).
-  // During smooth transitions, keep the existing graph visible while new data loads.
-  const isFirstLoad = nodes.value.length === 0
-  if (isFirstLoad) {
-    status.value = 'loading'
-  }
-  delegationUnavailable.value = false
-  previewReady.value = false
-  pendingCamera.value = true
-  try {
-    const address = sceneAddress.value
-    if (!address) return
-    if (address.type === 'random') {
-      const block = await GraphNavigationRetrievalManager.getRandomBlock()
-      if (current !== generation) return
-      if (!block) {
-        nodes.value = []
-        edges.value = []
-        status.value = 'empty'
-        return
-      }
-      await infoBaseRouter.push({ name: 'overview', focal_block: block.id })
-      return
-    }
-
-    let graph: GraphModel | null = null
-    let nextStatus: SceneStatus = 'empty'
-    if (address.type === 'block') {
-      const result = await GraphNavigationRetrievalManager.getBlockNeighborhood(address.block, {
-        direction: 'both',
-        limit: SCALE_LIMITS[scale.value],
-      })
-      graph = result?.graph ?? null
-      if (!graph) nextStatus = 'missing'
-    } else if (address.type === 'relation') {
-      const result = await GraphNavigationRetrievalManager.getRelationNeighborhood(address.relation)
-      graph = result?.graph ?? null
-      if (!graph) nextStatus = 'missing'
-    } else if (address.type === 'path') {
-      const result = await GraphNavigationRetrievalManager.findPath(address.from, address.to)
-      if (result.status === 'found') graph = result.graph
-      else nextStatus = result.status === 'not_found' ? 'not-found' : 'limit'
-    } else {
-      const result = await LexicalRetrievalManager.retrieve({ query: address.query, limit: 20 })
-      const groups = await presentLexicalMatches(result.matches)
-      graph = { blocks: groups.map((group) => group.block), relations: [] }
-    }
-    if (current !== generation) return
-    transitioning.value = false
-    if (graph) {
-      setGraph(graph)
-      status.value = graph.blocks.length > 0 ? 'ready' : 'empty'
-    } else {
-      status.value = nextStatus
-      nodes.value = []
-      edges.value = []
-    }
-  } catch (cause) {
-    if (current !== generation) return
-    console.error('[InfoBase] Failed to load Graph scene.', cause)
-    nodes.value = []
-    edges.value = []
-    delegationUnavailable.value = cause instanceof CapabilityDelegationUnavailable
-    status.value = 'error'
-    transitioning.value = false
+function layoutContext() {
+  return {
+    nodes: nodes.value,
+    edges: edges.value,
+    measured: measuredNodes(),
+    dragged: draggedNodes,
   }
 }
 
 function layoutMeasuredNodes(): void {
+  const context = layoutContext()
   if (layoutAlgorithm.value === 'radial') {
-    layoutRadial()
+    nodes.value = layoutRadial(context, focalBlock.value !== null ? String(focalBlock.value) : null)
   } else if (layoutAlgorithm.value === 'force') {
-    layoutForce()
+    nodes.value = layoutForce(context)
   } else {
-    layoutHierarchical()
+    nodes.value = layoutHierarchical(context)
   }
-}
-
-function layoutHierarchical(): void {
-  const measured = getNodes.value
-  if (measured.length === 0) return
-  const byId = new Map(measured.map((node) => [node.id, node]))
-
-  // User drag owns its coordinates; skip layout for dragged nodes.
-  const dragged = new Set(draggedNodes)
-  const unpositioned = nodes.value.filter((node) => !dragged.has(node.id))
-  if (unpositioned.length === 0) return
-
-  const g = new dagre.graphlib.Graph()
-  g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 120, marginx: 40, marginy: 40 })
-
-  for (const node of unpositioned) {
-    const measuredNode = byId.get(node.id)
-    // Use actual dimensions if available, otherwise estimate from block content.
-    const width = measuredNode?.dimensions.width || 180
-    const height = measuredNode?.dimensions.height || 80
-    g.setNode(node.id, { width, height })
-  }
-  for (const edge of edges.value) {
-    if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
-      g.setEdge(edge.source, edge.target)
-    }
-  }
-
-  dagre.layout(g)
-
-  const positions = new Map<string, { x: number; y: number }>()
-  for (const node of unpositioned) {
-    const dagreNode = g.node(node.id)
-    if (dagreNode) {
-      positions.set(node.id, {
-        x: dagreNode.x - dagreNode.width / 2,
-        y: dagreNode.y - dagreNode.height / 2,
-      })
-    }
-  }
-  // Keep dragged nodes at their current positions.
-  for (const node of nodes.value) {
-    if (dragged.has(node.id)) {
-      const current = byId.get(node.id)?.position
-      if (current) positions.set(node.id, current)
-    }
-  }
-
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    position: positions.get(node.id) ?? node.position,
-  }))
-}
-
-// Force-directed layout using d3-force
-function layoutForce(): void {
-  const measured = getNodes.value
-  if (measured.length === 0) return
-  const byId = new Map(measured.map((node) => [node.id, node]))
-  const dragged = new Set(draggedNodes)
-
-  const nodeWidth = 182
-  const nodeHeight = 122
-  const centerX = 0
-  const centerY = 0
-
-  // Prepare nodes for simulation
-  const simNodes = nodes.value.map((node) => ({
-    id: node.id,
-    x: byId.get(node.id)?.position.x ?? centerX + (Math.random() - 0.5) * 400,
-    y: byId.get(node.id)?.position.y ?? centerY + (Math.random() - 0.5) * 400,
-    radius: Math.sqrt(nodeWidth * nodeWidth + nodeHeight * nodeHeight) / 2,
-  }))
-
-  // Prepare links for simulation
-  const simLinks = edges.value
-    .filter(
-      (e) => simNodes.some((n) => n.id === e.source) && simNodes.some((n) => n.id === e.target)
-    )
-    .map((e) => ({ source: e.source, target: e.target }))
-
-  // Create force simulation
-  const simulation = forceSimulation(simNodes)
-    .force('charge', forceManyBody().strength(-800))
-    .force(
-      'link',
-      forceLink(simLinks)
-        .id((d: any) => d.id)
-        .distance(250)
-        .strength(0.5)
-    )
-    .force(
-      'collide',
-      forceCollide()
-        .radius((d: any) => d.radius + 40)
-        .iterations(2)
-    )
-    .force('center', forceCenter(centerX, centerY))
-    .stop()
-
-  // Run simulation synchronously
-  for (let i = 0; i < 300; i++) {
-    simulation.tick()
-  }
-
-  // Extract positions
-  const positions = new Map<string, { x: number; y: number }>()
-  for (const simNode of simNodes) {
-    positions.set(simNode.id, {
-      x: simNode.x - nodeWidth / 2,
-      y: simNode.y - nodeHeight / 2,
-    })
-  }
-
-  // Keep dragged nodes at their current positions
-  for (const node of nodes.value) {
-    if (dragged.has(node.id)) {
-      const current = byId.get(node.id)?.position
-      if (current) positions.set(node.id, current)
-    }
-  }
-
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    position: positions.get(node.id) ?? node.position,
-  }))
-}
-
-// Radial layout using d3-force with radial force
-function layoutRadial(): void {
-  const measured = getNodes.value
-  if (measured.length === 0) return
-  const byId = new Map(measured.map((node) => [node.id, node]))
-  const dragged = new Set(draggedNodes)
-
-  const nodeWidth = 182
-  const nodeHeight = 122
-  const centerX = 0
-  const centerY = 0
-
-  // Build adjacency from edges
-  const adjacency = new Map<string, string[]>()
-  for (const edge of edges.value) {
-    if (!adjacency.has(edge.source)) adjacency.set(edge.source, [])
-    if (!adjacency.has(edge.target)) adjacency.set(edge.target, [])
-    adjacency.get(edge.source)!.push(edge.target)
-    adjacency.get(edge.target)!.push(edge.source)
-  }
-
-  // BFS from focal node to assign ring depths
-  const focalId = focalBlock.value !== null ? String(focalBlock.value) : null
-  const ringDepth = new Map<string, number>()
-  const visited = new Set<string>()
-
-  if (focalId) {
-    const queue: Array<[string, number]> = [[focalId, 0]]
-    visited.add(focalId)
-    ringDepth.set(focalId, 0)
-
-    while (queue.length > 0) {
-      const [current, depth] = queue.shift()!
-      const neighbors = adjacency.get(current) ?? []
-      for (const neighbor of neighbors) {
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor)
-          ringDepth.set(neighbor, depth + 1)
-          queue.push([neighbor, depth + 1])
-        }
-      }
-    }
-    const maxDepth = Math.max(...ringDepth.values(), 0)
-    for (const node of nodes.value) {
-      if (!ringDepth.has(node.id)) {
-        ringDepth.set(node.id, maxDepth + 1)
-      }
-    }
-  } else {
-    for (const node of nodes.value) {
-      ringDepth.set(node.id, 1)
-    }
-  }
-
-  // Calculate radius for each depth
-  const maxDepth = Math.max(...ringDepth.values(), 1)
-  const baseRadius = 300
-  const radiusStep = 250
-
-  const depthRadius = new Map<number, number>()
-  for (let d = 1; d <= maxDepth; d++) {
-    depthRadius.set(d, baseRadius + (d - 1) * radiusStep)
-  }
-
-  // Prepare nodes with target radius
-  const simNodes = nodes.value.map((node) => {
-    const depth = ringDepth.get(node.id) ?? 1
-    const targetRadius = depth === 0 ? 0 : (depthRadius.get(depth) ?? baseRadius)
-    return {
-      id: node.id,
-      x: byId.get(node.id)?.position.x ?? centerX + (Math.random() - 0.5) * 400,
-      y: byId.get(node.id)?.position.y ?? centerY + (Math.random() - 0.5) * 400,
-      radius: Math.sqrt(nodeWidth * nodeWidth + nodeHeight * nodeHeight) / 2,
-      targetRadius,
-    }
-  })
-
-  // Prepare links
-  const simLinks = edges.value
-    .filter(
-      (e) => simNodes.some((n) => n.id === e.source) && simNodes.some((n) => n.id === e.target)
-    )
-    .map((e) => ({ source: e.source, target: e.target }))
-
-  // Create simulation with radial force
-  const simulation = forceSimulation(simNodes)
-    .force('charge', forceManyBody().strength(-500))
-    .force(
-      'link',
-      forceLink(simLinks)
-        .id((d: any) => d.id)
-        .distance(200)
-        .strength(0.3)
-    )
-    .force(
-      'collide',
-      forceCollide()
-        .radius((d: any) => d.radius + 30)
-        .iterations(2)
-    )
-    .force('radial', forceRadial((d: any) => d.targetRadius, centerX, centerY).strength(0.8))
-    .stop()
-
-  // Run simulation
-  for (let i = 0; i < 300; i++) {
-    simulation.tick()
-  }
-
-  // Extract positions
-  const positions = new Map<string, { x: number; y: number }>()
-  for (const simNode of simNodes) {
-    positions.set(simNode.id, {
-      x: simNode.x - nodeWidth / 2,
-      y: simNode.y - nodeHeight / 2,
-    })
-  }
-
-  // Keep dragged nodes at their current positions
-  for (const node of nodes.value) {
-    if (dragged.has(node.id)) {
-      const current = byId.get(node.id)?.position
-      if (current) positions.set(node.id, current)
-    }
-  }
-
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    position: positions.get(node.id) ?? node.position,
-  }))
 }
 
 function routeEdges(): void {
@@ -670,19 +167,46 @@ function routeEdges(): void {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Camera
+// ---------------------------------------------------------------------------
+
+const realizing = ref(false)
+let realizationRequested = false
+
+/** Focus the camera on a node without changing zoom. */
+function focusCameraOnNode(blockId: number): void {
+  const node = getNodes.value.find((n) => n.id === String(blockId))
+  if (!node) return
+  const centerX = node.position.x + node.dimensions.width / 2
+  const centerY = node.position.y + node.dimensions.height / 2
+  const rect = container.value?.querySelector('.vue-flow')?.getBoundingClientRect()
+  const currentZoom = getViewport()?.zoom ?? 1
+  void setViewport(
+    {
+      x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
+      y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
+      zoom: currentZoom,
+    },
+    {
+      duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400,
+    }
+  )
+}
+
 async function realizeScene(): Promise<void> {
   if (realizing.value) {
     realizationRequested = true
     return
   }
   realizing.value = true
-  const current = generation
+  const current = scene.epoch.value // snapshot for the timeout guard below
   try {
     // Trigger node measurement
     updateNodeInternals(nodes.value.map((node) => node.id))
     // Use setTimeout instead of await to avoid blocking
     setTimeout(() => {
-      if (current !== generation) {
+      if (current !== scene.epoch.value) {
         realizing.value = false
         return
       }
@@ -691,14 +215,15 @@ async function realizeScene(): Promise<void> {
         layoutMeasuredNodes()
       }
       routeEdges()
-      if (current !== generation || !pendingCamera.value) {
+      if (!pendingCamera.value) {
         realizing.value = false
         return
       }
       pendingCamera.value = false
       const narrow = (container.value?.clientWidth ?? 0) < 640
       const focalId =
-        focalBlock.value ?? (sceneAddress.value?.type === 'path' ? sceneAddress.value.from : null)
+        focalBlock.value ??
+        (scene.sceneAddress.value?.type === 'path' ? scene.sceneAddress.value.from : null)
       const visibleNodes =
         narrow && focalId !== null ? [String(focalId)] : nodes.value.map((node) => node.id)
       void fitView({
@@ -715,11 +240,40 @@ async function realizeScene(): Promise<void> {
         }
       })
     }, 100)
-  } catch (e) {
+  } catch (error) {
     realizing.value = false
-    console.error('[Graph] realizeScene error:', e)
+    console.error('[Graph] realizeScene error:', error)
   }
 }
+
+function refocus(): void {
+  pendingCamera.value = true
+  void realizeScene()
+}
+
+// ---------------------------------------------------------------------------
+// Vue Flow event handlers
+// ---------------------------------------------------------------------------
+
+function onNodeDragStart(event: NodeDragEvent): void {
+  pendingCamera.value = false
+  draggedNodes.add(event.node.id)
+}
+
+function onNodeDrag(_event: NodeDragEvent): void {
+  // Update edge routing in real-time during drag for responsive feel
+  routeEdges()
+}
+
+function onNodeDragStop(event: NodeDragEvent): void {
+  positionCache.set(event.node.id, { ...event.node.position })
+  draggedNodes.delete(event.node.id)
+  routeEdges()
+}
+
+// ---------------------------------------------------------------------------
+// Glue: react to scene, route, and measurement changes
+// ---------------------------------------------------------------------------
 
 watch(
   [sceneKey, scale],
@@ -749,277 +303,27 @@ watch(
   }
 )
 
-function setNodeFocusing(blockId: number | null): void {
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    data: {
-      ...node.data,
-      focusing: blockId !== null && node.data.block.id === blockId,
-    },
-  }))
-}
-
-function focusBlock(block: number): void {
-  transitioning.value = true
-  selectedBlock.value = block
-  setNodeFocusing(block)
-  if (expansionMode.value === 'incremental') {
-    // Incremental: load new neighborhood and merge into existing graph.
-    void loadIncrementalBlock(block).finally(() => {
-      transitioning.value = false
-      setNodeFocusing(null)
-    })
-  } else {
-    // Smooth: replace graph, animate camera to new focal.
-    pendingCamera.value = true
-    void infoBaseRouter.push({ name: 'overview', focal_block: block })
-  }
-}
-
-function focusRelation(relation: number): void {
-  transitioning.value = true
-  setNodeFocusing(null)
-  if (expansionMode.value === 'incremental') {
-    void loadIncrementalRelation(relation).finally(() => {
-      transitioning.value = false
-    })
-  } else {
-    pendingCamera.value = true
-    void infoBaseRouter.push({ name: 'overview', focal_relation: relation })
-  }
-}
-
-async function loadIncrementalBlock(block: number): Promise<void> {
-  const current = generation
-  try {
-    const result = await GraphNavigationRetrievalManager.getBlockNeighborhood(block, {
-      direction: 'both',
-      limit: SCALE_LIMITS[scale.value],
-    })
-    if (current !== generation || !result?.graph) return
-    mergeGraph(result.graph, block)
-    // Update URL to reflect new focal without full reload
-    void infoBaseRouter.push({ name: 'overview', focal_block: block })
-  } catch (cause) {
-    console.error('[InfoBase] Failed to load incremental neighborhood.', cause)
-  }
-}
-
-async function loadIncrementalRelation(relation: number): Promise<void> {
-  const current = generation
-  try {
-    const result = await GraphNavigationRetrievalManager.getRelationNeighborhood(relation)
-    if (current !== generation || !result?.graph) return
-    mergeGraph(result.graph, null, relation)
-    void infoBaseRouter.push({ name: 'overview', focal_relation: relation })
-  } catch (cause) {
-    console.error('[InfoBase] Failed to load incremental relation.', cause)
-  }
-}
-
-function mergeGraph(
-  graph: GraphModel,
-  newFocalBlock: number | null,
-  newFocalRelation?: number
-): void {
-  const existingBlockIds = new Set(nodes.value.map((n) => n.data.block.id))
-  const existingRelationIds = new Set(edges.value.map((e) => e.data.relation.id))
-
-  const newBlocks = graph.blocks.filter((b) => !existingBlockIds.has(b.id))
-  const newRelations = graph.relations.filter((r) => !existingRelationIds.has(r.id))
-
-  if (newBlocks.length === 0 && newRelations.length === 0) {
-    // Just update focal highlighting and move camera to focal block
-    applyPresentation()
-    if (newFocalBlock !== null) {
-      setTimeout(() => {
-        focusCameraOnNode(newFocalBlock)
-      }, 100)
-    }
-    return
-  }
-
-  const incident = new Map<number, Relation[]>()
-  for (const relation of graph.relations) {
-    incident.set(relation.from_, [...(incident.get(relation.from_) ?? []), relation])
-    incident.set(relation.to_, [...(incident.get(relation.to_) ?? []), relation])
-  }
-
-  // Add new nodes with temporary positions (will be laid out below)
-  const newNodes = newBlocks.map((block) =>
-    blockNode(block, {
-      focal: block.id === newFocalBlock,
-      muted: false,
-      position: { x: 0, y: 0 }, // Temporary, will be positioned by layoutNewNodes
-    })
-  )
-
-  // Add new edges
-  const newEdges = newRelations.map((relation) =>
-    relationEdge(relation, {
-      focal: relation.id === newFocalRelation,
-      muted: false,
-    })
-  )
-
-  // Merge into existing graph
-  nodes.value = [...nodes.value, ...newNodes]
-  edges.value = [...edges.value, ...newEdges]
-
-  // Update focal highlighting
-  const targetFocal = newFocalBlock ?? focalBlock.value
-  const targetFocalRelation = newFocalRelation ?? focalRelation.value
-
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    data: {
-      ...node.data,
-      focal: node.data.block.id === targetFocal,
-    },
-  }))
-  edges.value = edges.value.map((edge) => ({
-    ...edge,
-    data: {
-      ...edge.data,
-      focal: edge.data.relation.id === targetFocalRelation,
-    },
-  }))
-
-  // Load previews for new blocks only
-  void loadPreviews(newBlocks, incident, generation)
-
-  // Layout only new nodes around existing graph, then focus camera
-  // Set skipLayout to prevent realizeScene from re-layouting all nodes
-  skipLayout.value = true
-  setTimeout(() => {
-    layoutNewNodes(newBlocks.map((b) => b.id))
-    updateNodeInternals(nodes.value.map((n) => n.id))
-    void nextTick(() => {
-      routeEdges()
-      // Focus camera on new focal block after layout
-      if (newFocalBlock !== null) {
-        focusCameraOnNode(newFocalBlock)
-      }
-      // Reset skipLayout after a delay to allow watcher to fire
-      setTimeout(() => {
-        skipLayout.value = false
-      }, 200)
-    })
-  }, 100)
-}
-
-// Focus camera on a specific node without changing zoom
-function focusCameraOnNode(blockId: number): void {
-  const node = getNodes.value.find((n) => n.id === String(blockId))
-  if (!node) return
-  const centerX = node.position.x + (node.dimensions?.width ?? 180) / 2
-  const centerY = node.position.y + (node.dimensions?.height ?? 80) / 2
-  const container = document.querySelector('.vue-flow')
-  const rect = container?.getBoundingClientRect()
-  const currentZoom = getViewport()?.zoom ?? 1
-  void setViewport(
-    {
-      x: (rect?.width ?? 800) / 2 - centerX * currentZoom,
-      y: (rect?.height ?? 600) / 2 - centerY * currentZoom,
-      zoom: currentZoom,
-    },
-    {
-      duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400,
-    }
-  )
-}
-
-// Layout only new nodes, positioning them near their connected existing nodes
-function layoutNewNodes(newBlockIds: number[]): void {
-  if (newBlockIds.length === 0) return
-
-  const newNodeIds = new Set(newBlockIds.map((id) => String(id)))
-  const existingNodes = nodes.value.filter((n) => !newNodeIds.has(n.id))
-  const newNodes = nodes.value.filter((n) => newNodeIds.has(n.id))
-
-  if (existingNodes.length === 0) {
-    // No existing nodes, layout all nodes with dagre
-    layoutMeasuredNodes()
-    return
-  }
-
-  // Build a map of existing node positions
-  const existingPositions = new Map<string, { x: number; y: number }>()
-  for (const node of existingNodes) {
-    existingPositions.set(node.id, node.position)
-  }
-
-  // For each new node, find its connected existing nodes and position near them
-  const nodeWidth = 182
-  const nodeHeight = 122
-  const spacing = 250 // Distance from connected node
-
-  const positions = new Map<string, { x: number; y: number }>()
-  const connectionCount = new Map<string, number>() // Track how many new nodes connect to each existing node
-
-  for (const newNode of newNodes) {
-    // Find edges connecting this new node to existing nodes
-    const connectedEdges = edges.value.filter(
-      (e) =>
-        (e.source === newNode.id && existingPositions.has(e.target)) ||
-        (e.target === newNode.id && existingPositions.has(e.source))
-    )
-
-    if (connectedEdges.length > 0) {
-      // Position near the first connected node
-      const firstEdge = connectedEdges[0]
-      const connectedNodeId = firstEdge.source === newNode.id ? firstEdge.target : firstEdge.source
-      const connectedPos = existingPositions.get(connectedNodeId)
-
-      if (connectedPos) {
-        // Get offset index for this connection
-        const offsetIndex = connectionCount.get(connectedNodeId) ?? 0
-        connectionCount.set(connectedNodeId, offsetIndex + 1)
-
-        // Position in a fan pattern to the right of the connected node
-        const x = connectedPos.x + nodeWidth + spacing
-        const y = connectedPos.y + offsetIndex * (nodeHeight + 50)
-        positions.set(newNode.id, { x, y })
-        continue
-      }
-    }
-
-    // No connected edges, position near center of existing nodes
-    let sumX = 0,
-      sumY = 0
-    for (const pos of existingPositions.values()) {
-      sumX += pos.x
-      sumY += pos.y
-    }
-    const centerX = sumX / existingPositions.size
-    const centerY = sumY / existingPositions.size
-    const fallbackIndex = newNodes.indexOf(newNode)
-    positions.set(newNode.id, {
-      x: centerX + nodeWidth + spacing,
-      y: centerY + fallbackIndex * (nodeHeight + 50),
-    })
-  }
-
-  // Apply positions to new nodes only
-  nodes.value = nodes.value.map((node) => {
-    if (newNodeIds.has(node.id)) {
-      const pos = positions.get(node.id)
-      if (pos) {
-        return { ...node, position: pos }
-      }
-    }
-    return node
-  })
-}
+// ---------------------------------------------------------------------------
+// Navigation and side panels
+// ---------------------------------------------------------------------------
 
 function inspectBlock(block: number): void {
   selectedBlock.value = block
   void infoBaseRouter.push({ name: 'block', block })
 }
-
 function inspectRelation(relation: number): void {
   selectedBlock.value = null
   void infoBaseRouter.push({ name: 'relation', relation })
+}
+
+const infoBaseRouter = getInfoBaseRouter()
+
+function onRuminated(): void {
+  void loadScene()
+}
+
+function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): boolean {
+  return route?.name === name
 }
 
 // Check if side panel is open (block or relation detail)
@@ -1030,35 +334,6 @@ const isSidePanelOpen = computed(() => {
 function closeSidePanel(): void {
   selectedBlock.value = null
   void infoBaseRouter.back()
-}
-
-function onNodeDragStart(event: NodeDragEvent): void {
-  pendingCamera.value = false
-  draggedNodes.add(event.node.id)
-}
-
-function onNodeDrag(_event: NodeDragEvent): void {
-  // Update edge routing in real-time during drag for responsive feel
-  routeEdges()
-}
-
-function onNodeDragStop(event: NodeDragEvent): void {
-  positionCache.set(event.node.id, { ...event.node.position })
-  draggedNodes.delete(event.node.id)
-  routeEdges()
-}
-
-function refocus(): void {
-  pendingCamera.value = true
-  void realizeScene()
-}
-
-function onRuminated(): void {
-  void loadScene()
-}
-
-function isRoute(route: InfoBaseRoute | null, name: InfoBaseRoute['name']): boolean {
-  return route?.name === name
 }
 </script>
 
