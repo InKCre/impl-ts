@@ -80,7 +80,7 @@ export function registerGitHubNativeTests(): void {
       let body = await readFile(file)
       if (relative === 'mf-manifest.json') {
         const manifest = JSON.parse(body.toString())
-        manifest.metaData.publicPath = assetBase
+        manifest.metaData.publicPath = 'auto'
         body = Buffer.from(JSON.stringify(manifest))
       }
       const contentType = relative.endsWith('.js')
