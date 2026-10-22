@@ -162,5 +162,34 @@ pnpm verify:twitter
 
 Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter MF 产物，并设置
 `INKCRE_E2E_CORE_URL`、`INKCRE_E2E_POSTGREST_URL`、`INKCRE_E2E_WEB_URL`、
-`INKCRE_E2E_JWT_SECRET`。它会安装或启用浏览器 Peer 的 Twitter 扩展、写入测试数据并提交词法索引 Job，
-不会自动清理数据；应使用独立验收信息库。截图保存在 `test-results/twitter-acceptance/`。
+`INKCRE_E2E_JWT_SECRET`，以及 `INKCRE_E2E_CORE_SOURCE_SHA` 和 `INKCRE_E2E_INFO_BASE_OWNER`。
+后两项分别来自 Python 交付 owner 报告的目标源码，以及本次独占信息库的生命周期责任标识（例如 Python PR）。
+`--list` 不要求这些输入；实际运行缺输入会在写入前失败。
+
+一次跨仓候选交接按以下顺序进行：
+
+1. 选择独占的 Python Preview／信息库，取得其成功交付的 Core、PostgREST、SHA 和获授权凭据。
+   owner 在自己的 Python Peer 选择、启用该候选 Registry 的 Twitter Python Distribution，并确认账户页可达。
+   首次选择需要安装 wheel 时，宿主可能报告 `operation: restarting`；等待 readiness 恢复且该操作清空后再启用，
+   不要把此时启用得到的 HTTP 409 当成安装失败。
+   Core 镜像更新后，未启用的选择可能仍存在而 wheel 已不在新环境中；此时重新选择该精确版本完成安装，再等待重启并启用。
+   不改其他 Peer 的选择；Python facade 与 Web MF facade 分别由各自 Peer 使用。
+2. 从 TS Preview 摘要选择本次不可变 deployment URL，确认其 `/preview-candidate.json` 包含需要的 Twitter MF。
+   `INKCRE_E2E_WEB_URL` 使用这个 URL，脚本据此配置本次新 Web Peer 的 Registry。
+3. 将上述六项输入注入运行进程，执行 `pnpm verify:twitter`。不要 source dotenv 文件或把凭据写进提交、命令输出、
+   截图和 trace。Core Cookie 连接需要真实安全浏览器上下文；本专项保留 Secure Cookie 和关闭 trace 的设置。
+4. 查看本次测试目录的 `run.json`：它保留准备／提交／读取／索引／搜索／重开阶段、结果、Web 实际构建身份、Core 的
+   声明源码与实际 Peer/version、原生 Distribution 的选择／加载／运行状态、数据库合同／head、实际 MF entry URL／摘要及资源 URL、fixture native IDs 与 Job／Block IDs。
+   Core SHA 是部署 owner 的输入声明，脚本不把它冒充运行时独立读取的 SHA。失败时已写记录仍保留并标出阶段。
+5. owner 在不再需要现场后清理整个独占信息库，例如关闭本次 Python PR 触发既有 Preview 清理。脚本不会根据
+   标题、时间范围或前缀批删共享数据；保留现场时，下一轮使用新的 fixture stamp，记录也说明清理责任。
+
+脚本先检查 Core readiness、信息库中匹配该 Core endpoint 的 live Peer、该 Peer 已加载并运行所选 Python Distribution，
+以及 Web 构建身份，再开始账户连接。原生 status 只证明选择与运行状态，不独立证明 wheel 字节来自候选 Registry。
+它会安装或启用本次 Web Peer 的 Twitter MF、写入测试数据并提交词法索引 Job，最后关闭原页并在新页从持久信息库
+重开正文。页面重开没有注入初始配置，使用该浏览器实际保存的连接和 Peer 意图。截图和运行记录保存在
+`test-results/twitter-acceptance/`，其中 `reopened.png` 对应这次重开。
+
+这项证据涵盖 Chromium 的实际 HTTP／Cookie／数据库／MF 路径；原版 GM 的检测、提交和续签仍需实际 userscript
+观察。Core 进程冷重启与真实视频播放没有由该脚本执行。源码 source lane 的快速迭代仍使用前述本地入口；本专项
+要求已准备并可溯源的 Web 交付产物。
