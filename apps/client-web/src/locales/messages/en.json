@@ -57,7 +57,9 @@
     "extensions": "Extensions",
     "peers": "Devices",
     "settings": "Settings",
-    "menu": "Navigation menu"
+    "menu": "Navigation menu",
+    "managing": "Managing",
+    "infoBase": "Info Base"
   },
   "toast": {
     "regionLabel": "Notifications"

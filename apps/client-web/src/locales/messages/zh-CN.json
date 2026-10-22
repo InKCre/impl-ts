@@ -57,7 +57,9 @@
     "extensions": "扩展",
     "peers": "设备",
     "settings": "设置",
-    "menu": "导航菜单"
+    "menu": "导航菜单",
+    "managing": "管理",
+    "infoBase": "信息库"
   },
   "toast": {
     "regionLabel": "通知"

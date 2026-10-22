@@ -161,7 +161,7 @@ async function onSaveSource() {
     draft.value = Source.parse(saved)
     sourceSaved.value = true
   } catch {
-    sourceError.value = t('source.saveFailed')
+    sourceError.value = t('common.saveFailed')
   } finally {
     sourceSaving.value = false
   }
