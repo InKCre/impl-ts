@@ -15,7 +15,7 @@ const clientVersion = JSON.parse(
 async function openSettings(page: Page): Promise<void> {
   await page.locator('button[aria-controls="app-side-panel"]').click()
   // The redesigned side panel renders navigation as links inside a popup.
-  await page.getByRole('link', { name: 'Settings', exact: true }).click()
+  await page.getByLabel('Primary').getByRole('link', { name: 'Settings', exact: true }).click()
   await expect(page.getByLabel('PostgREST URL')).toBeVisible()
 }
 
@@ -134,7 +134,7 @@ test('startup shows pending and failed states without trapping a deep link', asy
     await page.getByRole('button', { name: 'Retry', exact: true }).click()
     await expect(loading).toBeVisible()
     await expect(page).toHaveURL(new RegExp(`${path.replace('?', '\\?')}$`))
-    await page.getByRole('link', { name: 'Settings', exact: true }).click()
+    await page.getByLabel('Primary').getByRole('link', { name: 'Settings', exact: true }).click()
     await expect(page).toHaveURL(/\/settings$/)
     await expect(page.getByLabel('PostgREST URL')).toHaveValue(postgrestUrl)
     await expect(page.getByLabel('JWT signing secret')).toHaveValue(jwtSecret)
