@@ -5,23 +5,14 @@
       "database": {
         "poll_interval": 1,
         "probe": {
-          "argv": [
-            "node",
-            "scripts/probe-database.mjs",
-            "${dev.instance}"
-          ],
+          "argv": ["node", "scripts/probe-database.mjs", "${dev.instance}"],
           "cwd": ".",
           "kind": "exec",
           "output_limit": 2048,
           "timeout": 5
         },
         "provision": {
-          "argv": [
-            "node",
-            "scripts/database-runtime.mjs",
-            "ensure",
-            "${dev.instance}"
-          ],
+          "argv": ["node", "scripts/database-runtime.mjs", "ensure", "${dev.instance}"],
           "cwd": ".",
           "env": {
             "INKCRE_DATABASE_PROVIDER": "local"
@@ -33,28 +24,17 @@
         "scope": "worktree"
       },
       "web": {
-        "access": [
-          "https://client-web-${dev.instance}.localhost/"
-        ],
+        "access": ["https://client-web-${dev.instance}.localhost/"],
         "poll_interval": 0.5,
         "probe": {
-          "argv": [
-            "node",
-            "scripts/probe-dev.mjs",
-            "web",
-            "${dev.instance}"
-          ],
+          "argv": ["node", "scripts/probe-dev.mjs", "web", "${dev.instance}"],
           "cwd": ".",
           "kind": "exec",
           "output_limit": 1024,
           "timeout": 5
         },
         "provision": {
-          "argv": [
-            "node",
-            "scripts/dev.mjs",
-            "web"
-          ],
+          "argv": ["node", "scripts/dev.mjs", "web"],
           "cwd": ".",
           "kind": "exec",
           "mode": "run"
@@ -63,28 +43,17 @@
         "scope": "worktree"
       },
       "web-ui": {
-        "access": [
-          "https://client-web-ui-${dev.instance}.localhost/"
-        ],
+        "access": ["https://client-web-ui-${dev.instance}.localhost/"],
         "poll_interval": 0.5,
         "probe": {
-          "argv": [
-            "node",
-            "scripts/probe-dev.mjs",
-            "web-ui",
-            "${dev.instance}"
-          ],
+          "argv": ["node", "scripts/probe-dev.mjs", "web-ui", "${dev.instance}"],
           "cwd": ".",
           "kind": "exec",
           "output_limit": 1024,
           "timeout": 5
         },
         "provision": {
-          "argv": [
-            "node",
-            "scripts/dev.mjs",
-            "web-ui"
-          ],
+          "argv": ["node", "scripts/dev.mjs", "web-ui"],
           "cwd": ".",
           "kind": "exec",
           "mode": "run"
@@ -93,28 +62,17 @@
         "scope": "worktree"
       },
       "webext": {
-        "access": [
-          "https://webext-${dev.instance}.localhost/popup.html"
-        ],
+        "access": ["https://webext-${dev.instance}.localhost/popup.html"],
         "poll_interval": 0.5,
         "probe": {
-          "argv": [
-            "node",
-            "scripts/probe-dev.mjs",
-            "webext",
-            "${dev.instance}"
-          ],
+          "argv": ["node", "scripts/probe-dev.mjs", "webext", "${dev.instance}"],
           "cwd": ".",
           "kind": "exec",
           "output_limit": 1024,
           "timeout": 5
         },
         "provision": {
-          "argv": [
-            "node",
-            "scripts/dev.mjs",
-            "webext"
-          ],
+          "argv": ["node", "scripts/dev.mjs", "webext"],
           "cwd": ".",
           "kind": "exec",
           "mode": "run"

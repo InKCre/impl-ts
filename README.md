@@ -1,58 +1,37 @@
-# InKCre Web Clients
+# InKCre TypeScript Implementation
 
-Monorepo for the InKCre web application, browser extension, shared client core, and native Module
-Federation Extensions.
+The TypeScript peer of InKCre — the web application, the browser extension, and first-party TypeScript extensions, built around the shared `@inkcre/core` SDK.
 
-## Setup
+`impl-ts` 是 InKCre 的 TypeScript 实现——一个承载 Web 应用、浏览器扩展和一方 TS 扩展的 peer monorepo。
 
-Required tools:
+## Repository shape
 
-- Node.js 22.22.3 through the root pnpm-managed runtime;
-- pnpm 11.11.0 from `packageManager`;
-- Python 3.11+, PDM, and `sustainable-vibe-coding==14.0.0`;
-- Docker Compose v2, locally or through an SSH alias;
-- a GitHub token with `read:packages` for `@inkcre/ui-web` and the admitted core image.
+- `packages/core/` — `@inkcre/core` shared SDK (info-base model, storage, resolvers, retrieval, extension host)
+- `apps/client-web/` — Vue 3 web application (static Vite artifact)
+- `apps/client-webext/` — WXT browser extension
+- `extensions/` — independently built native Module Federation producers (`ext-github`, `ext-mail`, `ext-twitter`, `ext-memos`)
+
+## Quickstart
+
+### Use the product
+
+End users consume the published web build and browser extension through the deployed instance — see [inkcre.dev](https://inkcre.dev) for entry points. To self-host the underlying peer, see [`InKCre/impl-py`](https://github.com/InKCre/impl-py).
+
+### Develop locally
 
 ```bash
-pdm add -g --save-exact sustainable-vibe-coding==14.0.0
 git submodule update --init --recursive
 pnpm install --frozen-lockfile
 pnpm run doctor
+pnpm dev
 ```
 
-Store the package token as a user-level placeholder rather than repository configuration:
-
-```bash
-pnpm config set --global //npm.pkg.github.com/:_authToken '${NODE_AUTH_TOKEN}'
-```
-
-Authenticate the selected Docker engine separately when the database runtime needs GHCR access.
-See [Development Runtime](docs/40-deployment/development-runtime.md) for local, SSH, external
-impl-py, Portless, browser, and sibling UI setup.
-
-## Commands
-
-```bash
-pnpm dev             # Ensure database and web capabilities
-pnpm dev:webext      # Ensure the WXT capability
-pnpm dev:all         # Develop the web Host with local remotes
-pnpm dev:status      # Observe capability health
-pnpm dev:stop        # Stop only current-worktree resources
-pnpm run doctor      # Diagnose versions and runtime contracts
-pnpm check           # Required format, lint, type, test, and build gate
-pnpm test:e2e        # Browser tests with owned runtime resources
-```
-
-Specialized database, sibling UI, contract-generation, and release commands are documented under
-[Deployment and Runtime](docs/40-deployment/README.md); `package.json` remains their executable
-owner.
+`pnpm check` is the required format/lint/type/test/build gate used by CI. See the [organization contribution guide](https://github.com/InKCre/.github/blob/main/CONTRIBUTING.md) and [docs/40-deployment/development-runtime.md](docs/40-deployment/development-runtime.md) for the full local and SSH runtime contract.
 
 ## Documentation
 
-- [Repository topology](ARCHITECTURE.md)
-- [Logical Unit design](docs/30-unit-tdd/README.md)
+- [Repository architecture](ARCHITECTURE.md)
+- [Agent operating guide](AGENTS.md)
 - [Deployment and runtime](docs/40-deployment/README.md)
 - [Documentation index](docs/index.md)
-
-Shared product requirements and cross-unit Product TDD are mounted read-only at `docs/_shared/`.
-Update the Hub source first and publish it before changing this repository's reference.
+- Shared product truth Hub: [`InKCre/docs`](https://github.com/InKCre/docs) (mounted read-only at `docs/_shared/`)

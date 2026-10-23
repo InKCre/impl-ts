@@ -1,0 +1,21 @@
+{
+  "configurations": [
+    {
+      "name": "Dev(Attach)",
+      "type": "chrome",
+      "request": "launch",
+      "runtimeExecutable": "Your/Path/To/Chrome.exe",
+      "runtimeArgs": ["--user-data-dir=${workspaceFolder}\\.browser-profile"],
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/src",
+      "sourceMapPathOverrides": {
+        // 这里的配置用于修正路径映射，如果断点是灰色的，需要调整这里
+        // 这是一个万能公式，通常能解决大部分 Vite sourcemap 问题
+        "webpack:///*": "${webRoot}/*",
+      },
+      "sourceMaps": true,
+      "preLaunchTask": "start dev server",
+      "postDebugTask": "stop dev server",
+    },
+  ],
+}
