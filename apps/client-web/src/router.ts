@@ -173,10 +173,7 @@ export function createInfoBaseRouterAdapter(router: Router): InfoBaseRouter {
       const currentSurface = surface(current.name) ?? 'list'
       const prefix = currentSurface === 'list' ? 'InfoBaseList' : 'InfoBaseGraph'
       const requestedQuery = sceneQuery(route)
-      const query =
-        Object.keys(requestedQuery).length > 0
-          ? requestedQuery
-          : sceneQuery({ name: 'overview', ...parseSceneAddress(current.query) })
+      const query = Object.keys(requestedQuery).length > 0 ? requestedQuery : current.query
       if (route.name === 'overview') {
         await router.push({ name: `${prefix}Overview`, query })
         return

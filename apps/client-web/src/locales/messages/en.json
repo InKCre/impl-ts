@@ -359,7 +359,14 @@
         "text_substring": "Matched the body",
         "terms": "Matched keywords"
       },
-      "unavailable": "No device is available to search right now. Your query is preserved; retry once a device is ready."
+      "unavailable": "No device is available to search right now. Your query is preserved; retry once a device is ready.",
+      "mode": "Search mode",
+      "modes": {
+        "lexical": "Keywords",
+        "semantic": "Semantic"
+      },
+      "noPreview": "No preview. Open the entry to read it.",
+      "score": "Similarity"
     },
     "blockInspector": {
       "loadFailed": "Unable to load this entry.",
