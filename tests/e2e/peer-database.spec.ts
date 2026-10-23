@@ -14,7 +14,8 @@ const clientVersion = JSON.parse(
  *  route gates created before the navigation stay alive (page.goto would reload). */
 async function openSettings(page: Page): Promise<void> {
   await page.locator('button[aria-controls="app-side-panel"]').click()
-  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  // The redesigned side panel renders navigation as links inside a popup.
+  await page.getByLabel('Primary').getByRole('link', { name: 'Settings', exact: true }).click()
   await expect(page.getByLabel('PostgREST URL')).toBeVisible()
 }
 
