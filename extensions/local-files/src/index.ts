@@ -1,0 +1,13 @@
+import { Resolver, type ExtensionModule } from '@inkcre/core'
+import { LocalFileResolver } from './resolver'
+
+const resolvers = [LocalFileResolver]
+const extension: ExtensionModule = {
+  async initialize() {
+    for (const resolver of resolvers) Resolver.register(resolver.type, resolver)
+  },
+  async dispose() {
+    for (const resolver of resolvers) Resolver.unregister(resolver.type, resolver)
+  },
+}
+export default extension
