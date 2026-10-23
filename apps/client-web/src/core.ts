@@ -17,6 +17,8 @@ import {
   localStorageAdapter,
   registerCoreResolvers,
   TextResolver,
+  Resolver,
+  ExtractionResultResolver,
   AudioResolver,
   EpubResolver,
   FileResolver,
@@ -48,6 +50,8 @@ import * as VueUse from '@vueuse/core'
 import packageJson from '../package.json'
 import corePackageJson from '../../../packages/core/package.json'
 import ContentText from '@/components/info-base/resolvers/ContentText.vue'
+import ContentExtraction from '@/components/info-base/resolvers/ContentExtraction/ContentExtraction.vue'
+import ContentExtractionPreview from '@/components/info-base/resolvers/ContentExtraction/ContentExtractionPreview.vue'
 import ContentImage from '@/components/info-base/resolvers/ContentImage.vue'
 import ContentVideo from '@/components/info-base/resolvers/ContentVideo.vue'
 import ContentHtml from '@/components/info-base/resolvers/ContentHtml.vue'
@@ -136,6 +140,9 @@ export function setupResolvers(): void {
   HtmlResolver.solvedContentRenderer = ContentHtml
   ZipResolver.solvedContentRenderer = ContentFile
   registerCoreResolvers()
+  ExtractionResultResolver.previewRenderer = ContentExtractionPreview
+  ExtractionResultResolver.solvedContentRenderer = ContentExtraction
+  Resolver.register(ExtractionResultResolver.type, ExtractionResultResolver)
 
   console.log('[Core] Resolver components registered')
 }
