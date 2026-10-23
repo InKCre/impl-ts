@@ -65,5 +65,8 @@
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@11.11.0"
+  "packageManager": "pnpm@11.11.0",
+  "dependencies": {
+    "@inkcre/ui-web": "link:../ui/packages/web"
+  }
 }

@@ -17,6 +17,7 @@ allowBuilds:
 
 overrides:
   '@babel/core@<=7.29.0': 7.29.7
+  '@inkcre/ui-web': link:../ui/packages/web
   adm-zip@<0.6.0: 0.6.0
   brace-expansion@>=4.0.0 <5.0.9: 5.0.9
   defu@<=6.1.4: 6.1.7
