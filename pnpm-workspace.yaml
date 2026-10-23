@@ -37,7 +37,7 @@ overrides:
   ws@>=8.0.0 <8.21.0: 8.21.0
 
 minimumReleaseAgeExclude:
-  - '@inkcre/ui-web@2.0.0 || 2.0.1 || 2.1.0 || 2.1.1 || 2.2.0 || 2.2.1 || 2.3.0 || 2.4.0'
+  - '@inkcre/ui-web@2.0.0 || 2.0.1 || 2.1.0 || 2.1.1 || 2.2.0 || 2.2.1 || 2.3.0 || 2.4.0 || 2.5.0'
   - '@supabase/cli-darwin-arm64@2.112.0'
   - '@supabase/cli-darwin-x64@2.112.0'
   - '@supabase/cli-linux-arm64-musl@2.112.0'

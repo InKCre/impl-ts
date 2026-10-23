@@ -16,7 +16,7 @@
     "@dagrejs/dagre": "^3.1.1",
     "@inkcre/core": "workspace:*",
     "@inkcre/extension-runtime-client-web": "https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz",
-    "@inkcre/ui-web": "2.4.0",
+    "@inkcre/ui-web": "2.5.0",
     "@module-federation/runtime": "^0.21.4",
     "@supabase/postgrest-js": "^2.84.0",
     "@types/d3-force": "^3.0.10",

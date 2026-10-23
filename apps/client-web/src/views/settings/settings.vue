@@ -251,7 +251,6 @@ const onFileSelected = async (event: Event) => {
         <div class="settings-view__switch-field">
           <span :id="telemetryLabelId">{{ t('settings.telemetryEnabled') }}</span>
           <InkSwitch
-            size="sm"
             v-model="metaFormConfig.telemetry_enabled"
             :disabled="formBusy"
             :aria-labelledby="telemetryLabelId"
