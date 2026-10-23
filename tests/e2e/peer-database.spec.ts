@@ -134,7 +134,7 @@ test('startup shows pending and failed states without trapping a deep link', asy
     await page.getByRole('button', { name: 'Retry', exact: true }).click()
     await expect(loading).toBeVisible()
     await expect(page).toHaveURL(new RegExp(`${path.replace('?', '\\?')}$`))
-    await page.getByLabel('Primary').getByRole('link', { name: 'Settings', exact: true }).click()
+    await page.getByRole('link', { name: 'Settings', exact: true }).click()
     await expect(page).toHaveURL(/\/settings$/)
     await expect(page.getByLabel('PostgREST URL')).toHaveValue(postgrestUrl)
     await expect(page.getByLabel('JWT signing secret')).toHaveValue(jwtSecret)
