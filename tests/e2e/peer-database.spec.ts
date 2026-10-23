@@ -1634,6 +1634,76 @@ test('Recall delegates one read to its destination and discards stale path searc
   await expect(page).toHaveURL(new RegExp(`q=${query}`))
 })
 
+test('semantic search opens existing content and preserves its mode', async ({ page }) => {
+  const headers = {
+    Authorization: `Bearer ${await token()}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  }
+  const content = `Semantic reading ${Date.now()}`
+  const created = await fetch(`${postgrestUrl}blocks`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify([
+      { resolver: 'core.text.v1', content, storage: null },
+      { resolver: 'not.installed', content: 'opaque', storage: null },
+    ]),
+  })
+  expect(created.status).toBe(201)
+  const blocks = await created.json()
+  let fail = false
+  // Ranking is unchanged; this journey owns selecting, presenting and reading its results.
+  await page.route(`${coreUrl}semantic-retrieval`, (route) =>
+    route.fulfill(
+      fail
+        ? { status: 503, json: { detail: 'semantic unavailable' } }
+        : {
+            json: {
+              profile: 1,
+              metric: 'cosine',
+              matches: blocks.map((entity: { id: number }) => ({
+                type: 'block',
+                entity,
+                score: 0.8,
+              })),
+            },
+          }
+    )
+  )
+  try {
+    await page.goto('/')
+    await page.getByRole('searchbox', { name: 'Search the info base' }).fill('remembered meaning')
+    await page.getByRole('combobox', { name: 'Search mode' }).click()
+    await page.getByRole('option', { name: 'Semantic', exact: true }).click()
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(page.getByText(content, { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: new RegExp(`block:${blocks[1].id}`) })
+    ).toBeVisible()
+    await page.reload()
+    await expect(page.getByRole('combobox', { name: 'Search mode' })).toHaveText('Semantic')
+    await page.getByRole('button', { name: new RegExp(`block:${blocks[0].id}`) }).click()
+    await page.getByRole('button', { name: 'View content', exact: true }).click()
+    await expect(
+      page.locator('.solved-content-popup').getByText(content, { exact: true })
+    ).toBeVisible()
+    expect(new URL(page.url()).searchParams.get('q')).toBe('remembered meaning')
+    expect(new URL(page.url()).searchParams.get('mode')).toBe('semantic')
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
+    fail = true
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(
+      page.getByText('The search could not be completed.', { exact: true })
+    ).toBeVisible()
+    await expect(page.getByRole('searchbox')).toHaveValue('remembered meaning')
+  } finally {
+    await fetch(
+      `${postgrestUrl}blocks?id=in.(${blocks.map((block: { id: number }) => block.id).join(',')})`,
+      { method: 'DELETE', headers }
+    )
+  }
+})
+
 test('an empty browser saves its connection across refresh and reads Peers', async ({
   browser,
 }) => {
