@@ -55,6 +55,15 @@ the same class and rejects collisions; there is no default decoder. `Resolver.un
 registers the versioned text, HTML, image, audio, video, PDF, EPUB, ZIP, and file contracts.
 Extensions register their own namespaced, versioned contracts rather than aliases for retired IDs.
 
+`ExtractionResultResolver` 解码 `core.organization.extraction-result.v1`，由 Client Web 在通用九类 Resolver
+之后显式注册。它只依赖 info-base 数据合同，不要求 Python 或提取 Agent 在线。结果正文、历史出处与必要引文
+来自结果自身的 content；来源 Relation 通过 `kind`、`basis_key` 提供当前内部入口。删除来源或解除关系后，
+正文和引文仍可读。错误或冲突的来源映射只影响 `getSource()`，不能隐藏合法正文。损坏的结果 payload 明确拒绝。
+
+Client Web 的 `ContentExtraction` 分开呈现正文与原文依据，按组显示来源入口状态；链接缺失不推断删除原因。
+历史出处仅展示保存的来源名称，阅读不会重新抓取来源。预览仅展示有限行正文。其他 TypeScript 消费者
+可选择注册这个导出的 Resolver，并按既有合同提供两种 renderer；通用 `registerCoreResolvers()` 的参数不变。
+
 Every concrete Resolver exposes `getText({ context })`, where `default` and `lexical` are named,
 resolver-owned projections. Lexical projection is Block-local and non-recursive. Callers preserve
 four distinct results:

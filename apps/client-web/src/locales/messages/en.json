@@ -445,6 +445,13 @@
         "previous": "Previous group",
         "next": "Next group"
       }
+    },
+    "extraction": {
+      "excerpts": "Source excerpts",
+      "openSource": "Open source",
+      "sourceUnavailable": "Source association unavailable",
+      "sourceError": "Unable to read source association",
+      "sourceLoading": "Reading source association"
     }
   }
 }

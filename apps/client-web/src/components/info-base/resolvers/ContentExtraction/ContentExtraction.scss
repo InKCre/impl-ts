@@ -1,0 +1,41 @@
+.content-extraction {
+  display: grid;
+  gap: sys-var(space, lg);
+  padding: sys-var(space, md);
+  color: sys-var(color, text, base);
+  overflow-wrap: anywhere;
+  @include apply-font(body-md);
+
+  &__text,
+  blockquote {
+    white-space: pre-wrap;
+  }
+
+  &__basis,
+  &__source {
+    display: grid;
+    justify-items: start;
+    gap: sys-var(space, sm);
+  }
+
+  &__source + &__source {
+    margin-top: sys-var(space, md);
+  }
+
+  h3,
+  h4 {
+    margin: 0;
+    @include apply-font(label-md);
+  }
+
+  blockquote {
+    margin: 0;
+    padding-inline-start: sys-var(space, md);
+    border-inline-start: 2px solid sys-var(color, border, base);
+  }
+
+  &__source-state {
+    color: sys-var(color, text, subtle);
+    @include apply-font(body-sm);
+  }
+}
