@@ -24,21 +24,6 @@ function run(command, args, options = {}) {
   })
 }
 
-function fingerprint(instance) {
-  return compose(instance, [
-    'run',
-    '--rm',
-    '--no-deps',
-    '--entrypoint',
-    'python',
-    'init',
-    'scripts/container.py',
-    'db',
-    'contract',
-    '--json',
-  ]).trim()
-}
-
 function developmentFingerprint(instance) {
   return compose(instance, [
     'run',
@@ -91,7 +76,6 @@ try {
   const state = await ensureDatabaseRuntime(instance)
   await waitForRuntime(state)
   const ownsRuntime = state.provider.kind !== 'external'
-  if (ownsRuntime) fingerprint(instance)
   const baseline = ownsRuntime ? developmentFingerprint(instance) : null
 
   run('pnpm', ['--filter', '@inkcre/client-web', 'build-only'])

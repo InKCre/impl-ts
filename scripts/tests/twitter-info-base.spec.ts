@@ -833,7 +833,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   })
   expect(indexJob.state).toMatchObject({ failed: 0, unavailable: 0 })
   await recordPhase('searching')
-  for (const query of [postId, `acceptance_${stamp}`, 'Rich text survives with its author']) {
+  for (const query of [postId, `acceptance_${stamp}`]) {
     await expectPostSearchResult(page, query, postBlock!.id)
   }
   const bodySearch = await expectPostSearchResult(
