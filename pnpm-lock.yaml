@@ -440,6 +440,52 @@ importers:
         specifier: ^4.1.12
         version: 4.4.3
 
+  extensions/local-files:
+    dependencies:
+      '@inkcre/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@vueuse/core':
+        specifier: ^14.0.0
+        version: 14.4.0(vue@3.5.40(typescript@5.9.3))
+      pinia:
+        specifier: ^3.0.0
+        version: 3.0.3(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      vue:
+        specifier: ^3.5.25
+        version: 3.5.40(typescript@5.9.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.5.1(vue@3.5.40(typescript@5.9.3))
+      zod:
+        specifier: ^4.1.0
+        version: 4.4.3
+    devDependencies:
+      '@inkcre/ext-dev-utils':
+        specifier: workspace:*
+        version: link:../../packages/ext-dev-utils
+      '@inkcre/ui-web':
+        specifier: 2.2.1
+        version: 2.2.1(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+      '@module-federation/vite':
+        specifier: ^1.1.0
+        version: 1.7.1(rollup@4.59.0)
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.1
+        version: 6.0.3(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))(vue@3.5.40(typescript@5.9.3))
+      '@vue/tsconfig':
+        specifier: ^0.7.0
+        version: 0.7.0(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: ^7.0.6
+        version: 7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 3.3.8(typescript@5.9.3)
+
   extensions/mail:
     dependencies:
       '@inkcre/core':
