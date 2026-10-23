@@ -134,6 +134,11 @@ Mail 的摘要用于识别邮件、附件或事实对象，完整 renderer 承�
 
 ## Recall Reading Destinations
 
+列表默认关键词检索，也可选择既有语义检索；`q` 和 `mode` 由 URL 保存，打开对象和内容时保留。
+语义结果展示原实体引用、相似度与既有 Resolver 预览，再通过现有 Block/Relation inspector 阅读。
+预览使用 `materializeMissing=false`；预览失败仍保留候选的引用、分数和打开入口，不把预览称为命中片段。
+新查询清空旧结果，generation 阻止过期查询或预览覆盖当前结果；失败显示错误，不切换检索方式。
+
 `LexicalRetrievalManager.retrieve()` 保留 Peer 返回的逐 Block 命中。列表和图通过
 `presentLexicalMatches()` 呈现同一结果窗口：Resolver 可用 `getRecallTarget(match)` 提供确定的阅读目标，
 默认返回 `null`。按目标 Block ID 聚合并保持第一次命中的顺序，每组保留原始命中对象、rank 和 evidence。
