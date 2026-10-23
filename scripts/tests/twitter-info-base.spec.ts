@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -190,7 +190,6 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     'INKCRE_E2E_WEB_URL',
     'INKCRE_E2E_JWT_SECRET',
     'INKCRE_E2E_CORE_SOURCE_SHA',
-    'INKCRE_E2E_INFO_BASE_OWNER',
   ]) {
     if (!process.env[key])
       throw new Error(`${key} is required before this journey can write fixtures`)
@@ -223,7 +222,6 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     postgrest_url: postgrestUrl,
     web_url: process.env.INKCRE_E2E_WEB_URL,
     declared_core_source_revision: process.env.INKCRE_E2E_CORE_SOURCE_SHA,
-    info_base_owner: process.env.INKCRE_E2E_INFO_BASE_OWNER,
     fixture_stamp: stamp,
     cleanup:
       'The isolated info-base owner removes this run data; this script does not delete shared rows.',
@@ -246,7 +244,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   const candidate = (await candidateResponse.json()) as {
     source_revision: string
     build_id: string
-    distributions: Array<{ manifest: string; sha256: string }>
+    distributions: Array<{ manifest: string }>
   }
   const twitterCandidate = candidate.distributions?.find((item) =>
     item.manifest.startsWith('/extensions/inkcre/twitter/')
@@ -570,11 +568,11 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     { webOrigin, postgrestUrl, jwtSecret, peerId }
   )
   const twitterRemoteEntries: import('@playwright/test').Response[] = []
-  const moduleResources: Array<{ url: string; status: number }> = []
+  const moduleOrigins = new Set<string>()
   context.on('response', (response) => {
     const url = new URL(response.url())
     if (url.pathname.includes('/extensions/inkcre/twitter/')) {
-      moduleResources.push({ url: response.url(), status: response.status() })
+      moduleOrigins.add(url.origin)
     }
     if (
       url.pathname.includes('/extensions/inkcre/twitter/') &&
@@ -622,12 +620,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   await recordPhase('reading', {
     web_peer_id: peerId,
     registry_origin: webOrigin,
-    remote_entry: {
-      url: remoteEntry.url(),
-      sha256: createHash('sha256')
-        .update(await remoteEntry.body())
-        .digest('hex'),
-    },
+    remote_entry_url: remoteEntry.url(),
   })
   const posts = await databaseRows<BlockRow>(
     'blocks?select=id,resolver,content&resolver=eq.extensions.twitter.tweet.v2&order=id.desc&limit=100'
@@ -870,8 +863,11 @@ test('Core self-hosted connection writes native records that the real Twitter MF
     { timeout: 30_000 }
   )
   await expect(reopened.locator('.solved-content-popup')).toContainText('Archive Acceptance Author')
-  expect(moduleResources.every((resource) => new URL(resource.url).origin === webOrigin)).toBe(true)
+  await recordPhase('reopened', {
+    module_origins: [...moduleOrigins].sort(),
+    reopened_url: reopened.url(),
+  })
+  expect([...moduleOrigins]).toEqual([webOrigin])
   expect(secretTransmitted, 'Application requests must not transmit JWT_SECRET.').toBe(false)
   await reopened.screenshot({ path: testInfo.outputPath('reopened.png'), fullPage: true })
-  await recordPhase('reopened', { module_resources: moduleResources, reopened_url: reopened.url() })
 })
