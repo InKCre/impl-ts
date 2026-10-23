@@ -351,7 +351,10 @@ export function registerGitHubNativeTests(): void {
         if (await contentPopup.isVisible())
           await contentPopup.getByRole('button', { name: 'Close', exact: true }).click()
         await page.locator('button[aria-controls="app-side-panel"]').click()
-        await page.getByRole('button', { name: 'Settings', exact: true }).click()
+        await page
+          .getByLabel('Primary')
+          .getByRole('link', { name: 'Settings', exact: true })
+          .click()
         await expect(page.getByLabel('PostgREST URL')).toBeVisible()
       }
       async function setInterval(seconds: number): Promise<void> {
