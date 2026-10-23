@@ -5,6 +5,12 @@
 
 <!-- What changes, and why is this the smallest coherent change? -->
 
+<!-- Use type(scope): summary for the PR title; CONTRIBUTING.md owns stable scopes. -->
+
+Primary implementation scope:
+
+Affected release projects (or `none`):
+
 ## Validation evidence
 
 - [ ] `pnpm check`

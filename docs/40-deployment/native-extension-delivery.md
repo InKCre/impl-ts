@@ -21,8 +21,13 @@ compatible SDK bump need not release MF consumers whose only generated change is
 propagation: they do not bundle Core (`import: false`) and keep their declared Host SDK range.
 Consumers that bundle changed code or require a newer minimum SDK must be released with it.
 
-Contributors record intent with `pnpm changeset`, selecting only affected independently releasable
-Extension packages. On a protected `main` push,
+Contributors record intent with `pnpm changeset`, selecting the affected versioned workspace
+projects: applications, SDK packages, or Extension packages. Private application and Extension
+packages are versioned too; `private` does not mean their release intent should be omitted.
+Changesets own versions and changelogs, while each delivery workflow owns its artifact. A package's
+commit or PR scope is not a substitute for selecting it in the Changeset.
+
+On a protected `main` push,
 [`.github/workflows/extension-release.yml`](../../.github/workflows/extension-release.yml) runs the
 **First-party Extension release** lifecycle:
 
