@@ -1,5 +1,4 @@
 import { fileURLToPath, URL } from 'node:url'
-import UnoCSS from 'unocss/vite'
 import { defineConfig } from 'wxt'
 
 const devInstance = process.env.INKCRE_DEV_INSTANCE
@@ -11,9 +10,30 @@ const chromiumBinary = process.env.INKCRE_CHROMIUM_BINARY
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
-  manifest: {
-    permissions: ['storage'],
-  },
+  manifestVersion: 3,
+  manifest: ({ browser }) => ({
+    action: {
+      // A 16-DIP toolbar mark needs optical geometry at every pixel density.
+      default_icon: { 16: 'toolbar/16.png', 32: 'toolbar/32.png', 48: 'toolbar/48.png' },
+    },
+    permissions: [
+      'storage',
+      'activeTab',
+      'scripting',
+      'alarms',
+      ...(browser === 'firefox' ? [] : ['offscreen']),
+    ],
+    optional_permissions: ['bookmarks', 'history'],
+    optional_host_permissions: ['http://*/*', 'https://*/*'],
+    ...(browser === 'firefox' ? {} : { minimum_chrome_version: '116' }),
+    ...(browser === 'firefox'
+      ? {
+          browser_specific_settings: {
+            gecko: { id: 'webext@inkcre.org', strict_min_version: '128.0' },
+          },
+        }
+      : {}),
+  }),
   dev: Number.isInteger(devPort)
     ? {
         server: {
@@ -47,9 +67,6 @@ export default defineConfig({
           })
         },
       },
-      UnoCSS({
-        configFile: './uno.config.ts',
-      }),
     ],
     build: {
       sourcemap: 'inline',

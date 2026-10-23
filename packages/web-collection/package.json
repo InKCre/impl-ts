@@ -1,0 +1,21 @@
+{
+  "name": "@inkcre/web-collection",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/material.ts",
+    "./resolvers": "./src/resolvers.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@inkcre/core": "workspace:*",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

@@ -113,7 +113,6 @@ const runtimeSources = [
   ...(await sourceFiles('packages/ext-dev-utils/src')),
   ...(await sourceFiles('apps/client-web/src')),
   ...(await sourceFiles('apps/client-webext/components')),
-  ...(await sourceFiles('apps/client-webext/composables')),
   ...(await sourceFiles('apps/client-webext/entrypoints')),
   ...(await sourceFiles('apps/client-webext/logic')),
   ...(

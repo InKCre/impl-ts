@@ -35,3 +35,13 @@ $radius-lg: 0px;
   --color-muted: 156 163 175; /* gray-400 */
   --color-border: 55 65 81; /* gray-700 */
 }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-surface: 17 24 39;
+    --color-surface-2: 31 41 55;
+    --color-text: 243 244 246;
+    --color-muted: 156 163 175;
+    --color-border: 55 65 81;
+  }
+}
