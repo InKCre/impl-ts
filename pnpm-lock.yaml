@@ -102,8 +102,8 @@ importers:
         specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz
         version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.21.6)
       '@inkcre/ui-web':
-        specifier: 2.3.0
-        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+        specifier: 2.4.0
+        version: 2.4.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       '@module-federation/runtime':
         specifier: ^0.21.4
         version: 0.21.6
@@ -644,8 +644,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@inkcre/ui-web':
-        specifier: 2.3.0
-        version: 2.3.0(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
+        specifier: 2.4.0
+        version: 2.4.0(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
     devDependencies:
       pinia:
         specifier: ^3.0.3
@@ -1539,6 +1539,12 @@ packages:
 
   '@inkcre/ui-web@2.3.0':
     resolution: {integrity: sha512-fXfAro12+zzyhtjiZqfQBvyMJKVnclrm/qvHst70dnRFZekYIkE+rSfabEJ//avAvvJyVZL7kK6XewXK4PgdJg==, tarball: https://npm.pkg.github.com/download/@inkcre/ui-web/2.3.0/2c81dee78ac6797018f0e62a2a988747cd3c7a3e}
+    peerDependencies:
+      unocss: ^66.5.0
+      vue: ^3.5.25
+
+  '@inkcre/ui-web@2.4.0':
+    resolution: {integrity: sha512-9M2EbOAbby0Ad8hMlQHfEVjCIqUzYaFfbP/7Xb8PfFZ4cLlajQTdsDND10f2UC/B3r60/t3+UD2AvVogLasBwQ==, tarball: https://npm.pkg.github.com/download/@inkcre/ui-web/2.4.0/bed87144d3f0a47eb380582394a571fb6e46d2d1}
     peerDependencies:
       unocss: ^66.5.0
       vue: ^3.5.25
@@ -7607,7 +7613,23 @@ snapshots:
       vscode-languageserver-textdocument: 1.0.14
       vue: 3.5.40(typescript@5.9.3)
 
-  '@inkcre/ui-web@2.3.0(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))':
+  '@inkcre/ui-web@2.4.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))':
+    dependencies:
+      '@codemirror/autocomplete': 6.20.3
+      '@codemirror/commands': 6.11.1
+      '@codemirror/lang-json': 6.0.2
+      '@codemirror/lint': 6.9.7
+      '@codemirror/state': 6.7.5
+      '@codemirror/view': 6.43.12
+      '@vue/shared': 3.5.25
+      '@vueuse/core': 14.4.0(vue@3.5.40(typescript@5.9.3))
+      dayjs: 1.11.23
+      unocss: 66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))
+      vscode-json-languageservice: 5.6.4
+      vscode-languageserver-textdocument: 1.0.14
+      vue: 3.5.40(typescript@5.9.3)
+
+  '@inkcre/ui-web@2.4.0(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))':
     dependencies:
       '@codemirror/autocomplete': 6.20.3
       '@codemirror/commands': 6.11.1
