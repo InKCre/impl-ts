@@ -7,6 +7,12 @@ const jsonOutput = process.argv.includes('--json')
 
 const workspaces = [
   {
+    path: 'extensions/local-files',
+    name: '@inkcre/ext-local-files',
+    requiredScripts: ['build', 'dev', 'type-check'],
+    builder: 'vite',
+  },
+  {
     path: 'extensions/capture',
     name: '@inkcre/ext-capture',
     requiredScripts: ['build', 'dev', 'type-check'],
