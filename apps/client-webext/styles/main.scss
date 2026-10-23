@@ -1,18 +1,1 @@
 @use './design/_tokens.scss';
-@use './base/_globals.scss';
-
-/* Project-level global additions can be placed here */
-
-.btn {
-  @apply px-4 py-1 rounded-none inline-block
-    bg-brand text-white cursor-pointer
-    hover:bg-brand/90
-    disabled:cursor-default disabled:bg-muted/50 disabled:text-text/70 disabled:opacity-60;
-}
-
-.icon-btn {
-  @apply inline-block cursor-pointer select-none
-    opacity-75 transition duration-200 ease-in-out
-    hover:opacity-100 hover:text-brand;
-  font-size: 0.9em;
-}

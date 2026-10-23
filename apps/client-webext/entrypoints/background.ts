@@ -1,36 +1,40 @@
-import { onMessage, sendMessage } from 'webext-bridge/background'
 import { browser } from 'wxt/browser'
+import {
+  handleCollectionMessage,
+  handlesCollectionMessage,
+  initializeCollection,
+  refreshPeers,
+  syncAutomaticScripts,
+  wakeWork,
+} from '~/logic/collection/runtime'
 
 export default defineBackground(() => {
-  onMessage('open-sidepanel', ({ sender, data }) => {
-    const tabId = sender.tabId
-    const path = data?.path
-
-    void browser.sidePanel
-      .open({ tabId })
-      .then(async () => {
-        // Keep notifying content script that sidepanel was opened
-        await Promise.all([
-          sendMessage('sidepanel-opened', undefined, `content-script@${tabId}`),
-          browser.sidePanel.setOptions({
-            path,
-            tabId,
-          }),
-        ])
-      })
-      .catch((error) => console.error('Failed to open side panel:', error))
-  })
-  browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type === 'get-tab-id') {
-      if (msg.from !== 'sidepanel') {
-        sendResponse({ tabId: sender.tab?.id })
-      } else {
-        browser.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-          const tabId = tabs[0]?.id
-          sendResponse({ tabId })
+  const initialized = initializeCollection()
+  initialized
+    .then(() => Promise.all([wakeWork(), refreshPeers()]))
+    .catch((error) => console.error('Collection startup failed:', error))
+  browser.runtime.onMessage.addListener((message, sender) => {
+    if (!handlesCollectionMessage(message)) return
+    return initialized
+      .then(() => handleCollectionMessage(message, sender))
+      .then(
+        (value) => ({ ok: true, value }),
+        (error: unknown) => ({
+          ok: false,
+          error:
+            error && typeof error === 'object' && 'message' in error
+              ? String(error.message)
+              : String(error),
         })
-      }
-    }
-    return true
+      )
+  })
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'inkcre-collection')
+      void initialized
+        .then(() => Promise.all([wakeWork(), refreshPeers()]))
+        .catch((error) => console.error('Collection batch failed:', error))
+  })
+  browser.permissions.onRemoved.addListener(() => {
+    void initialized.then(() => syncAutomaticScripts())
   })
 })

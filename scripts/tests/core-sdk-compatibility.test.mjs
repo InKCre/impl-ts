@@ -10,9 +10,12 @@ import {
   presentLexicalMatches,
   Resolver,
   TextResolver,
+  DBAPIClient,
+  PostgreSQLBinaryStorage,
+  rawPostgrestFetch,
 } from '../../packages/core/dist/index.js'
 
-test('SDK 0.4 preserves the legacy JWT default without changing database admission truth', async () => {
+void test('SDK 0.4 preserves the legacy JWT default without changing database admission truth', async () => {
   const generated = JSON.parse(
     await readFile(
       new URL('../../packages/core/src/database/runtime-contract.generated.json', import.meta.url),
@@ -32,7 +35,44 @@ test('SDK 0.4 preserves the legacy JWT default without changing database admissi
   }
 })
 
-test('optional recall APIs preserve an ordinary resolver and its original match', async () => {
+void test('binary storage keeps its explicit connection for create, read, update and delete', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const id = '00000000-0000-4000-8000-000000000009'
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    calls.push({ url, token: new Headers(init.headers).get('Authorization') })
+    if (url.includes('create_storage_blob')) return Response.json(id)
+    if (url.includes('read_storage_blob')) return new Response(new Uint8Array([37, 80, 68, 70]))
+    return Response.json([{ id }])
+  }
+  try {
+    const token = async () => 'explicit-connection-test-token'
+    const baseUrl = 'https://connection.test/database'
+    const storage = new PostgreSQLBinaryStorage(
+      { id: -4, type: 'postgresql_binary' },
+      (path, options) => rawPostgrestFetch(path, { ...options, baseUrl, tokenProvider: token }),
+      new DBAPIClient('storage_blobs', undefined, 'inkcre', baseUrl, token)
+    )
+    const pointer = await storage.createRawContent(new Uint8Array([37, 80, 68, 70]))
+    assert.deepEqual(JSON.parse(pointer), { blob_id: id })
+    assert.deepEqual(
+      await storage.getRawContent({ id: 1, storage: -4, content: pointer }),
+      new Uint8Array([37, 80, 68, 70])
+    )
+    assert.equal(await storage.updateRawContent(pointer, new Uint8Array([1])), true)
+    assert.equal(await storage.deleteRawContent(pointer), true)
+    assert.equal(calls.length, 4)
+    for (const call of calls) {
+      assert.equal(call.url.startsWith(baseUrl + '/'), true)
+      assert.equal(call.token, 'Bearer explicit-connection-test-token')
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+void test('optional recall APIs preserve an ordinary resolver and its original match', async () => {
   TextResolver.previewRenderer = { render: () => null }
   TextResolver.solvedContentRenderer = { render: () => null }
   Resolver.register(TextResolver.type, TextResolver)
