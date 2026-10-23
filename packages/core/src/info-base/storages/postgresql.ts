@@ -27,9 +27,17 @@ function postgresBytea(content: Uint8Array): string {
 export class PostgreSQLBinaryStorage extends WritableStorage<Uint8Array> {
   private static blobApi = new DBAPIClient<'storage_blobs'>('storage_blobs')
 
+  constructor(
+    data: ConstructorParameters<typeof Storage>[0],
+    private readonly request: typeof rawPostgrestFetch = rawPostgrestFetch,
+    private readonly blobs = PostgreSQLBinaryStorage.blobApi
+  ) {
+    super(data)
+  }
+
   protected async _getRawContent(block: IStorageBlock): Promise<Uint8Array> {
     const pointer = parsePointer(block.content)
-    const response = await rawPostgrestFetch('/rpc/read_storage_blob', {
+    const response = await this.request('/rpc/read_storage_blob', {
       method: 'POST',
       headers: {
         Accept: 'application/octet-stream',
@@ -41,7 +49,7 @@ export class PostgreSQLBinaryStorage extends WritableStorage<Uint8Array> {
   }
 
   async createRawContent(content: Uint8Array): Promise<string> {
-    const response = await rawPostgrestFetch('/rpc/create_storage_blob', {
+    const response = await this.request('/rpc/create_storage_blob', {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -55,7 +63,7 @@ export class PostgreSQLBinaryStorage extends WritableStorage<Uint8Array> {
 
   async updateRawContent(blockContent: string, content: Uint8Array): Promise<boolean> {
     const pointer = parsePointer(blockContent)
-    const { data, error } = await PostgreSQLBinaryStorage.blobApi
+    const { data, error } = await this.blobs
       .update({ data: postgresBytea(content) })
       .eq('id', pointer.blob_id)
       .select('id')
@@ -65,11 +73,7 @@ export class PostgreSQLBinaryStorage extends WritableStorage<Uint8Array> {
 
   async deleteRawContent(blockContent: string): Promise<boolean> {
     const pointer = parsePointer(blockContent)
-    const { data, error } = await PostgreSQLBinaryStorage.blobApi
-      .from()
-      .delete()
-      .eq('id', pointer.blob_id)
-      .select('id')
+    const { data, error } = await this.blobs.from().delete().eq('id', pointer.blob_id).select('id')
     if (error) throw new APIError(error.message, 400, error)
     return data?.length === 1
   }
