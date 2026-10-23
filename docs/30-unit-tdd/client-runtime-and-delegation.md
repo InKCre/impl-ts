@@ -205,9 +205,11 @@ exporter 为 10 秒，经 relay 为 35 秒，以覆盖服务端最多 32 秒的�
 取消已开始的 SDK 导出，也不证明排空成功；页面退出只能 best effort。Job 页面提供可选
 `diagnostics_url` 链接，用户以 Job ID 在诊断端查询，不把 Grafana 查询语法写入业务层。
 
-`JobManager.create` 在同一个 PostgREST INSERT 中写入 SDK 注入的提交 carrier。超出
-512 UTF-8 bytes 的可选 tracestate 会被省略并计数。执行成功 claim 后创建独立 trace，
-通过 SDK Span Link 关联提交；claim、取消和 close 不重写提交列。Job ID 是诊断关联字段，
+`JobManager.create` 只在有效 trace context 存在时，在同一个 PostgREST INSERT 中写入
+SDK 注入的提交 carrier。遥测关闭或没有有效 traceparent 时不发送提交追踪列；缺失或
+空 tracestate 也不发送对应列，超出 512 UTF-8 bytes 的可选 tracestate 会被省略并计数。
+带上下文的提交要求部署数据库已包含这些可选列；不在提交失败后删字段重试。
+执行成功 claim 后创建独立 trace，通过 SDK Span Link 关联提交；claim、取消和 close 不重写提交列。Job ID 是诊断关联字段，
 不是 trace ID。时延指标 `inkcre.operation.duration` 使用与 Core 一致的 `operation` /
 `outcome` 标签和 5ms 至 300s 的显式秒分桶，便于跨 Peer 聚合；日志保留 `inkcre.*` 属性。
 `job.submitted`、`job.started`、`job.closed` 只从明确的业务边界发出结构化

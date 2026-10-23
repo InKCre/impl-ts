@@ -641,7 +641,7 @@ test('disabling while registration is pending prevents its later lease or worker
   }
 })
 
-test('disabling participation drains a dispatched claim before saving configuration', async ({
+test('untraced Job creation omits carrier columns and disabling drains its claim', async ({
   page,
 }) => {
   const authorization = `Bearer ${await token()}`
@@ -663,6 +663,7 @@ test('disabling participation drains a dispatched claim before saving configurat
     release = resolve
   })
   let claimStored = false
+  let carrierlessInsertObserved = false
   try {
     await page.goto('/sources')
     await expect(page.getByRole('main')).toBeVisible()
@@ -671,14 +672,16 @@ test('disabling participation drains a dispatched claim before saving configurat
         'Connecting this Web Peer; database pages are available, local jobs are not running yet.'
       )
     ).toHaveCount(0)
-    const created = await fetch(`${postgrestUrl}jobs`, {
-      method: 'POST',
-      headers: { ...headers, Prefer: 'return=representation' },
-      body: JSON.stringify({ type, parameters: {}, timeout_seconds: 3600 }),
-    })
-    expect(created.status).toBe(201)
-    id = (await created.json())[0].id
     await page.route('**/jobs?**', async (route) => {
+      if (route.request().method() === 'POST') {
+        const submitted = route.request().postDataJSON()
+        expect(submitted.type).toBe(type)
+        expect(submitted).not.toHaveProperty('submission_traceparent')
+        expect(submitted).not.toHaveProperty('submission_tracestate')
+        carrierlessInsertObserved = true
+        await route.continue()
+        return
+      }
       if (
         route.request().method() !== 'PATCH' ||
         route.request().postDataJSON().status !== 'running' ||
@@ -694,38 +697,49 @@ test('disabling participation drains a dispatched claim before saving configurat
       await route.fulfill({ response })
     })
     // Native extensions use this same shared SDK; the fixture adds no production test hook.
-    await page.evaluate(
-      async ({ id, type }) => {
-        type Sdk = typeof import('../../packages/core/src/index')
-        const globals = globalThis as typeof globalThis & {
-          __FEDERATION__: {
-            __INSTANCES__: Array<{
-              options: { name: string }
-              loadShare(name: string): Promise<() => Sdk>
-            }>
-          }
-          __claimDrain: { stop(): Promise<void>; handlerRuns: number; stopCompleted: boolean }
+    id = await page.evaluate(async (type) => {
+      type Sdk = typeof import('../../packages/core/src/index')
+      const globals = globalThis as typeof globalThis & {
+        __FEDERATION__: {
+          __INSTANCES__: Array<{
+            options: { name: string }
+            loadShare(name: string): Promise<() => Sdk>
+          }>
         }
-        const host = globals.__FEDERATION__.__INSTANCES__.find(
-          (instance) => instance.options.name === 'host'
-        )!
-        const sdk = (await host.loadShare('@inkcre/core'))()
-        globals.__claimDrain = {
-          stop: () => sdk.JobManager.stopWorker(),
-          handlerRuns: 0,
-          stopCompleted: false,
+        __claimDrain: {
+          start(id: number): void
+          stop(): Promise<void>
+          handlerRuns: number
+          stopCompleted: boolean
         }
-        sdk.JobManager.registerHandler(type, {
-          parameters: sdk.MetaConfigSchema,
-          canHandle: () => true,
-          handle: async () => {
-            globals.__claimDrain.handlerRuns++
-          },
-        })
-        void sdk.JobManager.run(id!)
-      },
-      { id, type }
-    )
+      }
+      const host = globals.__FEDERATION__.__INSTANCES__.find(
+        (instance) => instance.options.name === 'host'
+      )!
+      const sdk = (await host.loadShare('@inkcre/core'))()
+      globals.__claimDrain = {
+        start: (id) => {
+          sdk.JobManager.registerHandler(type, {
+            parameters: sdk.MetaConfigSchema,
+            canHandle: () => true,
+            handle: async () => {
+              globals.__claimDrain.handlerRuns++
+            },
+          })
+          void sdk.JobManager.run(id)
+        },
+        stop: () => sdk.JobManager.stopWorker(),
+        handlerRuns: 0,
+        stopCompleted: false,
+      }
+      return (await sdk.JobManager.create(type, {})).id
+    }, type)
+    expect(carrierlessInsertObserved).toBe(true)
+    await page.evaluate((id) => {
+      ;(
+        globalThis as typeof globalThis & { __claimDrain: { start(id: number): void } }
+      ).__claimDrain.start(id)
+    }, id)
     await expect.poll(() => claimStored).toBe(true)
     const stoppedBeforeClaimReturned = await page.evaluate(async () => {
       const fixture = (

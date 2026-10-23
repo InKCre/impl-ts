@@ -281,17 +281,18 @@ export async function observeOperation<T>(
 }
 
 export function captureSubmission(parent: Context): {
-  submission_traceparent: string | null
-  submission_tracestate: string | null
+  submission_traceparent?: string
+  submission_tracestate?: string
 } {
   const carrier: Record<string, string> = {}
   if (tracer) propagator.inject(parent, carrier, setter)
+  if (!carrier.traceparent) return {}
   const state = carrier.tracestate
   const oversized = state !== undefined && new TextEncoder().encode(state).length > 512
   if (oversized) droppedCarrier?.add(1, { reason: 'tracestate_too_large' })
   return {
-    submission_traceparent: carrier.traceparent ?? null,
-    submission_tracestate: oversized ? null : (state ?? null),
+    submission_traceparent: carrier.traceparent,
+    ...(state && !oversized ? { submission_tracestate: state } : {}),
   }
 }
 export function submissionLinks(job: {
