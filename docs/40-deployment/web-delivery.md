@@ -134,8 +134,8 @@ Toolkit 完成校验后，trusted controller 的 `prepare-pages-preview.mjs` 只
 不可变 deployment URL 选择扩展时，remoteEntry 和分发资源不再被引向可更新的 PR alias。正式发布产物
 不经过这项 Preview 适配。暂存目录禁止符号链接。
 
-每次部署的 `/preview-candidate.json` 记录源码 SHA、run-attempt build ID，以及各 MF 分发的内容摘要
-（按相对文件名排序，对文件名、NUL、文件字节、NUL 顺序计算 SHA-256）。同一 SHA 重建不假定字节相同。
+每次部署的 `/preview-candidate.json` 记录源码 SHA、run-attempt build ID 和各 MF manifest 路径。
+不可变 deployment URL 标识本次交付；同一源码重建仍是不同候选，记录不提供字节相等性校验。
 验收固定候选时，应将浏览器 Peer 的 Registry origin 指向该 deployment URL，并核对实际加载资源；
 只打开快照 Web，不会覆盖浏览器已保存的 Registry。摘要明确区分静态部署成功与尚未执行的业务验收。
 

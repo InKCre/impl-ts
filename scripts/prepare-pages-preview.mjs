@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { readFile, readdir, realpath, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -31,18 +30,7 @@ export async function preparePagesPreview(directory, { sourceRevision, buildId }
     manifest.metaData.publicPath = 'auto'
     await writeFile(join(root, path), `${JSON.stringify(manifest, null, 2)}\n`)
 
-    const prefix = path.slice(0, -'mf-manifest.json'.length)
-    const files = entries
-      .filter((entry) => entry.isFile())
-      .map((entry) => relative(root, join(entry.parentPath, entry.name)))
-      .filter((file) => file.startsWith(prefix))
-      .sort()
-    const digest = createHash('sha256')
-    for (const file of files) {
-      digest.update(file.slice(prefix.length)).update('\0')
-      digest.update(await readFile(join(root, file))).update('\0')
-    }
-    distributions.push({ manifest: `/${path}`, sha256: digest.digest('hex') })
+    distributions.push({ manifest: `/${path}` })
   }
   const candidate = { source_revision: sourceRevision, build_id: buildId, distributions }
   await writeFile(join(root, 'preview-candidate.json'), `${JSON.stringify(candidate, null, 2)}\n`)

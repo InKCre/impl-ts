@@ -162,8 +162,7 @@ pnpm verify:twitter
 
 Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter MF 产物，并设置
 `INKCRE_E2E_CORE_URL`、`INKCRE_E2E_POSTGREST_URL`、`INKCRE_E2E_WEB_URL`、
-`INKCRE_E2E_JWT_SECRET`，以及 `INKCRE_E2E_CORE_SOURCE_SHA` 和 `INKCRE_E2E_INFO_BASE_OWNER`。
-后两项分别来自 Python 交付 owner 报告的目标源码，以及本次独占信息库的生命周期责任标识（例如 Python PR）。
+`INKCRE_E2E_JWT_SECRET`，以及 Python 交付 owner 报告的目标源码 `INKCRE_E2E_CORE_SOURCE_SHA`。
 `--list` 不要求这些输入；实际运行缺输入会在写入前失败。
 
 一次跨仓候选交接按以下顺序进行：
@@ -176,10 +175,10 @@ Twitter 验收需要预先启动且兼容的 Core、PostgREST、Web 和 Twitter 
    不改其他 Peer 的选择；Python facade 与 Web MF facade 分别由各自 Peer 使用。
 2. 从 TS Preview 摘要选择本次不可变 deployment URL，确认其 `/preview-candidate.json` 包含需要的 Twitter MF。
    `INKCRE_E2E_WEB_URL` 使用这个 URL，脚本据此配置本次新 Web Peer 的 Registry。
-3. 将上述六项输入注入运行进程，执行 `pnpm verify:twitter`。不要 source dotenv 文件或把凭据写进提交、命令输出、
+3. 将上述五项输入注入运行进程，执行 `pnpm verify:twitter`。不要 source dotenv 文件或把凭据写进提交、命令输出、
    截图和 trace。Core Cookie 连接需要真实安全浏览器上下文；本专项保留 Secure Cookie 和关闭 trace 的设置。
 4. 查看本次测试目录的 `run.json`：它保留准备／提交／读取／索引／搜索／重开阶段、结果、Web 实际构建身份、Core 的
-   声明源码与实际 Peer/version、原生 Distribution 的选择／加载／运行状态、数据库合同／head、实际 MF entry URL／摘要及资源 URL、fixture native IDs 与 Job／Block IDs。
+   声明源码与实际 Peer/version、原生 Distribution 的选择／加载／运行状态、数据库合同／head、实际 MF entry URL 和资源 origin 集合、fixture native IDs 与 Job／Block IDs。
    Core SHA 是部署 owner 的输入声明，脚本不把它冒充运行时独立读取的 SHA。失败时已写记录仍保留并标出阶段。
 5. owner 在不再需要现场后清理整个独占信息库，例如关闭本次 Python PR 触发既有 Preview 清理。脚本不会根据
    标题、时间范围或前缀批删共享数据；保留现场时，下一轮使用新的 fixture stamp，记录也说明清理责任。

@@ -10,7 +10,7 @@ const requireWeb = createRequire(new URL('../../apps/client-web/package.json', i
 const requireRuntime = createRequire(requireWeb.resolve('@module-federation/runtime'))
 const { generateSnapshotFromManifest } = requireRuntime('@module-federation/sdk')
 
-test('preview MF resolves from each selected snapshot and its receipt identifies the staged bytes', async () => {
+test('preview MF resolves from each selected snapshot and records its build identity', async () => {
   const root = await mkdtemp(join(tmpdir(), 'inkcre-preview-'))
   const path = 'extensions/inkcre/example/1.0.0/module-federation'
   const manifest = {
@@ -28,6 +28,11 @@ test('preview MF resolves from each selected snapshot and its receipt identifies
     await writeFile(join(root, path, 'mf-manifest.json'), JSON.stringify(manifest))
     await writeFile(join(root, path, 'remoteEntry.js'), 'export const candidate = "A"')
     const candidate = await preparePagesPreview(root, identity)
+    assert.deepEqual(candidate, {
+      source_revision: identity.sourceRevision,
+      build_id: identity.buildId,
+      distributions: [{ manifest: `/${path}/mf-manifest.json` }],
+    })
     const prepared = JSON.parse(await readFile(join(root, path, 'mf-manifest.json'), 'utf8'))
     assert.deepEqual(prepared, {
       ...manifest,
@@ -47,11 +52,6 @@ test('preview MF resolves from each selected snapshot and its receipt identifies
       candidate
     )
     assert.deepEqual(await preparePagesPreview(root, identity), candidate)
-    await writeFile(join(root, path, 'lazy.js'), 'export const candidate = "B"')
-    assert.notEqual(
-      (await preparePagesPreview(root, identity)).distributions[0].sha256,
-      candidate.distributions[0].sha256
-    )
     await symlink(join(root, path, 'remoteEntry.js'), join(root, path, 'linked.js'))
     await assert.rejects(preparePagesPreview(root, identity), /symbolic links/)
   } finally {
