@@ -38,13 +38,13 @@ WebExt 固定使用 `@inkcre/ui-web` 2.5.0 的内置密码显隐能力，通过�
 
 根目录 `pnpm test:e2e:webext` 真正加载扩展。指定 `INKCRE_CHROMIUM_BINARY=/Applications/Helium.app/Contents/MacOS/Helium` 使用 Helium 的隔离测试 profile，测试结束清理，不连接日常会话。真实数据旅程还需要可销毁数据库/PostgREST 的 `INKCRE_E2E_WEBEXT_PGREST` 与 `INKCRE_E2E_WEBEXT_JWT_SECRET`。测试副本只对合成 localhost 资料预授予权限；原生权限 UI 另行验证，生产 manifest 保持 optional 权限。
 
-实现合同见[WebExt 运行时与材料](../../docs/30-unit-tdd/webext-collection.md)。构建与行为验证分开记录；当前仓库没有扩展自动发布工作流，`zip`/`crx` 不代表已经发布。
+实现合同见[WebExt 运行时与材料](../../docs/30-unit-tdd/webext-collection.md)。安装、手动更新、旧身份迁移和 Changesets/GitHub Release 流程见[WebExt 版本与分发](../../docs/40-deployment/webext-delivery.md)。本地构建不等于发布；Firefox ZIP 尚未签名，不能作为正式安装包。
 
 ## Logo 素材
 
-图标直接取自用户提供的 `InKCre-logo-pack-20261021.zip`，使用 `original-transparent` 原色透明版，没有重新描摹或缩放导出。`public/toolbar/16.png`、`32.png`、`48.png` 分别来自 `16.png`、`16px@2x.png`、`16px@3x.png`，在 16px 逻辑工具栏尺寸下都保留小尺寸光学校正几何；manifest 的 `action.default_icon` 明确引用这些文件。
+图标直接取自用户提供的 `InKCre-logo-pack-20261021.zip`，没有重新描摹或缩放导出。工具栏的 16/32/48px 文件分别来自 optical 16px 的 1×/2×/3× 素材，不把标准大图缩到小尺寸。Chromium 不提供 Firefox 等价的原生主题图标声明，因此 `action.default_icon` 使用 `public/toolbar/canvas-*.png`，即原包 `original-white` 白底原色版，在两种工具栏背景上均可辨认，不为切换图标增加后台监听。
 
-扩展管理图标 `public/icon/16.png`、`32.png` 使用小尺寸版，`48.png`、`128.png` 使用标准版，`96.png` 来自标准 48px 的 2× 导出。设置页和 popup 的 32px 标志使用包内原色与反白的 `optical-32` SVG，按系统浅深色选择。素材沿用原包来源和品牌使用边界，没有新增许可授权。
+Firefox 通过 `action.theme_icons` 使用 `toolbar/*.png` 原色透明版与 `toolbar/reverse-*.png` 反白透明版，随浏览器工具栏主题选择。扩展管理图标同样使用白底原色：`public/icon/16.png`、`32.png` 使用小尺寸版，`48.png`、`128.png` 使用标准版，`96.png` 来自标准 48px 的 2× 导出。设置页和 popup 的 32px 标志使用包内原色与反白的 `optical-32` SVG，按系统浅深色选择；原生控件声明 `color-scheme: light dark`。素材沿用原包来源和品牌使用边界，没有新增许可授权。
 
 ## Hister 参考
 

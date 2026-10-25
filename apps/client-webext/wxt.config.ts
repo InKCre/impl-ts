@@ -1,5 +1,6 @@
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'wxt'
+import { key as chromiumKey } from './chromium-key.json'
 
 const devInstance = process.env.INKCRE_DEV_INSTANCE
 const devPort = Number.parseInt(process.env.PORT ?? '', 10)
@@ -11,10 +12,25 @@ const chromiumBinary = process.env.INKCRE_CHROMIUM_BINARY
 export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
   manifestVersion: 3,
-  manifest: ({ browser }) => ({
+  manifest: ({ browser, mode }) => ({
+    name: 'InKCre WebExt',
+    ...(browser !== 'firefox' && mode !== 'migration' ? { key: chromiumKey } : {}),
     action: {
       // A 16-DIP toolbar mark needs optical geometry at every pixel density.
-      default_icon: { 16: 'toolbar/16.png', 32: 'toolbar/32.png', 48: 'toolbar/48.png' },
+      default_icon: {
+        16: 'toolbar/canvas-16.png',
+        32: 'toolbar/canvas-32.png',
+        48: 'toolbar/canvas-48.png',
+      },
+      ...(browser === 'firefox'
+        ? {
+            theme_icons: [16, 32, 48].map((size) => ({
+              size,
+              light: `toolbar/reverse-${size}.png`,
+              dark: `toolbar/${size}.png`,
+            })),
+          }
+        : {}),
     },
     permissions: [
       'storage',
@@ -34,6 +50,11 @@ export default defineConfig({
         }
       : {}),
   }),
+  zip: {
+    artifactTemplate: 'inkcre-webext-{{version}}-{{browser}}-{{mode}}.zip',
+    // AMO needs the workspace and its private dependency sources, not an app-only ZIP.
+    zipSources: false,
+  },
   dev: Number.isInteger(devPort)
     ? {
         server: {

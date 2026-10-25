@@ -148,9 +148,9 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
       )
     ).rejects.toThrow()
   expect(manifest.action.default_icon).toEqual({
-    16: 'toolbar/16.png',
-    32: 'toolbar/32.png',
-    48: 'toolbar/48.png',
+    16: 'toolbar/canvas-16.png',
+    32: 'toolbar/canvas-32.png',
+    48: 'toolbar/canvas-48.png',
   })
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto(`chrome-extension://${extensionId}/options.html`)
@@ -241,6 +241,126 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
   expect(pageErrors).toEqual([])
 })
 
+test('local data survives an identity transfer and a relocated fixed-identity upgrade', async ({
+  restartContext,
+}) => {
+  const connectionId = crypto.randomUUID()
+  const requestId = crypto.randomUUID()
+  const importId = crypto.randomUUID()
+  const data = {
+    format: 'inkcre-webext-local-v1',
+    settings: {
+      profileId: crypto.randomUUID(),
+      activeConnectionId: connectionId,
+      paused: true,
+      origins: [],
+      excluded: ['https://private.test'],
+    },
+    connections: [
+      {
+        id: connectionId,
+        peerId: crypto.randomUUID(),
+        name: '迁移测试',
+        url: 'https://transfer.invalid/rest',
+        secret: 'synthetic-transfer-secret-at-least-32-bytes',
+        storageId: -4,
+      },
+    ],
+    outbox: [
+      {
+        id: requestId,
+        connectionId,
+        importId,
+        createdAt: 123,
+        automatic: true,
+        url: 'https://source.test/document.pdf',
+        state: 'pending',
+        command: {
+          request_id: requestId,
+          mode: 'fixed',
+          source: { scope: 'transfer-test', key: requestId, metadata: {} },
+          material: {
+            url: 'https://source.test/document.pdf',
+            title: 'PDF',
+            captured_at: new Date().toISOString(),
+            method: 'online-pdf',
+            coverage: [],
+          },
+          storage_id: -4,
+          parts: [{ role: 'pdf', base64: 'JVBERi0xLjcK' }],
+        },
+      },
+    ],
+    imports: [
+      {
+        id: importId,
+        connectionId,
+        kind: 'bookmarks',
+        scope: 'transfer-test',
+        state: 'paused',
+        fetchContent: true,
+        remaining: [
+          {
+            key: '1',
+            url: 'https://source.test/document.pdf',
+            title: 'PDF',
+            metadata: {},
+            recordAccepted: true,
+          },
+        ],
+        failures: [],
+        counts: { total: 1, records: 1, content: 0, existing: 0 },
+        stage: 'content-wait',
+        requestId,
+      },
+    ],
+    legacy: [['llmProviders', [{ name: '封存测试', secret: 'synthetic-old-value' }]]],
+  }
+  async function open(context: Awaited<ReturnType<typeof restartContext>>) {
+    const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'))
+    const id = new URL(worker.url()).hostname
+    const page = await context.newPage()
+    await page.goto(`chrome-extension://${id}/options.html`)
+    await expect(page.getByRole('heading', { name: '信息库', exact: true })).toBeVisible()
+    await page.getByText('本机数据迁移', { exact: true }).click()
+    return { page, id }
+  }
+  async function restore(page: Awaited<ReturnType<typeof open>>['page'], value: unknown) {
+    await page.getByLabel('本机数据文件').setInputFiles({
+      name: 'local.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(value)),
+    })
+  }
+  async function exported(page: Awaited<ReturnType<typeof open>>['page']) {
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: '导出本机数据', exact: true }).click()
+    const file = await (await download).path()
+    return JSON.parse(await readFile(file!, 'utf8'))
+  }
+  const previous = await open(await restartContext({ legacyIdentity: true }))
+  await restore(previous.page, { ...data, connections: [] })
+  await expect(previous.page.getByRole('alert')).toContainText('缺少')
+  await restore(previous.page, data)
+  await expect(previous.page.getByRole('status')).toContainText('数据已迁入')
+  const saved = await exported(previous.page)
+  expect(saved).toEqual(data)
+  const current = await open(await restartContext({ legacyIdentity: false }))
+  expect(current.id).not.toBe(previous.id)
+  await restore(current.page, saved)
+  await expect(current.page.getByRole('status')).toContainText('数据已迁入')
+  await restore(current.page, {
+    ...saved,
+    connections: saved.connections.map((entry: any) => ({ ...entry, name: '不能覆盖' })),
+  })
+  await expect(current.page.getByRole('alert')).toContainText('仅能迁入空')
+  expect(await exported(current.page)).toEqual(saved)
+  const upgraded = await open(await restartContext({ version: '0.1.4', relocate: true }))
+  expect(upgraded.id).toBe(current.id)
+  await expect(upgraded.page.getByText('InKCre / WebExt 0.1.4', { exact: true })).toBeVisible()
+  expect(await exported(upgraded.page)).toEqual(saved)
+})
+
 test('settings preserve the WebExt card style across desktop, narrow and dark layouts', async ({
   page,
   extensionId,
@@ -256,6 +376,18 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
   ]) {
     await page.setViewportSize({ width: variant.width, height: 900 })
     await page.emulateMedia({ colorScheme: variant.colorScheme })
+    await expect
+      .poll(() =>
+        page.locator('.settings-header img').evaluate(async (img: HTMLImageElement) => {
+          const svg = await (await fetch(img.currentSrc)).text()
+          return { white: svg.includes('#FFFFFF'), black: svg.includes('#000000') }
+        })
+      )
+      .toEqual(
+        variant.colorScheme === 'dark'
+          ? { white: true, black: false }
+          : { white: false, black: true }
+      )
     await expect(page.getByLabel('PostgREST 地址')).toBeVisible()
     const layout = await page.evaluate(() => {
       const card = document.querySelector('.collection-page > .section')!

@@ -9,18 +9,31 @@ const extensionPath = fileURLToPath(
 )
 
 export const test = base.extend<{
-  extensionRuntime: { context: BrowserContext; restart: () => Promise<BrowserContext> }
+  extensionRuntime: {
+    context: BrowserContext
+    restart: (upgrade?: {
+      version?: string
+      legacyIdentity?: boolean
+      relocate?: boolean
+    }) => Promise<BrowserContext>
+  }
   context: BrowserContext
   extensionId: string
-  restartContext: () => Promise<BrowserContext>
+  restartContext: (upgrade?: {
+    version?: string
+    legacyIdentity?: boolean
+    relocate?: boolean
+  }) => Promise<BrowserContext>
 }>({
   extensionRuntime: async ({ browserName: _browserName, headless }, use) => {
     const executablePath = process.env.INKCRE_CHROMIUM_BINARY
     const profile = await mkdtemp(join(tmpdir(), 'inkcre-webext-test-'))
-    let loadedExtension = extensionPath
+    let loadedExtension = join(profile, 'fixture-extension')
+    await cp(extensionPath, loadedExtension, { recursive: true })
+    const originalManifest = JSON.parse(
+      await readFile(join(loadedExtension, 'manifest.json'), 'utf8')
+    )
     if (process.env.INKCRE_E2E_WEBEXT_PGREST) {
-      loadedExtension = join(profile, 'fixture-extension')
-      await cp(extensionPath, loadedExtension, { recursive: true })
       const manifest = JSON.parse(await readFile(join(loadedExtension, 'manifest.json'), 'utf8'))
       // Native permission UX is checked separately. This profile contains only
       // synthetic localhost pages, bookmarks and history; browser APIs stay real.
@@ -44,8 +57,22 @@ export const test = base.extend<{
         get context() {
           return context
         },
-        restart: async () => {
+        restart: async (upgrade) => {
           await context.close()
+          if (upgrade) {
+            if (upgrade.relocate) {
+              const relocated = join(profile, 'upgraded-extension')
+              await cp(loadedExtension, relocated, { recursive: true })
+              loadedExtension = relocated
+            }
+            const manifest = JSON.parse(
+              await readFile(join(loadedExtension, 'manifest.json'), 'utf8')
+            )
+            if (upgrade.version) manifest.version = upgrade.version
+            if (upgrade.legacyIdentity === true) delete manifest.key
+            if (upgrade.legacyIdentity === false) manifest.key = originalManifest.key
+            await writeFile(join(loadedExtension, 'manifest.json'), JSON.stringify(manifest))
+          }
           context = await launch()
           return context
         },

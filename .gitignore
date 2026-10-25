@@ -20,6 +20,7 @@ coverage
 /test-results/
 /.extension-delivery/
 /.core-sdk-delivery/
+/.webext-delivery/
 
 /cypress/videos/
 /cypress/screenshots/

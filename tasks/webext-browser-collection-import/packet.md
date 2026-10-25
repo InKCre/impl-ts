@@ -1,5 +1,15 @@
 # WebExt 浏览器采集与已有资料导入
 
+## 2026-10-25 分发实现进展
+
+用户已接受提案，授权继续实现和验证；Chrome 与 Mozilla 开发者账号均未建立，先完成无需账号部分，不付费、不上传商店、不实际发布。当前工作只在隔离 worktree，原日常扩展与主 checkout 未改。此前自由提交和更新 Draft PR #161 的授权继续有效。实施边界与验收见 [delivery-plan.md](delivery-plan.md)，持久操作说明归入 `docs/40-deployment/webext-delivery.md`。
+
+已加入固定 Chromium 公钥、版本显示、完整本机数据转移、深浅图标、Changeset 与独立发布工作流。私钥仅位于 `/Users/lanzhijiang/.config/inkcre/webext/chromium.pem`，不进入源码与产物。功能 PR 不直接升级或发布旧 `0.1.3`；待 Version PR 消费 minor Changeset 后准备 `0.2.0`。旧路径 ID 不能反推 RSA 身份，不自动替换用户安装；未来商店 ID 承接尚未验证。
+
+已通过全仓 `pnpm check`、TS7、针对性 type-aware lint、双浏览器构建、发布规则 3/3、core SDK 3/3，以及隔离 Helium 的完整 11/11（46.3 秒）与 sfp7 Firefox 156 配置/采集/导入/PDF/公开 MDN 读回。实际检查宽窄深色截图和 optical 工具栏资产，未改变原 UI 风格。身份迁移/换目录升级保留整份合成数据；迁移 ZIP 已验证不带固定 key，且单独输出到 `chrome-mv3-migration`，不会覆盖正常构建。测试数据库、容器、profile 和转发均已清理。
+
+Changesets 实际识别唯一待升 minor 的包为 `@inkcre/client-webext`；公钥派生固定 Chromium ID 为 `fnejbpghhbcojofhgjglkejhednalfoa`，私钥权限为 0600。分支已同步 `origin/main` 的 `e4f75a6`，不改变其他会话工作。源码提交后执行本地 release build/check，以便来源记录指向干净的确切提交；不执行 publish。商店账号/签名、Firefox 原生 popup 与工具栏主题切换、实际 GitHub Release 写入仍未验收。
+
 ## 2026-10-25 版本管理与分发提案
 
 用户要求处理 WebExt 的版本管理和分发，已明确首期以自己和少量使用者安装、接受开发者模式和手动更新为主，但后续接入浏览器商店不能重做发布流程。本轮形成提案，不修改源码、创建商店项目或发布；此前自由提交和草稿 PR 授权不等于对新分发渠道的发布授权。

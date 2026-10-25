@@ -10,8 +10,30 @@ import { collectionMessage } from '~/logic/collection/messages'
 import { siteMatchPattern } from '~/logic/collection/permissions'
 import { connection } from '~/logic/collection/store'
 import { deliveryLabels, useCollectionStatus } from '~/logic/collection/ui'
+import { exportLocalData, importLocalData } from '~/logic/collection/transfer'
 
 const { status, error, feedback, busy, action, updateSettings } = useCollectionStatus()
+const version = browser.runtime.getManifest().version
+const transferFile = ref<HTMLInputElement>()
+async function downloadLocalData() {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(await exportLocalData())], { type: 'application/json' })
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `inkcre-webext-${version}-local-data.json`
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+async function restoreLocalData(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  await action(async () => {
+    await importLocalData(JSON.parse(await file.text()))
+    input.value = ''
+  }, '数据已迁入。请停用旧实例，再检查连接并重新授权站点；浏览器授权不会随文件转移。')
+}
 const target = ref({ name: '我的信息库', url: '', secret: '', storageId: '-4' })
 const editingConnection = ref<string>()
 const showConnectionForm = ref(false)
@@ -173,7 +195,7 @@ onMounted(() => {
         <img :src="logo" alt="InKCre" width="32" height="32" />
       </picture>
       <div class="stack">
-        <span class="brand">InKCre / WebExt</span>
+        <span class="brand">InKCre / WebExt {{ version }}</span>
         <h1>扩展设置</h1>
       </div>
     </header>
@@ -469,6 +491,24 @@ onMounted(() => {
         </div>
       </article>
     </section>
+    <details class="section">
+      <summary>本机数据迁移</summary>
+      <p class="muted">
+        文件包含明文密钥和待发送材料，请私下保管。迁移时先关闭其他扩展页面并等待正在发送的工作结束，导出后停用旧实例，不要卸载；只迁入空实例。
+      </p>
+      <div class="actions">
+        <InkButton text="导出本机数据" @click="action(downloadLocalData)" />
+        <InkButton text="迁入本机数据" @click="transferFile?.click()" />
+        <input
+          ref="transferFile"
+          type="file"
+          accept="application/json,.json"
+          hidden
+          aria-label="本机数据文件"
+          @change="restoreLocalData"
+        />
+      </div>
+    </details>
     <MaterialReader v-if="reader" :material="reader" />
     <section v-if="status?.legacyTasks.length || status?.legacyWarning" class="section">
       <h2>待迁入的旧摘录</h2>

@@ -219,6 +219,9 @@ jobs:
       - name: Build the Firefox extension
         run: pnpm --filter @inkcre/client-webext build:firefox
 
+      - name: Verify WebExt delivery rules
+        run: node --test scripts/tests/webext-release.test.mjs
+
       - name: Upload browser evidence on failure
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
