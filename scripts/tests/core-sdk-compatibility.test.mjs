@@ -12,7 +12,7 @@ import {
   TextResolver,
 } from '../../packages/core/dist/index.js'
 
-test('SDK 0.4 preserves the legacy JWT default without changing database admission truth', async () => {
+void test('SDK 0.4 preserves the legacy JWT default without changing database admission truth', async () => {
   const generated = JSON.parse(
     await readFile(
       new URL('../../packages/core/src/database/runtime-contract.generated.json', import.meta.url),
@@ -32,7 +32,7 @@ test('SDK 0.4 preserves the legacy JWT default without changing database admissi
   }
 })
 
-test('optional recall APIs preserve an ordinary resolver and its original match', async () => {
+void test('optional recall APIs preserve an ordinary resolver and its original match', async () => {
   TextResolver.previewRenderer = { render: () => null }
   TextResolver.solvedContentRenderer = { render: () => null }
   Resolver.register(TextResolver.type, TextResolver)

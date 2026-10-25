@@ -10,7 +10,7 @@ const requireWeb = createRequire(new URL('../../apps/client-web/package.json', i
 const requireRuntime = createRequire(requireWeb.resolve('@module-federation/runtime'))
 const { generateSnapshotFromManifest } = requireRuntime('@module-federation/sdk')
 
-test('preview MF resolves from each selected snapshot and records its build identity', async () => {
+void test('preview MF resolves from each selected snapshot and records its build identity', async () => {
   const root = await mkdtemp(join(tmpdir(), 'inkcre-preview-'))
   const path = 'extensions/inkcre/example/1.0.0/module-federation'
   const manifest = {
