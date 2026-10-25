@@ -10,7 +10,7 @@ import test from 'node:test'
 const run = promisify(execFile)
 const probe = new URL('../probe-database.mjs', import.meta.url)
 
-test('database probe distinguishes stale provenance from transport failure without mutating the owner', async () => {
+void test('database probe distinguishes stale provenance from transport failure without mutating the owner', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inkcre-probe-'))
   let coreStatus = 200
   const requests = []

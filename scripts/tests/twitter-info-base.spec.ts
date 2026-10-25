@@ -162,14 +162,14 @@ test('HTTP transport failures do not log signed credentials or browser Cookies',
     const signedError = await fetch(`${base}/disconnect`, {
       headers: { Authorization: `Bearer ${sentinel}` },
     }).catch((error: Error) => error)
-    expect(signedError).toBeInstanceOf(Error)
+    if (!(signedError instanceof Error)) throw new Error('Expected the connection to fail')
     expect(String(signedError)).not.toContain(sentinel)
     await context.addCookies([{ name: 'acceptance', value: sentinel, url: base }])
     await page.goto(base)
     const cookieError = await archiveRequest(page, `${base}/disconnect`).catch(
       (error: Error) => error
     )
-    expect(cookieError).toBeInstanceOf(Error)
+    if (!(cookieError instanceof Error)) throw new Error('Expected the connection to fail')
     expect(String(cookieError)).not.toContain(sentinel)
     expect(sawAuthorization).toBe(true)
     expect(sawCookie).toBe(true)
