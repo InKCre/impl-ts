@@ -91,7 +91,11 @@
     "peerRuntime": "Local background",
     "telemetry": "Telemetry",
     "telemetryRelayDefault": "Leave empty to use deployment telemetry endpoints.",
-    "backgroundDisabledEffect": "Saving stops background tasks and telemetry; local extensions remain available."
+    "backgroundDisabledEffect": "Saving stops background tasks and telemetry; local extensions remain available.",
+    "currentConnection": "Current connection",
+    "addConnection": "Add connection",
+    "connectionName": "Connection name",
+    "saveAndUseConnection": "Save and use connection"
   },
   "source": {
     "lead": "Manage the places your InKCre collects from; each source is an ongoing channel of new content.",

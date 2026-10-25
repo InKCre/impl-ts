@@ -31,6 +31,17 @@ const connectionNoticeKey = computed(() => {
   return 'startup.peerConnecting'
 })
 const reload = () => window.location.reload()
+const connectionGeneration = ref(0)
+watch(
+  () => [
+    configStore.metaConfig.INKCRE_PGREST_URL,
+    configStore.metaConfig.INKCRE_JWT_SECRET,
+    configStore.metaConfig.INKCRE_PEER_ID,
+  ],
+  () => {
+    connectionGeneration.value += 1
+  }
+)
 
 onMounted(async () => {
   const loadPeerConfig = shouldLoadPeerConfigAtBootstrap(window.location.pathname)
@@ -204,9 +215,13 @@ const connectionNoticeVisible = computed(
           <a href="/settings">{{ t('common.settings') }}</a>
         </div>
       </main>
-      <AppSidePanel v-model:expanded="sidebarExpanded" :ready="startupState === 'ready'" />
+      <AppSidePanel
+        :key="connectionGeneration"
+        v-model:expanded="sidebarExpanded"
+        :ready="startupState === 'ready'"
+      />
     </div>
-    <RecallSearch v-if="startupState === 'ready'" />
+    <RecallSearch :key="connectionGeneration" v-if="startupState === 'ready'" />
     <ToastHost />
   </div>
 </template>

@@ -361,7 +361,7 @@ export function registerGitHubNativeTests(): void {
         await page
           .getByLabel('Lease renewal and job check interval (seconds; 0 disables)')
           .fill(String(seconds))
-        await page.getByRole('button', { name: 'Save', exact: true }).click()
+        await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
         await expect(
           page.getByText('Configuration saved successfully', { exact: true }).first()
         ).toBeVisible()

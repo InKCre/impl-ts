@@ -421,7 +421,7 @@ test('switching connections cannot renew a pending old registration against eith
     await openSettings(page)
     await page.getByLabel('PostgREST URL').fill(alternateUrl)
     await page.getByLabel('JWT signing secret').fill(alternateSecret)
-    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
     await expect.poll(() => newLeaseRequests).toBe(1)
     release()
     await expect.poll(() => registrationFinished).toBe(true)
@@ -550,14 +550,14 @@ test('zero participation persists, stays idle, and a custom interval resumes lea
     page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)')
   ).toHaveValue('0')
   await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
   expect(leaseTtls).toEqual([])
   const intervalInput = page.getByLabel(
     'Lease renewal and job check interval (seconds; 0 disables)'
   )
   await intervalInput.fill('2')
   await expect(intervalInput).toHaveValue('2')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
   await expect(intervalInput).toHaveValue('2')
   await expect.poll(() => scans).toBeGreaterThan(0)
   expect(leaseTtls.length).toBeGreaterThan(0)
@@ -574,10 +574,12 @@ test('zero participation persists, stays idle, and a custom interval resumes lea
   const exported = JSON.parse(readFileSync(path!, 'utf8'))
   expect(exported.metaConfig.peer_lease_renew_interval_seconds).toBe(2)
   await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
   await expect(page.getByRole('status').first()).toBeVisible()
   // The import handler bails while the save still owns the form; wait for it to finish.
-  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+  await expect(
+    page.getByRole('button', { name: 'Save and use connection', exact: true })
+  ).toBeEnabled()
   const stoppedScans = scans,
     stoppedLeases = leaseTtls.length
   await page.clock.fastForward(35_000)
@@ -624,7 +626,7 @@ test('disabling while registration is pending prevents its later lease or worker
     await expect(page.getByRole('main')).toBeVisible()
     await openSettings(page)
     await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
-    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
     await expect(page.getByRole('status').first()).toBeVisible()
     release()
     await expect.poll(() => firstPatchFinished).toBe(true)
@@ -744,8 +746,10 @@ test('disabling participation drains a dispatched claim before saving configurat
     expect(stoppedBeforeClaimReturned).toBe(false)
     await openSettings(page)
     await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
-    await page.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+    await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
+    await expect(
+      page.getByRole('button', { name: 'Save and use connection', exact: true })
+    ).toBeDisabled()
     expect(
       await page.evaluate(
         () =>
@@ -1275,7 +1279,13 @@ test('Settings export restores the complete browser experience', async ({ page }
     expect(path).not.toBeNull()
     const exported = JSON.parse(readFileSync(path!, 'utf8'))
     expect(exported).toEqual({
-      version: 2,
+      version: 3,
+      connections: {
+        activeConnectionId: expect.any(String),
+        connections: [
+          { id: expect.any(String), name: new URL(postgrestUrl).host, config: exported.metaConfig },
+        ],
+      },
       metaConfig: {
         INKCRE_PGREST_URL: postgrestUrl,
         INKCRE_JWT_SECRET: jwtSecret,
@@ -1312,7 +1322,7 @@ test('Settings export restores the complete browser experience', async ({ page }
           locale: localStorage.getItem('inkcre-locale'),
         }))
       )
-      .toEqual({ metaConfig: exported.metaConfig, locale: 'en' })
+      .toEqual({ metaConfig: { ...exported.metaConfig, ...exported.connections }, locale: 'en' })
     await expect(
       page.getByRole('switch', { name: 'Enable telemetry', exact: true })
     ).not.toBeChecked()
@@ -1730,7 +1740,7 @@ test('an empty browser saves its connection across refresh and reads Peers', asy
     await page.getByLabel('JWT signing secret').fill(jwtSecret)
     await expect(page.getByLabel('Device readiness wait timeout (seconds)')).toHaveValue('5')
     await page.getByLabel('Device readiness wait timeout (seconds)').fill('45')
-    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
     await expect
       .poll(() =>
         page.evaluate(

@@ -41,3 +41,34 @@ test('built Chromium extension loads its real popup', async ({ context, page, ex
   await expect(page.getByText('Popup', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Open Options' })).toBeVisible()
 })
+
+test('saved API connections survive reload and switch across open option pages', async ({
+  context,
+  page,
+  extensionId,
+}) => {
+  const [worker] = context.serviceWorkers()
+  await worker.evaluate(async () => {
+    const chrome = (globalThis as any).chrome
+    await chrome.storage.local.set({ inkcreApi: 'https://first.example' })
+  })
+  await page.goto(`chrome-extension://${extensionId}/options.html`)
+  await expect(page.getByLabel('API 地址')).toHaveValue('https://first.example')
+  await page.getByRole('button', { name: '添加连接', exact: true }).click()
+  await page.getByLabel('连接名称', { exact: true }).fill('工作')
+  await page.getByLabel('API 地址').fill('https://second.example')
+  await page.getByRole('button', { name: '保存并使用连接' }).click()
+  await expect(page.getByRole('status')).toHaveText('已切换连接。')
+  await page.reload()
+  await expect(page.getByLabel('API 地址')).toHaveValue('https://second.example')
+  const other = await context.newPage()
+  await other.goto(`chrome-extension://${extensionId}/options.html`)
+  await expect(other.getByLabel('API 地址')).toHaveValue('https://second.example')
+  await page.getByLabel('当前连接').selectOption({ label: 'first.example' })
+  await expect(page.getByLabel('API 地址')).toHaveValue('https://first.example')
+  await expect(other.getByLabel('API 地址')).toHaveValue('https://first.example')
+  await other.reload()
+  await expect(other.getByLabel('API 地址')).toHaveValue('https://first.example')
+  await expect(other.getByLabel('当前连接').locator('option')).toHaveCount(2)
+  await other.close()
+})
