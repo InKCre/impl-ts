@@ -1,5 +1,23 @@
 # Development Runtime
 
+## TypeScript 与 Vue 检查
+
+根目录、全部 workspace 和工具的传递依赖统一使用 `pnpm-workspace.yaml` 中的 TypeScript catalog。当前固定 `typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2`：类型检查引擎为 TS7 7.0.2，兼容层保留 Vue、AST 合同脚本和声明生成所需的旧 Compiler API。这是 Vue 维护者采用的过渡方案，并非微软原版 `typescript@7` 包；直接替换为后者会使当前 `vue-tsc` 无法加载 `typescript/lib/tsc`。上游依据见 [Vue 的迁移记录](https://github.com/vuejs/language-tools/pull/6129)。
+
+全库类型检查使用 `pnpm type-check`，它先验证工作区合同，再执行所有子包的 `type-check`。Core 使用 `tsc --noEmit`，Vue 包使用 `vue-tsc` 保留 script 与 template 检查；两者解析到同一编译器。`pnpm check` 和 CI 均包含该入口，不再保留独立的 `type-check:ts7` 或第二个编译器别名。局部迭代使用 `pnpm --filter <包名> type-check`，源码 UI 联调继续使用 `pnpm type-check:ui`。
+
+`pnpm check:workspace` 验证根目录、子包、Vue 检查器和 Core 声明生成器实际解析到同一固定包。桥接层的 `tsc --version` 显示兼容 API 版本 `6.0.3`，实际类型检查会输出 `TNB ACTIVE`；完整包版本中的 `tsgo.7.0.2` 标识引擎版本。升级时同步验证 Vue 模板错误会被拒绝、浏览器运行时 AST 合同和 Core 声明消费，不以版本字符串代替行为验证。该原生依赖需要受支持的平台，CI 使用 Ubuntu/glibc。
+
+浏览器源码检查通过 `tsconfig.browser.json` 明确跨包源码的 `rootDir`，保留原 Vue 配置的 ES2020／DOM 能力声明；它不扩大各包的 `include` 范围。`types/ui-web.d.ts` 仅补充 UI 2.3.0 已发布 CSS 子路径缺少的声明，其他缺失导入仍会失败。UI 源码联调按选定 checkout 与 impl-ts 的共同目录生成 `rootDir`，使用绝对路径映射，不再设置 `baseUrl`。
+
+## 格式与 lint
+
+`pnpm check` 在类型检查和构建前运行 `pnpm format:check` 与 `pnpm lint`，CI 使用同一入口。`pnpm lint` 包含类型感知规则并拒绝 warning；`pnpm lint:type-aware` 保留为同一命令的别名。修复格式使用 `pnpm format`。
+
+格式与 lint 排除任务材料、外部维护的 `.agents/skills/` 和只读共享文档；各层 `playwright-report/` 与 `test-results/` 都是生成物。正式源码、测试和工具脚本仍在检查范围内。数据库生成投影仅豁免生成器产生的冗余／重复类型组合规则，继续接受其余 lint、格式、生成合同和类型检查。
+
+规则例外必须说明真实合同。Twitter 可见区间使用 Unicode 码点，不能为了消除告警改成字素索引。顶层 `node:test` 注册显式丢弃返回 Promise，失败仍由测试运行器处理；子测试与业务异步操作仍须等待或处理失败。
+
 ## Capability Contract
 
 The committed [`svc.json`](../../svc.json) declares four worktree-scoped capabilities: `database`,
