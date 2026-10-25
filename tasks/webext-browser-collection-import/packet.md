@@ -12,6 +12,8 @@ Changesets 实际识别唯一待升 minor 的包为 `@inkcre/client-webext`；�
 
 回查旧远端 CI，发现原任务的 `web-collection` 类型检查和 E2E 入口依赖本机残留 Core dist；补为与其他源码包一致的类型路径，并在 E2E 命令先构建 Core。Playwright 明确使用根 tsconfig，让 Node 测试走 package exports，不误套浏览器消费者的源码类型别名。已把隔离 worktree 的旧 dist 移至 `/tmp/inkcre-webext-core-build.HP65Ra/dist`，无旧产物的材料类型检查、E2E 命令通过（4 项无数据库检查通过，7 项按条件跳过），全仓类型再次通过；不修改 Core 发布入口或其他会话源码。
 
+修复后的完整 Helium 11/11 再次通过（35.2 秒）。远端工作区检查通过；Linux 原生字体使 ON/OFF switch 为 64.5px，旧测试将 64px 当作绝对上限误报。已下载检查 CI 实际截图，保持原 UI，只为紧凑宽度断言增加 2px 字体度量容差。升级回归从当前 manifest 计算下一 patch，不将未来 0.2.0 错当作升级到硬编码 0.1.4。CI 证据位于 `/tmp/inkcre-webext-ci-evidence.twh3iF`，最终状态以 PR #161 的当前 head checks 为准。
+
 ## 2026-10-25 版本管理与分发提案
 
 用户要求处理 WebExt 的版本管理和分发，已明确首期以自己和少量使用者安装、接受开发者模式和手动更新为主，但后续接入浏览器商店不能重做发布流程。本轮形成提案，不修改源码、创建商店项目或发布；此前自由提交和草稿 PR 授权不等于对新分发渠道的发布授权。

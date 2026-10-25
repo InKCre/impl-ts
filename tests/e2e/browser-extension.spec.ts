@@ -355,9 +355,15 @@ test('local data survives an identity transfer and a relocated fixed-identity up
   })
   await expect(current.page.getByRole('alert')).toContainText('仅能迁入空')
   expect(await exported(current.page)).toEqual(saved)
-  const upgraded = await open(await restartContext({ version: '0.1.4', relocate: true }))
+  const installedVersion: string = await current.page.evaluate(
+    () => (globalThis as any).chrome.runtime.getManifest().version
+  )
+  const nextVersion = installedVersion.replace(/\d+$/, (patch) => String(Number(patch) + 1))
+  const upgraded = await open(await restartContext({ version: nextVersion, relocate: true }))
   expect(upgraded.id).toBe(current.id)
-  await expect(upgraded.page.getByText('InKCre / WebExt 0.1.4', { exact: true })).toBeVisible()
+  await expect(
+    upgraded.page.getByText(`InKCre / WebExt ${nextVersion}`, { exact: true })
+  ).toBeVisible()
   expect(await exported(upgraded.page)).toEqual(saved)
 })
 
@@ -411,7 +417,8 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
     expect(layout.cardBorder).toBe('1px')
     expect(layout.radius).toBe('0px')
     expect(layout.primary).toBe('rgb(20, 184, 166)')
-    expect(layout.toggleWidth).toBeLessThanOrEqual(64)
+    // ON/OFF font metrics differ across platforms; allow two pixels around 64px.
+    expect(layout.toggleWidth).toBeLessThanOrEqual(66)
     expect(layout.toggleHeight).toBeLessThanOrEqual(24)
     await page.screenshot({
       path: testInfo.outputPath(`settings-${variant.name}.png`),
