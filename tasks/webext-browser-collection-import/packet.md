@@ -1,5 +1,19 @@
 # WebExt 浏览器采集与已有资料导入
 
+## 2026-10-25 版本管理与分发提案
+
+用户要求处理 WebExt 的版本管理和分发，已明确首期以自己和少量使用者安装、接受开发者模式和手动更新为主，但后续接入浏览器商店不能重做发布流程。本轮形成提案，不修改源码、创建商店项目或发布；此前自由提交和草稿 PR 授权不等于对新分发渠道的发布授权。
+
+现状：PR #161 仍为未合并草稿，head 为 `01c71de`；WebExt 版本仍为 `0.1.3`，WXT 从 package.json 生成 manifest 版本。已有 Chrome/Firefox 构建及 zip 命令，无 WebExt 发布流程。Changesets 支持私包版本管理，但当前 Extension release 的分发对象是 MF Extension，不是 WebExt Peer。主 checkout 有其他会话改动，不动其源码或 stash。
+
+拟议边界：WebExt 独立版本，Chrome/Firefox 为同一版本的浏览器产物，不与 client-web/Core 版本或 MF Registry 发布绑定。复用 Changesets 的版本意图与 Release PR，初次重写候选建议为 `0.2.0`；正式发布从受保护 main 构建并归档 GitHub Release，保存版本、来源和实际包，后续商店提交消费相同发布产物，仅增加渠道步骤，不再决定版本。首期 Chromium ZIP 解压加载、手动替换更新；Firefox 若交付可持续安装版本，需要 Mozilla 签名的 unlisted XPI，不把临时加载称为正式安装。不自建更新服务、不引入多渠道版本号或发布框架。
+
+安装身份与流水线复用分别验收。Firefox 已声明 `webext@inkcre.org`；Chromium 尚无固定 key，应在首个分发版本确定身份。官方支持先上传未发布商店草稿取得公钥，使解压版与未来商店版 ID 一致；尚未确认用户是否已有商店项目或账号，不承诺既有路径派生 ID 能原地转成商店身份，也不以卸载重装作为无损更新。升级检查应覆盖连接、Peer ID、待发送材料和导入进度。WXT 默认会去掉预发布后缀，不能把 beta 后缀当作浏览器递增版本。
+
+事实来源：[WXT manifest](https://wxt.dev/guide/essentials/config/manifest.html)、[WXT publishing](https://wxt.dev/guide/essentials/publishing.html)、[Chrome 分发](https://developer.chrome.com/docs/extensions/how-to/distribute)、[Chrome key](https://developer.chrome.com/docs/extensions/reference/manifest/key)、[Firefox 签名](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/)。本地 WXT 0.20.27 版本生成源码已核对。下一步先收口以上产品边界，再制定技术与验收方案；商店账号、签名和存量安装迁移尚未验证。
+
+## 此前实现与提交
+
 2026-10-23 提交授权：用户明确允许自由提交、创建 Draft PR，随后要求处理冲突。WebExt 重写、精简、相关 core 接缝、测试与文档在隔离 worktree 的 `feat/webext-collection` 分支，通过 [PR #161](https://github.com/InKCre/impl-ts/pull/161) 提交；允许更新该草稿，不合并、不发布、不改主仓或混合 stash。此授权取代下文此前的“不提交”限制。
 
 2026-10-23 当前状态：用户要求“开始精简”，九项审计已落实。配置完整回填、离线保存、同库地址可改且保留身份/待办，纯改名不再请求授权或登记；排除规则回填且刷新不改草稿。逐材料登记与界面驱动后台已移除；保留按连接缓存的独立 Peer 生命周期、错误可见及原队列恢复。设置正常读取只读、无消费者字段删除、带登录控件的公开正文不再误拒绝。未引入新依赖、权限体系或可靠性框架，原界面风格和 InkUI 显隐/紧凑 ON/OFF 保留。
