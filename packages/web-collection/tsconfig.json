@@ -5,7 +5,10 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM"],
+    "paths": {
+      "@inkcre/core": ["../core/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

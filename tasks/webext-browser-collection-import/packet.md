@@ -8,7 +8,9 @@
 
 已通过全仓 `pnpm check`、TS7、针对性 type-aware lint、双浏览器构建、发布规则 3/3、core SDK 3/3，以及隔离 Helium 的完整 11/11（46.3 秒）与 sfp7 Firefox 156 配置/采集/导入/PDF/公开 MDN 读回。实际检查宽窄深色截图和 optical 工具栏资产，未改变原 UI 风格。身份迁移/换目录升级保留整份合成数据；迁移 ZIP 已验证不带固定 key，且单独输出到 `chrome-mv3-migration`，不会覆盖正常构建。测试数据库、容器、profile 和转发均已清理。
 
-Changesets 实际识别唯一待升 minor 的包为 `@inkcre/client-webext`；公钥派生固定 Chromium ID 为 `fnejbpghhbcojofhgjglkejhednalfoa`，私钥权限为 0600。分支已同步 `origin/main` 的 `e4f75a6`，不改变其他会话工作。源码提交后执行本地 release build/check，以便来源记录指向干净的确切提交；不执行 publish。商店账号/签名、Firefox 原生 popup 与工具栏主题切换、实际 GitHub Release 写入仍未验收。
+Changesets 实际识别唯一待升 minor 的包为 `@inkcre/client-webext`；公钥派生固定 Chromium ID 为 `fnejbpghhbcojofhgjglkejhednalfoa`，私钥权限为 0600。分支已同步 `origin/main` 的 `e4f75a6`，不改变其他会话工作。源码提交后本地 `release:webext:build` 和 `release:webext:check` 已成功，`.webext-delivery/source.json` 记录实际来源和校验值。两个 ZIP 各 33 条目，源码归档 793 条目，无私钥或本机凭据文件；尚为 `0.1.3` 开发候选，不执行 publish。商店账号/签名、Firefox 原生 popup 与工具栏主题切换、实际 GitHub Release 写入仍未验收。
+
+回查旧远端 CI，发现原任务的 `web-collection` 类型检查和 E2E 入口依赖本机残留 Core dist；补为与其他源码包一致的类型路径，并在 E2E 命令先构建 Core。Playwright 明确使用根 tsconfig，让 Node 测试走 package exports，不误套浏览器消费者的源码类型别名。已把隔离 worktree 的旧 dist 移至 `/tmp/inkcre-webext-core-build.HP65Ra/dist`，无旧产物的材料类型检查、E2E 命令通过（4 项无数据库检查通过，7 项按条件跳过），全仓类型再次通过；不修改 Core 发布入口或其他会话源码。
 
 ## 2026-10-25 版本管理与分发提案
 

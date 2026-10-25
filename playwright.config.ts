@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
+  // Node tests use package exports, not consumers' browser-source type aliases.
+  tsconfig: './tsconfig.json',
   testDir: './tests/e2e',
   fullyParallel: false,
   workers: 1,
