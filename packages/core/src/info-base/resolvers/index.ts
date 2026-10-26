@@ -25,11 +25,6 @@ export { ResolverCache } from './cache'
 
 // Concrete resolver implementations
 export { TextResolver } from './text'
-export {
-  ExtractionResultResolver,
-  ExtractionContentSchema,
-  type ExtractionContent,
-} from './extraction'
 export { HtmlResolver, type HtmlRawContent } from './html'
 export { ImageResolver, type ImageSolvedContent } from './image'
 export { AudioResolver, type AudioSolvedContent } from './audio'

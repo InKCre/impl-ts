@@ -445,13 +445,6 @@
         "previous": "上一组",
         "next": "下一组"
       }
-    },
-    "extraction": {
-      "excerpts": "原文依据",
-      "openSource": "打开原材料",
-      "sourceUnavailable": "原材料关联不可用",
-      "sourceError": "无法读取原材料关联",
-      "sourceLoading": "正在读取原材料关联"
     }
   }
 }

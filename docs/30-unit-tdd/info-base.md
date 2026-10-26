@@ -55,15 +55,6 @@ the same class and rejects collisions; there is no default decoder. `Resolver.un
 registers the versioned text, HTML, image, audio, video, PDF, EPUB, ZIP, and file contracts.
 Extensions register their own namespaced, versioned contracts rather than aliases for retired IDs.
 
-`ExtractionResultResolver` 解码 `core.organization.extraction-result.v1`，由 Client Web 在通用九类 Resolver
-之后显式注册。它只依赖 info-base 数据合同，不要求 Python 或提取 Agent 在线。结果正文、历史出处与必要引文
-来自结果自身的 content；来源 Relation 通过 `kind`、`basis_key` 提供当前内部入口。删除来源或解除关系后，
-正文和引文仍可读。错误或冲突的来源映射只影响 `getSource()`，不能隐藏合法正文。损坏的结果 payload 明确拒绝。
-
-Client Web 的 `ContentExtraction` 分开呈现正文与原文依据，按组显示来源入口状态；链接缺失不推断删除原因。
-历史出处仅展示保存的来源名称，阅读不会重新抓取来源。预览仅展示有限行正文。其他 TypeScript 消费者
-可选择注册这个导出的 Resolver，并按既有合同提供两种 renderer；通用 `registerCoreResolvers()` 的参数不变。
-
 Every concrete Resolver exposes `getText({ context })`, where `default` and `lexical` are named,
 resolver-owned projections. Lexical projection is Block-local and non-recursive. Callers preserve
 four distinct results:
@@ -173,3 +164,5 @@ Twitter 的详情 renderer 以作者、正文、媒体与引用、发布时间�
 每个媒体视图拥有独立的运行态 Resolver 和 Object URL，随视图切换、卸载或加载结果被替换而撤销；视图关闭后的异步结果也会被释放，不与同时打开的视图共享待撤销的句柄。旧格式 renderer 使用相同阅读布局，但其 Resolver 原有的附件关系解析仍可能读取字节；本轮没有改写旧格式解析合同。UI 候选验收入口及边界见 [`scripts/tests/twitter-rendering`](../../scripts/tests/twitter-rendering/README.md)。
 
 媒体显示使用运行态 Object URL，随 Resolver 刷新、释放和缓存替换撤销。协议 DTO、provider 响应及共同信息模型的转换属于 Twitter 适配器，不能让客户端协议字段集变成 info-base 或 Resolver 的持久数据权威。
+
+Organization 提取结果沿用 `core.text.v1`，正文与必要引文已是可读文本；客户端通过现有 TextResolver 和文本组件读取，通过普通 `extraction` Relation 导航来源。生成行为不新增客户端结果类型或专用展示协议。
