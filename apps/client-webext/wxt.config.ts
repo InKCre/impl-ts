@@ -1,7 +1,9 @@
 import { fileURLToPath, URL } from 'node:url'
+import { createRequire } from 'node:module'
 import { defineConfig } from 'wxt'
 import { key as chromiumKey } from './chromium-key.json'
 
+const require = createRequire(import.meta.url)
 const devInstance = process.env.INKCRE_DEV_INSTANCE
 const devPort = Number.parseInt(process.env.PORT ?? '', 10)
 const portlessUrl = process.env.PORTLESS_URL
@@ -11,6 +13,37 @@ const chromiumBinary = process.env.INKCRE_CHROMIUM_BINARY
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
+  hooks: {
+    'build:publicAssets'(_wxt, files) {
+      for (const [relativeDest, asset] of [
+        ['icon/16.png', 'png/original-white/inkcre-original-white-16.png'],
+        ['icon/32.png', 'png/original-white/inkcre-original-white-32.png'],
+        ['icon/48.png', 'png/original-white/inkcre-original-white-48.png'],
+        ['icon/96.png', 'png/2x/original-white/inkcre-original-white-48px@2x.png'],
+        ['icon/128.png', 'png/original-white/inkcre-original-white-128.png'],
+        ['toolbar/16.png', 'png/original-transparent/inkcre-original-transparent-16.png'],
+        ['toolbar/32.png', 'png/2x/original-transparent/inkcre-original-transparent-16px@2x.png'],
+        ['toolbar/48.png', 'png/3x/original-transparent/inkcre-original-transparent-16px@3x.png'],
+        ['toolbar/reverse-16.png', 'png/reverse-transparent/inkcre-reverse-transparent-16.png'],
+        [
+          'toolbar/reverse-32.png',
+          'png/2x/reverse-transparent/inkcre-reverse-transparent-16px@2x.png',
+        ],
+        [
+          'toolbar/reverse-48.png',
+          'png/3x/reverse-transparent/inkcre-reverse-transparent-16px@3x.png',
+        ],
+        ['toolbar/canvas-16.png', 'png/original-white/inkcre-original-white-16.png'],
+        ['toolbar/canvas-32.png', 'png/2x/original-white/inkcre-original-white-16px@2x.png'],
+        ['toolbar/canvas-48.png', 'png/3x/original-white/inkcre-original-white-16px@3x.png'],
+      ]) {
+        files.push({
+          absoluteSrc: require.resolve(`@inkcre/ui-web/logo/${asset}`),
+          relativeDest,
+        })
+      }
+    },
+  },
   manifestVersion: 3,
   manifest: ({ browser, mode }) => ({
     name: 'InKCre WebExt',

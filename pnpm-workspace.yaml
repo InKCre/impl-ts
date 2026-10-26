@@ -39,7 +39,7 @@ overrides:
   ws@>=8.0.0 <8.21.0: 8.21.0
 
 minimumReleaseAgeExclude:
-  - '@inkcre/ui-web@2.0.0 || 2.0.1 || 2.1.0 || 2.1.1 || 2.2.0 || 2.2.1 || 2.3.0 || 2.4.0 || 2.5.0'
+  - '@inkcre/ui-web@2.0.0 || 2.0.1 || 2.1.0 || 2.1.1 || 2.2.0 || 2.2.1 || 2.3.0 || 2.4.0 || 2.5.0 || 2.6.0'
   - '@supabase/cli-darwin-arm64@2.112.0'
   - '@supabase/cli-darwin-x64@2.112.0'
   - '@supabase/cli-linux-arm64-musl@2.112.0'
@@ -51,5 +51,6 @@ minimumReleaseAgeExclude:
   - supabase@2.112.0
 
 patchedDependencies:
-  # shortcut: 修复 2.5.0 重复渲染输入值和 ID；升级到上游修复版时移除此补丁。
+  # shortcut: 修复 2.5.0/2.6.0 重复渲染输入值和 ID；升级到上游修复版时移除对应补丁。
   '@inkcre/ui-web@2.5.0': patches/@inkcre__ui-web@2.5.0.patch
+  '@inkcre/ui-web@2.6.0': patches/@inkcre__ui-web@2.6.0.patch

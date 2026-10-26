@@ -34,7 +34,7 @@ Explain、Writing Assist、旧选区浮栏、图编辑侧栏和模型设置已�
 
 设置页沿用 WebExt 原有的灰底方角卡片、白底字段、紧凑排版与 teal 主动作。公开 `ui-web` 组件承载控件，宿主通过原有 palette 适配系统 token；Switch 使用 `xs`，显示 ON/OFF，保留可访问名称、状态与键盘操作。宽屏、390px 窄屏和深色截图与尺寸检查属于 UI 回归。自动测试默认后台运行，不连接日常浏览器会话。
 
-WebExt 固定使用 `@inkcre/ui-web` 2.5.0 的内置密码显隐能力，通过公开 `INK_I18N_KEY` 和中文词典提供按钮名称，不另写密码组件。该版本普通可编辑输入框会额外渲染只读值和重复 ID，因此仓库用版本限定的 pnpm patch 修正一个渲染条件；升级到上游修复版后应移除此补丁。补丁作用于仓库中所有使用 2.5.0 的消费者，包括 main 已升级的 client-web、twitter 和 ext-dev-utils；不改变其组件 API、样式或包版本，也不升级仍使用 2.3.0 的扩展。
+WebExt 固定使用正式发布的 `@inkcre/ui-web` 2.6.0，通过内置密码显隐能力、公开 `INK_I18N_KEY` 和中文词典提供按钮名称，不另写密码组件。2.5.0 和 2.6.0 的普通可编辑输入框都会额外渲染只读值和重复 ID，因此仓库分别维护版本限定的 pnpm patch，各修正一个渲染条件；升级到上游修复版后移除对应补丁。这次仅 WebExt 升级，client-web、twitter 和 ext-dev-utils 继续使用原 2.5.0 及其补丁，不改变组件 API、样式或仍使用 2.3.0 的扩展。
 
 根目录 `pnpm test:e2e:webext` 真正加载扩展。指定 `INKCRE_CHROMIUM_BINARY=/Applications/Helium.app/Contents/MacOS/Helium` 使用 Helium 的隔离测试 profile，测试结束清理，不连接日常会话。真实数据旅程还需要可销毁数据库/PostgREST 的 `INKCRE_E2E_WEBEXT_PGREST` 与 `INKCRE_E2E_WEBEXT_JWT_SECRET`。测试副本只对合成 localhost 资料预授予权限；原生权限 UI 另行验证，生产 manifest 保持 optional 权限。
 
@@ -42,9 +42,11 @@ WebExt 固定使用 `@inkcre/ui-web` 2.5.0 的内置密码显隐能力，通过�
 
 ## Logo 素材
 
-图标直接取自用户提供的 `InKCre-logo-pack-20261021.zip`，没有重新描摹或缩放导出。工具栏的 16/32/48px 文件分别来自 optical 16px 的 1×/2×/3× 素材，不把标准大图缩到小尺寸。Chromium 不提供 Firefox 等价的原生主题图标声明，因此 `action.default_icon` 使用 `public/toolbar/canvas-*.png`，即原包 `original-white` 白底原色版，在两种工具栏背景上均可辨认，不为切换图标增加后台监听。
+品牌素材由锁定的正式 npm 版本 `@inkcre/ui-web` 2.6.0 通过公开的 `@inkcre/ui-web/logo/*` 入口交付。设置页和 popup 直接导入原色与反白的 32px SVG；WXT 在 `build:publicAssets` 中解析同一安装包的 PNG，复制到产物的 `icon/*` 和 `toolbar/*`。仓库不保留另一份素材，也不从 ZIP 或 UI 源码 checkout 取构建输入。公开入口缺失时构建直接失败，不使用本地副本回退。
 
-Firefox 通过 `action.theme_icons` 使用 `toolbar/*.png` 原色透明版与 `toolbar/reverse-*.png` 反白透明版，随浏览器工具栏主题选择。扩展管理图标同样使用白底原色：`public/icon/16.png`、`32.png` 使用小尺寸版，`48.png`、`128.png` 使用标准版，`96.png` 来自标准 48px 的 2× 导出。设置页和 popup 的 32px 标志使用包内原色与反白的 `optical-32` SVG，按系统浅深色选择；原生控件声明 `color-scheme: light dark`。素材沿用原包来源和品牌使用边界，没有新增许可授权。
+WebExt 负责把品牌素材装配为浏览器 AppIcon：选择尺寸、逻辑显示尺寸对应的几何、主题变体和 manifest 路径；UI 包提供品牌素材，不替扩展决定平台图标。工具栏的 16/32/48px 文件分别来自 optical 16px 的 1×/2×/3× 素材，不把标准大图缩到小尺寸。Chromium 不提供 Firefox 等价的原生主题图标声明，因此 `action.default_icon` 使用 `toolbar/canvas-*.png`，即 `original-white` 白底原色版，在两种工具栏背景上均可辨认，不为切换图标增加后台监听。
+
+Firefox 通过 `action.theme_icons` 使用 `toolbar/*.png` 原色透明版与 `toolbar/reverse-*.png` 反白透明版，随浏览器工具栏主题选择。扩展管理图标同样使用白底原色：`icon/16.png`、`32.png` 使用小尺寸版，`48.png`、`128.png` 使用标准版，`96.png` 来自标准 48px 的 2× 导出。设置页和 popup 的 32px 标志使用原色与反白的 `optical-32` SVG，按系统浅深色选择；原生控件声明 `color-scheme: light dark`。素材沿用 UI 包记录的来源和品牌使用边界，没有新增许可授权。两种浏览器的发布产物检查会核对 manifest 路径、PNG 尺寸和对应安装包素材的字节。
 
 ## Hister 参考
 

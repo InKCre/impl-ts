@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { test } from 'node:test'
 import { assertDraft, checkManifest, extensionId, preparedVersion } from '../webext-release.mjs'
+
+const require = createRequire(new URL('../../apps/client-webext/package.json', import.meta.url))
 
 void test('only a prepared numeric WebExt version is selected, independently of other units', () => {
   assert.equal(preparedVersion('0.2.0', '# WebExt\n\n## 0.2.0\nNews', false), true)
@@ -37,12 +40,39 @@ void test('browser artifacts preserve identity, numeric version and readable too
       assert.throws(() =>
         checkManifest({ ...manifest, key: undefined }, metadata.version, browser, key)
       )
-    for (const size of [16, 32, 48]) {
-      const image = await readFile(
-        new URL(`.output/${browser}-mv3/${manifest.action.default_icon[size]}`, root)
-      )
+    assert.deepEqual(
+      manifest.icons,
+      Object.fromEntries([16, 32, 48, 96, 128].map((size) => [size, `icon/${size}.png`]))
+    )
+    for (const size of [16, 32, 48, 96, 128]) {
+      const image = await readFile(new URL(`.output/${browser}-mv3/icon/${size}.png`, root))
+      const asset =
+        size === 96
+          ? 'png/2x/original-white/inkcre-original-white-48px@2x.png'
+          : `png/original-white/inkcre-original-white-${size}.png`
       assert.equal(image.readUInt32BE(16), size)
       assert.equal(image.readUInt32BE(20), size)
+      assert.deepEqual(image, await readFile(require.resolve(`@inkcre/ui-web/logo/${asset}`)))
+    }
+    for (const [size, density, suffix] of [
+      [16, '', '16'],
+      [32, '2x/', '16px@2x'],
+      [48, '3x/', '16px@3x'],
+    ]) {
+      assert.equal(manifest.action.default_icon[size], `toolbar/canvas-${size}.png`)
+      for (const [prefix, variant] of [
+        ['', 'original-transparent'],
+        ['reverse-', 'reverse-transparent'],
+        ['canvas-', 'original-white'],
+      ]) {
+        const image = await readFile(
+          new URL(`.output/${browser}-mv3/toolbar/${prefix}${size}.png`, root)
+        )
+        const asset = `png/${density}${variant}/inkcre-${variant}-${suffix}.png`
+        assert.equal(image.readUInt32BE(16), size)
+        assert.equal(image.readUInt32BE(20), size)
+        assert.deepEqual(image, await readFile(require.resolve(`@inkcre/ui-web/logo/${asset}`)))
+      }
     }
     if (browser === 'firefox')
       assert.deepEqual(
