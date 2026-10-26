@@ -359,7 +359,14 @@
         "text_substring": "匹配了正文",
         "terms": "匹配了关键词"
       },
-      "unavailable": "当前没有可用来搜索的设备。查询已保留；等设备就绪后重试。"
+      "unavailable": "当前没有可用来搜索的设备。查询已保留；等设备就绪后重试。",
+      "mode": "检索方式",
+      "modes": {
+        "lexical": "关键词",
+        "semantic": "语义"
+      },
+      "noPreview": "暂无预览，可打开条目阅读。",
+      "score": "相似度"
     },
     "blockInspector": {
       "loadFailed": "无法读取此条目。",
