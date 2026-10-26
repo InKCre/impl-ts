@@ -876,7 +876,7 @@ test('legacy configuration and pending notes survive the private-storage migrati
   expect(status.ok).toBe(true)
   expect(status.value.connections).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ name: '从旧配置迁入', url: 'http://127.0.0.1:9' }),
+      expect.objectContaining({ name: '127.0.0.1:9', url: 'http://127.0.0.1:9' }),
     ])
   )
   expect(status.value.legacyTasks).toEqual([
