@@ -1,4 +1,5 @@
 import { computed, onUnmounted, ref, shallowRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   configStore,
   ExtensionParticipationModel,
@@ -28,6 +29,7 @@ export function useExtensionVersionDialog(options: {
   data: ExtensionCardData
   runtime: ReturnType<typeof useExtensionPeerRuntime>
 }) {
+  const { t } = useI18n()
   const { data, runtime } = options
   const selectedPeer = shallowRef<Peer | null>(null)
   const versionOpen = ref(false)
@@ -105,7 +107,7 @@ export function useExtensionVersionDialog(options: {
         : (preferredPublishedRelease(releases)?.version ?? '')
       if (!releases.length) {
         // On explicit install, show another published native format without implying this Peer supports it.
-        const other: NativeDistribution = distribution === 'python' ? 'module_federation' : 'python'
+        const other = distribution === 'python' ? 'module_federation' : 'python'
         if (runtime.publishedFormats.value[other] === undefined) await readPublished(other)
       }
     } catch (error) {
