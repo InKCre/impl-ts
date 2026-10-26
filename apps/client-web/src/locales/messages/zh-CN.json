@@ -256,7 +256,7 @@
     "unavailableOnPeer": "此 Peer 不可用",
     "publishedDistributions": "已发布分发",
     "noPublishedDistribution": "尚无已发布的 {distribution} 版本。",
-    "bundledManagedByApp": "此分发随应用交付，不通过 Registry 获取版本或文档。请在对应应用中管理。"
+    "managedByPeer": "请在对应 Peer 管理此分发和查看文档。"
   },
   "job": {
     "loadFailed": "无法读取此任务。",

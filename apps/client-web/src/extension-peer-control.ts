@@ -97,8 +97,8 @@ export async function selectExtensionPeerVersion(input: {
   livePeerIds: ReadonlySet<string>
   manager: ExtensionManager
 }): Promise<ExtensionParticipation | ExtensionRuntimeStatus> {
-  if (input.distribution === 'swift_bundled')
-    throw new Error('此分发随应用交付，请在对应 Peer 管理。')
+  if (input.distribution !== 'python' && input.distribution !== 'module_federation')
+    throw new Error('此分发的安装方式需由对应 Peer 处理。')
   const mode = extensionPeerControlMode(input.peer, input.currentPeerId, input.livePeerIds)
   if (mode === 'current-runtime') {
     if (input.distribution !== 'module_federation')

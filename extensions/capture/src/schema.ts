@@ -2,6 +2,8 @@ import { z } from 'zod'
 import type { Block, Resolver } from '@inkcre/core'
 
 export const captureMetadata = z.object({
+  submission_id: z.uuid(),
+  payload_digest: z.string().regex(/^[0-9a-f]{64}$/),
   captured_at: z.iso.datetime({ offset: true }),
   entry: z.enum(['selection', 'paste', 'screenshot', 'manual']),
   origin: z

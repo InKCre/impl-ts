@@ -39,7 +39,7 @@ export function useExtensionVersionDialog(options: {
   const distributionOptions = computed(() =>
     selectedPeer.value
       ? runtime.supportedFormats(selectedPeer.value).map((format) => ({
-          label: format === 'python' ? 'Python' : 'Module Federation',
+          label: runtime.distributionLabel(format),
           value: format,
         }))
       : []
@@ -68,7 +68,14 @@ export function useExtensionVersionDialog(options: {
     versionLoading.value = true
     versionOptions.value = []
     versionError.value = ''
-    const readPublished = async (format: NativeDistribution): Promise<ReleaseRecord[]> => {
+    if (distribution !== 'python' && distribution !== 'module_federation') {
+      versionError.value = t('extension.managedByPeer')
+      versionLoading.value = false
+      return
+    }
+    const readPublished = async (
+      format: 'python' | 'module_federation'
+    ): Promise<ReleaseRecord[]> => {
       try {
         const catalog = await getExtensionRegistry().getExtension(data.extension.name, format)
         const releases = sortPublishedReleases(catalog.releases ?? [])

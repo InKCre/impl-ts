@@ -256,7 +256,7 @@
     "unavailableOnPeer": "Unavailable on this Peer",
     "publishedDistributions": "Published distributions",
     "noPublishedDistribution": "No published {distribution} releases.",
-    "bundledManagedByApp": "This distribution ships with its application. Manage it and consult its documentation in that application, rather than Registry."
+    "managedByPeer": "Manage this distribution and consult its documentation on the corresponding Peer."
   },
   "job": {
     "loadFailed": "Unable to load this job.",
