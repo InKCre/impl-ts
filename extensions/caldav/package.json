@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@inkcre/core": "workspace:*",
-    "@inkcre/extension-runtime-client-web": "https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz",
+    "@inkcre/extension-runtime-client-web": "https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz",
     "ical.js": "2.2.1"
   },
   "devDependencies": {
@@ -37,7 +37,7 @@
     "nickname": "CalDAV",
     "module_federation": {
       "host_sdk": "@inkcre/core",
-      "host_sdk_version": ">=0.4.0 <0.5.0"
+      "host_sdk_version": ">=0.4.2 <0.5.0"
     }
   },
   "intent": {
