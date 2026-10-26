@@ -1,5 +1,14 @@
 # @inkcre/ext-twitter
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [854291e]
+- Updated dependencies [854291e]
+- Updated dependencies [02ef335]
+  - @inkcre/core@0.4.2
+
 ## 0.5.0
 
 ### Minor Changes
