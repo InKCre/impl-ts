@@ -11,6 +11,14 @@ Primary implementation scope:
 
 Affected release projects (or `none`):
 
+## Next action
+
+Feedback or acceptance needed:
+
+Person or team responding next:
+
+Outstanding delivery and blockers (link the tracking issue for cross-repository work):
+
 ## Validation evidence
 
 - [ ] `pnpm check`
