@@ -97,6 +97,8 @@ export async function selectExtensionPeerVersion(input: {
   livePeerIds: ReadonlySet<string>
   manager: ExtensionManager
 }): Promise<ExtensionParticipation | ExtensionRuntimeStatus> {
+  if (input.distribution !== 'python' && input.distribution !== 'module_federation')
+    throw new Error('此分发的安装方式需由对应 Peer 处理。')
   const mode = extensionPeerControlMode(input.peer, input.currentPeerId, input.livePeerIds)
   if (mode === 'current-runtime') {
     if (input.distribution !== 'module_federation')

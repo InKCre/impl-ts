@@ -234,7 +234,9 @@ export function useExtensionPeerRuntime(options: {
       ? 'Python'
       : distribution === 'module_federation'
         ? 'Module Federation'
-        : t('extension.distributionUnknown')
+        : distribution === 'swift_bundled'
+          ? 'Swift (bundled)'
+          : (distribution ?? t('extension.distributionUnknown'))
   }
 
   function supportedFormats(peer: Peer): NativeDistribution[] {

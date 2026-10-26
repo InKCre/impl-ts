@@ -42,6 +42,11 @@ export function useExtensionInfoDialogs(options: {
     docsLoading.value = true
     documentation.value = []
     docsError.value = ''
+    if (pin.distribution !== 'python' && pin.distribution !== 'module_federation') {
+      docsError.value = t('extension.managedByPeer')
+      docsLoading.value = false
+      return
+    }
     try {
       const origin = await new ExtensionRegistryOriginResolver(
         () => configStore.peerConfig.extension_registry_url
