@@ -1,14 +1,57 @@
 <script setup lang="ts">
 import logo from '@/assets/inkcre.svg'
 import { type LLMProviderConfig, type ProviderType } from '@inkcre/core'
+import { defaultModel, explainInstruction, llmProviders, stopwords } from '@/logic/storage'
 import {
-  defaultModel,
-  explainInstruction,
-  inkcreApi,
-  llmProviders,
-  stopwords,
-} from '@/logic/storage'
+  apiConnections,
+  apiConnectionsReady,
+  apiConnectionIssue,
+  saveApiConnection,
+  selectApiConnection,
+} from '@/logic/api-connections'
 import 'uno.css'
+
+const connectionId = ref<string>(crypto.randomUUID())
+const connectionName = ref('')
+const connectionUrl = ref('')
+const connectionBusy = ref(true)
+const connectionFeedback = ref('')
+
+function showActiveConnection() {
+  const current = apiConnections.value.connections.find(
+    (item) => item.id === apiConnections.value.activeId
+  )
+  connectionId.value = current?.id ?? crypto.randomUUID()
+  connectionName.value = current?.name ?? ''
+  connectionUrl.value = current?.url ?? ''
+}
+onMounted(async () => {
+  await apiConnectionsReady
+  showActiveConnection()
+  connectionBusy.value = false
+})
+watch(apiConnections, showActiveConnection)
+function addConnection() {
+  connectionId.value = crypto.randomUUID()
+  connectionName.value = ''
+  connectionUrl.value = ''
+  connectionFeedback.value = ''
+}
+async function applyConnection(id?: string) {
+  if (connectionBusy.value) return
+  connectionBusy.value = true
+  connectionFeedback.value = ''
+  try {
+    if (id) await selectApiConnection(id)
+    else await saveApiConnection(connectionId.value, connectionName.value, connectionUrl.value)
+    showActiveConnection()
+    connectionFeedback.value = '已切换连接。'
+  } catch {
+    connectionFeedback.value = '无法保存连接，请检查名称和 HTTP(S) 地址。'
+  } finally {
+    connectionBusy.value = false
+  }
+}
 
 // Computed property to handle stopwords array/string conversion
 const stopwordsText = computed({
@@ -131,16 +174,45 @@ onMounted(() => {
     <div class="mt-6 p-4 bg-surface-2 rounded-none border border-border">
       <h3 class="text-lg font-semibold mb-2">Runtime configuration</h3>
       <div class="text-left space-y-4">
-        <div class="flex items-center space-x-2">
-          <label for="inkcre-api" class="font-medium">INKCRE_API:</label>
+        <fieldset :disabled="connectionBusy" class="space-y-2">
+          <legend class="font-semibold">连接</legend>
+          <label for="current-connection">当前连接</label>
+          <select
+            id="current-connection"
+            :value="apiConnections.activeId ?? ''"
+            @change="applyConnection(($event.target as HTMLSelectElement).value)"
+            class="w-full px-2 py-1 border border-border bg-surface"
+          >
+            <option v-if="!apiConnections.connections.length" value="" disabled>
+              尚未保存连接
+            </option>
+            <option v-for="item in apiConnections.connections" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </option>
+          </select>
+          <button type="button" @click="addConnection" class="px-3 py-1 border border-border">
+            添加连接
+          </button>
+          <label for="connection-name" class="block">连接名称</label>
+          <input
+            id="connection-name"
+            v-model="connectionName"
+            class="w-full px-2 py-1 border border-border bg-surface"
+          />
+          <label for="inkcre-api" class="block">API 地址</label>
           <input
             id="inkcre-api"
-            v-model="inkcreApi"
+            v-model="connectionUrl"
             type="url"
-            class="flex-1 px-2 py-1 border border-border rounded-none bg-surface"
+            class="w-full px-2 py-1 border border-border bg-surface"
             placeholder="https://..."
           />
-        </div>
+          <button type="button" @click="applyConnection()" class="px-3 py-1 border border-border">
+            保存并使用连接
+          </button>
+          <p v-if="apiConnectionIssue" role="alert">{{ apiConnectionIssue }}</p>
+          <p v-if="connectionFeedback" role="status">{{ connectionFeedback }}</p>
+        </fieldset>
 
         <!-- LLM Provider Configuration -->
         <div class="space-y-2">

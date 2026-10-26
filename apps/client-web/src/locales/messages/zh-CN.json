@@ -91,7 +91,11 @@
     "peerRuntime": "本机后台",
     "telemetry": "遥测",
     "telemetryRelayDefault": "留空使用部署的遥测出口。",
-    "backgroundDisabledEffect": "保存后停止后台任务和遥测；本地扩展仍可使用。"
+    "backgroundDisabledEffect": "保存后停止后台任务和遥测；本地扩展仍可使用。",
+    "currentConnection": "当前连接",
+    "addConnection": "添加连接",
+    "connectionName": "连接名称",
+    "saveAndUseConnection": "保存并使用连接"
   },
   "source": {
     "lead": "管理采集数据来源；每个数据源对应一个持续进入 InKCre 的内容通道。",

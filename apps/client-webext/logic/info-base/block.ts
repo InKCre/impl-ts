@@ -5,7 +5,7 @@
  */
 
 import { Block as CoreBlock } from '@inkcre/core'
-import { inkcreApi } from '~/logic/storage'
+import { inkcreApi, inkcreApiReady } from '~/logic/storage'
 
 /**
  * Extended Block class with vector search capability
@@ -28,6 +28,7 @@ export class Block extends CoreBlock {
     distanceThreshold?: number
     num?: number
   }): Promise<Block[]> {
+    await inkcreApiReady
     const url = new URL('/blocks/query/by_embedding', inkcreApi.value)
     if (params.query !== undefined) {
       url.searchParams.set('query', params.query)

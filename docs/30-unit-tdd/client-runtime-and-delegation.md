@@ -74,6 +74,12 @@ origin:
 - current technical Peer UUID;
 - user-owned JWT signing secret.
 
+每个 Web origin 在本地保存命名连接列表和当前选择。一个条目包含 PostgREST 地址、JWT 签名密钥、稳定的 Peer UUID 和该连接的运行设置。添加连接生成新的身份；切回已保存连接复用原身份。设置中的“保存并使用连接”验证目标后才提交列表与当前选择；连接失败或存储失败不改变已保存的选择。切换前收束旧 Job worker、扩展 Host 和遥测，并清除 Resolver 缓存及连接相关的搜索、侧栏状态。
+
+旧单连接会成为列表首项，保留凭据与身份。存储中的扁平 MetaConfig 字段是活动项的兼容投影；重新加载以列表的活动项为准。导出格式 v3 包含全部连接、当前选择和语言，包括连接凭据；导入接受旧 v2 单连接和 v3，并替换本地列表。各浏览器 origin 独立保存，不跨设备同步。
+
+浏览器扩展的旧 API 入口独立保存命名 API 地址及当前选择，沿用现有请求协议；其他打开的扩展页面通过 extension storage 接收选择变化。原单一 `inkcreApi` 地址保留为首项。它不把 API 地址冒充 Web 的 PostgREST/JWT 连接，亦不迁移旧协议。
+
 The application shell mounts immediately with its header and menu. A configured browser reads its
 complete canonical Peer row once before business views mount; a new identity must first be
 inserted. Business pages then remain available while runtime-owned version/schema registration and
