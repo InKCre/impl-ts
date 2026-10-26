@@ -1,5 +1,13 @@
 # WebExt 浏览器采集与已有资料导入
 
+## 2026-10-26 PR 审阅收口
+
+用户要求整理并将 PR #161 转为 Ready for review；仅授权进入审阅，不合并、不发布、不操作商店或日常浏览器。已快进同步远端 `e973936`，完整保留其合入 main `6cd68df` 的 TS7 工具链改动；当前无冲突、无未解决评审线程。此次仅更新任务交付记录和 PR 摘要，不改运行时代码，不重写提交历史。
+
+当前实现 head 的 [CI 40170309569](https://github.com/InKCre/impl-ts/actions/runs/40170309569) 与 PR 预览均通过，包括全仓格式、type-aware lint、统一 TS7/Vue 类型及构建、client-web E2E、WebExt 无数据库回归 4 项通过／7 项条件跳过和发布规则 3/3。此前真实可销毁数据库 Helium 11/11、sfp7 Firefox 及视觉检查是历史补充证据，不冒充当前 CI 的完整数据库旅程。旧的额外 type-aware lint 50 项诊断不再是当前阻塞，独立 `type-check:ts7` 入口已由上游统一工具链取代。
+
+安装迁移与未签名限制继续由 `docs/40-deployment/webext-delivery.md` 维护。没有新增打包或替换已提供的本地候选包；旧下载产物的来源仍以其 `source.json` 为准。收口提交后的检查和 Ready 状态以 [PR #161](https://github.com/InKCre/impl-ts/pull/161) 为准。下文保留此前阶段证据，不代表仍需重复执行的计划。
+
 ## 2026-10-25 分发实现进展
 
 用户已接受提案，授权继续实现和验证；Chrome 与 Mozilla 开发者账号均未建立，先完成无需账号部分，不付费、不上传商店、不实际发布。当前工作只在隔离 worktree，原日常扩展与主 checkout 未改。此前自由提交和更新 Draft PR #161 的授权继续有效。实施边界与验收见 [delivery-plan.md](delivery-plan.md)，持久操作说明归入 `docs/40-deployment/webext-delivery.md`。
