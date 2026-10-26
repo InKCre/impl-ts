@@ -1,20 +1,11 @@
 version: 2
 
-registries:
-  inkcre-github-packages:
-    type: npm-registry
-    url: https://npm.pkg.github.com
-    scope: '@inkcre'
-    token: ${{ secrets.INKCRE_PACKAGES_READ_TOKEN }}
-
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     target-branch: main
-    registries:
-      - inkcre-github-packages
     open-pull-requests-limit: 3
     cooldown:
       default-days: 7
@@ -22,6 +13,8 @@ updates:
       semver-minor-days: 7
       semver-patch-days: 3
     ignore:
+      # UI upgrades must adopt an already mirrored exact-version URL and lockfile together.
+      - dependency-name: '@inkcre/ui-web'
       - dependency-name: '*'
         update-types:
           - version-update:semver-major

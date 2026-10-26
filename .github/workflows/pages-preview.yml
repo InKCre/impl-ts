@@ -11,7 +11,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
   identity:
@@ -55,7 +54,6 @@ jobs:
     permissions:
       contents: read
       deployments: write
-      packages: read
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment:
@@ -87,8 +85,6 @@ jobs:
           node-version-file: candidate/package.json
           cache: pnpm
           cache-dependency-path: candidate/pnpm-lock.yaml
-          registry-url: https://npm.pkg.github.com
-          scope: '@inkcre'
 
       - name: Set up Python and PDM
         uses: pdm-project/setup-pdm@544d7237314ee09c256785bd360f6b30add38b37 # v4.6
@@ -104,7 +100,6 @@ jobs:
           pnpm install --frozen-lockfile
           pdm install --frozen-lockfile
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PDM_CHECK_UPDATE: 'false'
 
       - name: Build the exact-head SPA and Module Federation snapshots
