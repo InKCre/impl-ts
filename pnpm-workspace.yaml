@@ -17,6 +17,8 @@ allowBuilds:
   workerd: false
 
 overrides:
+  '@inkcre/ui-web@2.3.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
+  '@inkcre/ui-web@2.5.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
   typescript: *typescript
   '@babel/core@<=7.29.0': 7.29.7
   adm-zip@<0.6.0: 0.6.0

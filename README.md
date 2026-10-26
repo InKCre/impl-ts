@@ -19,9 +19,8 @@ End users consume the published web build and browser extension through the depl
 
 ### Develop locally
 
-Before installing, read the [contribution guide](CONTRIBUTING.md): the current lockfile consumes a
-private GitHub Package. Setup requires package access in addition to a `read:packages` token until
-the documented public-download cutover is completed.
+Read the [contribution guide](CONTRIBUTING.md) before installing. Locked UI packages download from
+public Release assets; local setup requires no organization package token.
 
 ```bash
 git submodule update --init --recursive

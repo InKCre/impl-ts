@@ -5,27 +5,21 @@ The organization-wide Git and pull-request policy lives in
 This guide owns the `impl-ts` setup, monorepo boundaries, verification, and release-intent details
 required by that policy.
 
-## Package access before setup
+## Public dependencies
 
-This public repository consumes the private `@inkcre/ui-web` GitHub Package. Local clone and fork
-development therefore requires both a classic GitHub personal access token with `read:packages` and
-read access to that package. Follow the
-[`ui` authentication instructions](https://github.com/InKCre/ui/blob/main/CONTRIBUTING.md#github-packages-authentication)
-before running `pnpm install`. A token scope does not grant package access by itself.
+The lockfile downloads the original `@inkcre/ui-web` tarballs from public versioned GitHub Releases.
+Local clone and fork setup requires no organization membership, package access, or GitHub/npm token.
+Root overrides route exactly UI `2.3.0` and `2.5.0` to those assets; the integrity values remain those
+of the originally published packages.
 
-Treat `401` or `403` during install as an access/setup failure. Do not edit the lockfile, commit a
-token, or add credentials to this repository's `.npmrc`. If you cannot obtain package access, confirm
-another suitable contribution with a maintainer; the normal local check cannot run without the
-locked package.
-
-The approved public-download path uses the original UI tarball on its versioned GitHub Release.
-Publication and consumer cutover have not happened yet; the active lockfile intentionally retains
-the existing source. Maintainers follow the
+Keep workspace `package.json` UI dependencies as semver: Module Federation reads them as
+`requiredVersion`. Maintainers adopting a new UI version follow the
 [UI delivery contract](https://github.com/InKCre/ui/blob/main/CONTRIBUTING.md#public-package-delivery)
-to publish and anonymously verify the asset first, then add a version-qualified root override and
-regenerate this lockfile. Keep `@inkcre/ui-web` dependency values as semver: Module Federation reads
-them as `requiredVersion`. The cutover must pass a clean no-token install, Web build, and Extension
-build before the package-access prerequisite above can be removed.
+to publish and anonymously verify its original tarball first, add its exact-version root override,
+and regenerate the lockfile. Verify a fresh frozen install and consumer builds with no token.
+Dependabot leaves UI upgrades to this coordinated step; other dependency updates remain automated.
+If a locked public URL fails, report its version and redacted response rather than adding credentials
+or switching the lockfile back to a private URL.
 
 ## Setup
 
@@ -70,5 +64,6 @@ acceptance command. Record what actually ran and any unmet environment condition
 body; a package build is not evidence of browser behavior.
 
 External fork workflows require maintainer approval and receive no preview or production credentials.
-A maintainer may need to confirm package access for CI and perform a trusted Pages preview after the
-ordinary checks pass. Never add a credential to the branch to make a fork workflow run.
+A maintainer may perform a trusted Pages preview after the ordinary checks pass. Frozen dependency
+installation runs without an npm authentication token. Never add a credential to the branch to make
+a fork workflow run.
