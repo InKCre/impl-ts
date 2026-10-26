@@ -17,10 +17,10 @@
     "@inkcre/ext-dev-utils": "workspace:*",
     "@inkcre/ui-web": "2.3.0",
     "@module-federation/vite": "^1.1.0",
-    "@vitejs/plugin-vue": "^6.0.1",
+    "@vitejs/plugin-vue": "^6.0.10",
     "@vue/tsconfig": "catalog:",
     "typescript": "catalog:",
-    "vite": "^7.0.6",
+    "vite": "^7.3.7",
     "vue-tsc": "catalog:"
   },
   "peerDependencies": {
