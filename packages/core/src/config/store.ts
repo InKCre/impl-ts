@@ -3,7 +3,11 @@ import { ref, shallowRef } from 'vue'
 import { store } from '../store'
 import type { ConfigAdapterWithWrite } from './types'
 import { MetaConfigSchema, PeerConfigSchema, type MetaConfig, type PeerConfig } from './schema'
-import { loadConfig as zodLoadConfig } from 'zod-config'
+import {
+  ConnectionSettingsSchema,
+  readConnectionSettings,
+  type ConnectionSettings,
+} from './connections'
 import type { WebPeerIdentity } from '../peer/runtime'
 
 // Lazy import Peer to avoid circular imports
@@ -25,6 +29,7 @@ export const useConfigStore = defineStore('inkcre-config', () => {
   const metaAdapter = shallowRef<ConfigAdapterWithWrite>(unconfiguredAdapter)
   const metaConfig = ref<MetaConfig>(MetaConfigSchema.parse({}))
   const peerConfig = ref<PeerConfig>(PeerConfigSchema.parse({}))
+  const connectionSettings = ref<ConnectionSettings>({ connections: [], activeConnectionId: null })
   const isLoading = ref(false)
   const error = ref<Error | null>(null)
 
@@ -34,14 +39,17 @@ export const useConfigStore = defineStore('inkcre-config', () => {
     error.value = null
 
     try {
-      metaConfig.value = await zodLoadConfig({
-        schema: MetaConfigSchema,
-        adapters: [adapter],
-      })
+      const stored = await adapter.read()
+      const current = MetaConfigSchema.parse(stored)
+      const settings = readConnectionSettings(stored, current)
+      connectionSettings.value = settings
+      metaConfig.value =
+        settings.connections.find((item) => item.id === settings.activeConnectionId)?.config ??
+        current
     } catch (err) {
       error.value = err as Error
-      metaConfig.value = MetaConfigSchema.parse({})
       console.error('[Config] Failed to initialize meta config.')
+      throw err
     } finally {
       isLoading.value = false
     }
@@ -66,7 +74,14 @@ export const useConfigStore = defineStore('inkcre-config', () => {
   async function saveMeta(): Promise<void> {
     error.value = null
     try {
-      await metaAdapter.value.write(metaConfig.value)
+      const settings = ConnectionSettingsSchema.parse(connectionSettings.value)
+      settings.connections = settings.connections.map((item) =>
+        item.id === settings.activeConnectionId
+          ? { ...item, config: MetaConfigSchema.parse(metaConfig.value) }
+          : item
+      )
+      await metaAdapter.value.write({ ...metaConfig.value, ...settings })
+      connectionSettings.value = settings
     } catch (err) {
       error.value = err as Error
       console.error('[Config] Failed to save meta config:', err)
@@ -74,16 +89,35 @@ export const useConfigStore = defineStore('inkcre-config', () => {
     }
   }
 
-  async function connectAndSave(metaCandidate: MetaConfig, identity: WebPeerIdentity) {
+  async function connectAndSave(
+    metaCandidate: MetaConfig,
+    identity: WebPeerIdentity,
+    selection?: { id: string; name: string },
+    imported?: ConnectionSettings
+  ) {
     error.value = null
     const nextMeta = MetaConfigSchema.parse(metaCandidate)
+    const settings = ConnectionSettingsSchema.parse(imported ?? connectionSettings.value)
+    const existing = settings.connections.find((item) => item.id === settings.activeConnectionId)
+    const selected = selection ??
+      existing ?? {
+        id: crypto.randomUUID(),
+        name: new URL(nextMeta.INKCRE_PGREST_URL).host,
+      }
+    const entry = { id: selected.id, name: selected.name, config: nextMeta }
+    const index = settings.connections.findIndex((item) => item.id === selected.id)
+    if (index < 0) settings.connections.push(entry)
+    else settings.connections[index] = entry
+    settings.activeConnectionId = selected.id
+    const nextSettings = ConnectionSettingsSchema.parse(settings)
     let candidateRuntime: InstanceType<Awaited<ReturnType<typeof lazyWebPeerRuntime>>> | null = null
 
     try {
       const WebPeerRuntime = await lazyWebPeerRuntime()
       const connection = await WebPeerRuntime.connect(nextMeta, identity)
       candidateRuntime = connection.runtime
-      await metaAdapter.value.write(nextMeta)
+      await metaAdapter.value.write({ ...nextMeta, ...nextSettings })
+      connectionSettings.value = nextSettings
       metaConfig.value = nextMeta
       peerConfig.value = PeerConfigSchema.parse(connection.peer.config)
       return candidateRuntime
@@ -99,7 +133,9 @@ export const useConfigStore = defineStore('inkcre-config', () => {
     const resetPeerConfig = PeerConfigSchema.parse({})
     error.value = null
     try {
-      await metaAdapter.value.write(resetMetaConfig)
+      const settings: ConnectionSettings = { connections: [], activeConnectionId: null }
+      await metaAdapter.value.write({ ...resetMetaConfig, ...settings })
+      connectionSettings.value = settings
       metaConfig.value = resetMetaConfig
       peerConfig.value = resetPeerConfig
     } catch (err) {
@@ -110,6 +146,7 @@ export const useConfigStore = defineStore('inkcre-config', () => {
 
   return {
     metaConfig,
+    connectionSettings,
     peerConfig,
     metaAdapter,
     isLoading,

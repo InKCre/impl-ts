@@ -1,6 +1,6 @@
 // (Information) Base Root module index
 
-import { inkcreApi } from '~/logic/storage'
+import { inkcreApi, inkcreApiReady } from '~/logic/storage'
 import type { BlockForm } from './block'
 
 export interface RelationInput {
@@ -22,7 +22,8 @@ export class StarGraphForm {
     public in_relations: ArcForm[] = []
   ) {}
 
-  create() {
+  async create() {
+    await inkcreApiReady
     return fetch(new URL('/graph', inkcreApi.value), {
       method: 'PUT',
       headers: {
@@ -51,6 +52,7 @@ export class Root {
     retrieve_mode?: string
     context_blocks?: string
   }): Promise<string> {
+    await inkcreApiReady
     const url = new URL('/sink/rag', inkcreApi.value)
     url.searchParams.set('query', encodeURIComponent(params.query))
     if (params.retrieve_mode) {

@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { InkButton, InkPlaceholder, InkSkeleton } from '@inkcre/ui-web'
+import {
+  InkButton,
+  InkDropdown,
+  InkForm,
+  InkInput,
+  InkPlaceholder,
+  InkSkeleton,
+} from '@inkcre/ui-web'
 import {
   CapabilityDelegationUnavailable,
   getInfoBaseRouter,
   LexicalRetrievalManager,
+  SemanticRetrievalManager,
+  ResolverCache,
+  type Resolver,
+  type SemanticRetrievalResult,
   presentLexicalMatches,
   type RecallGroup,
   type LexicalRetrievalMatch,
@@ -18,12 +29,28 @@ import BlockInspectorPopup from '@/components/info-base/BlockInspectorPopup/Bloc
 import SolvedContentPopup from '@/components/info-base/SolvedContentPopup/SolvedContentPopup.vue'
 import RelationInspectorPopup from '@/components/info-base/RelationInspectorPopup/RelationInspectorPopup.vue'
 import InfoBaseViewTabs from '@/components/info-base/InfoBaseViewTabs.vue'
+import PreviewRenderer from '@/components/info-base/PreviewRenderer/PreviewRenderer.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const infoBaseRouter = getInfoBaseRouter()
 
 const input = ref('')
+const mode = ref<string | number>('lexical')
+const modeOptions = computed(() =>
+  ['lexical', 'semantic'].map((value) => ({
+    value,
+    label: t(`infoBase.list.modes.${value}`),
+  }))
+)
+type SemanticMatch = SemanticRetrievalResult['matches'][number]
+const semanticMatches = shallowRef<
+  {
+    match: SemanticMatch
+    resolver?: Resolver
+    solvedContent?: unknown
+  }[]
+>([])
 const status = ref<'idle' | 'loading' | 'success' | 'error'>('idle')
 const matches = shallowRef<RecallGroup[]>([])
 const error = shallowRef<Error | null>(null)
@@ -35,10 +62,12 @@ const routeQuery = computed(() => {
   const value = route.query.q
   return typeof value === 'string' ? value.trim() : ''
 })
+const routeMode = computed(() => (route.query.mode === 'semantic' ? 'semantic' : 'lexical'))
 
 async function retrieve(query: string): Promise<void> {
   const current = ++generation
   matches.value = []
+  semanticMatches.value = []
   error.value = null
   if (!query) {
     status.value = 'idle'
@@ -46,6 +75,29 @@ async function retrieve(query: string): Promise<void> {
   }
   status.value = 'loading'
   try {
+    if (routeMode.value === 'semantic') {
+      const result = await SemanticRetrievalManager.retrieve({ query })
+      if (current !== generation) return
+      semanticMatches.value = result.matches.map((match) => ({ match }))
+      status.value = 'success'
+      // Preview failures must not hide a ranked entity or prevent opening it.
+      await Promise.all(
+        result.matches.map(async (match, index) => {
+          if (match.type !== 'block') return
+          try {
+            const resolver = await ResolverCache.getResolver(match.entity)
+            const solvedContent = await resolver.getSolvedContent({ materializeMissing: false })
+            if (current !== generation) return
+            semanticMatches.value = semanticMatches.value.map((item, position) =>
+              position === index ? { match, resolver, solvedContent } : item
+            )
+          } catch (cause) {
+            console.warn('Semantic result preview unavailable', cause)
+          }
+        })
+      )
+      return
+    }
     const result = await LexicalRetrievalManager.retrieve({ query, limit: 20 })
     const presented = await presentLexicalMatches(result.matches)
     if (current !== generation) return
@@ -59,13 +111,17 @@ async function retrieve(query: string): Promise<void> {
 }
 
 watch(
-  routeQuery,
-  (query) => {
+  [routeQuery, routeMode],
+  ([query, selected]) => {
     input.value = query
+    mode.value = selected
     void retrieve(query)
   },
   { immediate: true }
 )
+onBeforeUnmount(() => {
+  generation++
+})
 
 // A direct URL can retrieve before its extension Resolvers finish registering.
 watch(extensionHostRestoreState, (state) => {
@@ -74,7 +130,21 @@ watch(extensionHostRestoreState, (state) => {
 
 function search(): void {
   const query = input.value.trim()
-  void router.push({ name: 'InfoBaseListOverview', query: query ? { q: query } : {} })
+  const selected = mode.value === 'semantic' ? 'semantic' : 'lexical'
+  if (query === routeQuery.value && selected === routeMode.value) {
+    void retrieve(query)
+    return
+  }
+  void router.push({
+    name: 'InfoBaseListOverview',
+    query: { q: query || undefined, mode: selected === 'semantic' ? selected : undefined },
+  })
+}
+
+function openSemantic(match: SemanticMatch): void {
+  if (match.type === 'relation')
+    void infoBaseRouter.push({ name: 'relation', relation: match.entity.id })
+  else void infoBaseRouter.push({ name: 'block', block: match.entity.id })
 }
 
 function inspect(match: LexicalRetrievalMatch): void {
@@ -108,14 +178,15 @@ function refresh(): void {
     </div>
     <header class="info-base-list-view__hero">
       <h1>{{ t('infoBase.list.title') }}</h1>
-      <form class="info-base-list-view__search" @submit.prevent="search">
-        <input
+      <InkForm @submit="search">
+        <InkInput
           v-model="input"
-          type="search"
-          :aria-label="t('infoBase.list.searchLabel')"
+          native-type="search"
+          :label="t('infoBase.list.searchLabel')"
           :placeholder="t('infoBase.list.searchPlaceholder')"
           autocomplete="off"
         />
+        <InkDropdown v-model="mode" :label="t('infoBase.list.mode')" :options="modeOptions" />
         <InkButton
           :text="t('infoBase.list.search')"
           theme="primary"
@@ -123,8 +194,7 @@ function refresh(): void {
           :is-loading="status === 'loading'"
           :disabled="status === 'loading'"
         />
-      </form>
-      <p class="info-base-list-view__help">{{ t('infoBase.list.idle') }}</p>
+      </InkForm>
     </header>
 
     <section class="info-base-list-view__results" aria-live="polite">
@@ -153,7 +223,7 @@ function refresh(): void {
         </template>
       </InkPlaceholder>
       <InkPlaceholder
-        v-else-if="status === 'success' && matches.length === 0"
+        v-else-if="status === 'success' && matches.length === 0 && semanticMatches.length === 0"
         :title="t('infoBase.list.empty', { query: routeQuery })"
       />
       <ol v-else-if="matches.length" class="info-base-list-view__matches">
@@ -181,6 +251,31 @@ function refresh(): void {
               <span> · {{ formatRank(evidence.rank) }}</span>
             </div>
           </details>
+        </li>
+      </ol>
+      <ol v-else-if="semanticMatches.length" class="info-base-list-view__matches">
+        <li v-for="item in semanticMatches" :key="`${item.match.type}:${item.match.entity.id}`">
+          <button
+            type="button"
+            class="info-base-list-view__match"
+            @click="openSemantic(item.match)"
+          >
+            <strong>{{ item.match.type }}:{{ item.match.entity.id }}</strong>
+            <PreviewRenderer
+              v-if="item.resolver"
+              :resolver="item.resolver"
+              :solved-content="item.solvedContent"
+            />
+            <span v-else-if="item.match.type === 'relation'" class="info-base-list-view__excerpt">
+              #{{ item.match.entity.from_ }} → {{ item.match.entity.content.slice(0, 280) }} → #{{
+                item.match.entity.to_
+              }}
+            </span>
+            <span v-else>{{ t('infoBase.list.noPreview') }}</span>
+            <span class="info-base-list-view__evidence"
+              >{{ t('infoBase.list.score') }} · {{ formatRank(item.match.score) }}</span
+            >
+          </button>
         </li>
       </ol>
     </section>

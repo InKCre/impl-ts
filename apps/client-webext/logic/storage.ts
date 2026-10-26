@@ -37,14 +37,7 @@ export const { data: stopwords, dataReady: stopwordsReady } = useWebExtensionSto
   DEFAULT_STOPWORDS
 )
 
-/**
- * InKCre API base URL (extension-specific, not in core).
- * Used for info-base API calls.
- */
-export const { data: inkcreApi, dataReady: inkcreApiReady } = useWebExtensionStorage(
-  'inkcreApi',
-  ''
-)
+export { inkcreApi, apiConnectionsReady as inkcreApiReady } from './api-connections'
 
 /**
  * LLM provider credentials and model lists.

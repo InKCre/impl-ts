@@ -421,7 +421,7 @@ test('switching connections cannot renew a pending old registration against eith
     await openSettings(page)
     await page.getByLabel('PostgREST URL').fill(alternateUrl)
     await page.getByLabel('JWT signing secret').fill(alternateSecret)
-    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
     await expect.poll(() => newLeaseRequests).toBe(1)
     release()
     await expect.poll(() => registrationFinished).toBe(true)
@@ -550,14 +550,14 @@ test('zero participation persists, stays idle, and a custom interval resumes lea
     page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)')
   ).toHaveValue('0')
   await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
   expect(leaseTtls).toEqual([])
   const intervalInput = page.getByLabel(
     'Lease renewal and job check interval (seconds; 0 disables)'
   )
   await intervalInput.fill('2')
   await expect(intervalInput).toHaveValue('2')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
   await expect(intervalInput).toHaveValue('2')
   await expect.poll(() => scans).toBeGreaterThan(0)
   expect(leaseTtls.length).toBeGreaterThan(0)
@@ -574,10 +574,12 @@ test('zero participation persists, stays idle, and a custom interval resumes lea
   const exported = JSON.parse(readFileSync(path!, 'utf8'))
   expect(exported.metaConfig.peer_lease_renew_interval_seconds).toBe(2)
   await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
   await expect(page.getByRole('status').first()).toBeVisible()
   // The import handler bails while the save still owns the form; wait for it to finish.
-  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+  await expect(
+    page.getByRole('button', { name: 'Save and use connection', exact: true })
+  ).toBeEnabled()
   const stoppedScans = scans,
     stoppedLeases = leaseTtls.length
   await page.clock.fastForward(35_000)
@@ -624,7 +626,7 @@ test('disabling while registration is pending prevents its later lease or worker
     await expect(page.getByRole('main')).toBeVisible()
     await openSettings(page)
     await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
-    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
     await expect(page.getByRole('status').first()).toBeVisible()
     release()
     await expect.poll(() => firstPatchFinished).toBe(true)
@@ -744,8 +746,10 @@ test('disabling participation drains a dispatched claim before saving configurat
     expect(stoppedBeforeClaimReturned).toBe(false)
     await openSettings(page)
     await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
-    await page.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+    await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
+    await expect(
+      page.getByRole('button', { name: 'Save and use connection', exact: true })
+    ).toBeDisabled()
     expect(
       await page.evaluate(
         () =>
@@ -1275,7 +1279,13 @@ test('Settings export restores the complete browser experience', async ({ page }
     expect(path).not.toBeNull()
     const exported = JSON.parse(readFileSync(path!, 'utf8'))
     expect(exported).toEqual({
-      version: 2,
+      version: 3,
+      connections: {
+        activeConnectionId: expect.any(String),
+        connections: [
+          { id: expect.any(String), name: new URL(postgrestUrl).host, config: exported.metaConfig },
+        ],
+      },
       metaConfig: {
         INKCRE_PGREST_URL: postgrestUrl,
         INKCRE_JWT_SECRET: jwtSecret,
@@ -1312,7 +1322,7 @@ test('Settings export restores the complete browser experience', async ({ page }
           locale: localStorage.getItem('inkcre-locale'),
         }))
       )
-      .toEqual({ metaConfig: exported.metaConfig, locale: 'en' })
+      .toEqual({ metaConfig: { ...exported.metaConfig, ...exported.connections }, locale: 'en' })
     await expect(
       page.getByRole('switch', { name: 'Enable telemetry', exact: true })
     ).not.toBeChecked()
@@ -1634,6 +1644,76 @@ test('Recall delegates one read to its destination and discards stale path searc
   await expect(page).toHaveURL(new RegExp(`q=${query}`))
 })
 
+test('semantic search opens existing content and preserves its mode', async ({ page }) => {
+  const headers = {
+    Authorization: `Bearer ${await token()}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  }
+  const content = `Semantic reading ${Date.now()}`
+  const created = await fetch(`${postgrestUrl}blocks`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify([
+      { resolver: 'core.text.v1', content, storage: null },
+      { resolver: 'not.installed', content: 'opaque', storage: null },
+    ]),
+  })
+  expect(created.status).toBe(201)
+  const blocks = await created.json()
+  let fail = false
+  // Ranking is unchanged; this journey owns selecting, presenting and reading its results.
+  await page.route(`${coreUrl}semantic-retrieval`, (route) =>
+    route.fulfill(
+      fail
+        ? { status: 503, json: { detail: 'semantic unavailable' } }
+        : {
+            json: {
+              profile: 1,
+              metric: 'cosine',
+              matches: blocks.map((entity: { id: number }) => ({
+                type: 'block',
+                entity,
+                score: 0.8,
+              })),
+            },
+          }
+    )
+  )
+  try {
+    await page.goto('/')
+    await page.getByRole('searchbox', { name: 'Search the info base' }).fill('remembered meaning')
+    await page.getByRole('combobox', { name: 'Search mode' }).click()
+    await page.getByRole('option', { name: 'Semantic', exact: true }).click()
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(page.getByText(content, { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: new RegExp(`block:${blocks[1].id}`) })
+    ).toBeVisible()
+    await page.reload()
+    await expect(page.getByRole('combobox', { name: 'Search mode' })).toHaveText('Semantic')
+    await page.getByRole('button', { name: new RegExp(`block:${blocks[0].id}`) }).click()
+    await page.getByRole('button', { name: 'View content', exact: true }).click()
+    await expect(
+      page.locator('.solved-content-popup').getByText(content, { exact: true })
+    ).toBeVisible()
+    expect(new URL(page.url()).searchParams.get('q')).toBe('remembered meaning')
+    expect(new URL(page.url()).searchParams.get('mode')).toBe('semantic')
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
+    fail = true
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(
+      page.getByText('The search could not be completed.', { exact: true })
+    ).toBeVisible()
+    await expect(page.getByRole('searchbox')).toHaveValue('remembered meaning')
+  } finally {
+    await fetch(
+      `${postgrestUrl}blocks?id=in.(${blocks.map((block: { id: number }) => block.id).join(',')})`,
+      { method: 'DELETE', headers }
+    )
+  }
+})
+
 test('an empty browser saves its connection across refresh and reads Peers', async ({
   browser,
 }) => {
@@ -1660,7 +1740,7 @@ test('an empty browser saves its connection across refresh and reads Peers', asy
     await page.getByLabel('JWT signing secret').fill(jwtSecret)
     await expect(page.getByLabel('Device readiness wait timeout (seconds)')).toHaveValue('5')
     await page.getByLabel('Device readiness wait timeout (seconds)').fill('45')
-    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
     await expect
       .poll(() =>
         page.evaluate(
