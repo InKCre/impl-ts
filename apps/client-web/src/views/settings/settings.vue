@@ -10,7 +10,14 @@ import {
   InkSwitch,
 } from '@inkcre/ui-web'
 import { toast } from '@/components/toast/toast'
-import { configStore, MetaConfigSchema, type MetaConfig } from '@inkcre/core'
+import {
+  configStore,
+  MetaConfigSchema,
+  ConnectionSettingsSchema,
+  readConnectionSettings,
+  type MetaConfig,
+  type ConnectionSettings,
+} from '@inkcre/core'
 import { z } from 'zod'
 import { setLocale, SUPPORT_LOCALES, LOCALE_NAMES, type SupportLocale } from '@/locales'
 import i18n from '@/locales'
@@ -28,6 +35,42 @@ const { t } = useI18n()
 const telemetryLabelId = useId()
 
 const metaFormConfig = reactive<MetaConfig>({ ...configStore.metaConfig })
+const editingId = ref(configStore.connectionSettings.activeConnectionId ?? crypto.randomUUID())
+const connectionName = ref(
+  configStore.connectionSettings.connections.find((item) => item.id === editingId.value)?.name ?? ''
+)
+const addingConnection = ref(false)
+const connectionOptions = computed(() =>
+  configStore.connectionSettings.connections.map((item) => ({ value: item.id, label: item.name }))
+)
+
+function newConnection() {
+  editingId.value = crypto.randomUUID()
+  connectionName.value = ''
+  addingConnection.value = true
+  Object.assign(metaFormConfig, MetaConfigSchema.parse({}))
+  feedback.value = null
+}
+
+async function switchConnection(id: string | number) {
+  const saved = configStore.connectionSettings.connections.find((item) => item.id === id)
+  if (!saved || formBusy.value) return
+  editingId.value = saved.id
+  connectionName.value = saved.name
+  Object.assign(metaFormConfig, saved.config)
+  addingConnection.value = false
+  const savedSuccessfully = await onSave()
+  if (!savedSuccessfully) restoreCurrentConnection()
+}
+
+function restoreCurrentConnection() {
+  Object.assign(metaFormConfig, configStore.metaConfig)
+  editingId.value = configStore.connectionSettings.activeConnectionId ?? crypto.randomUUID()
+  connectionName.value =
+    configStore.connectionSettings.connections.find((item) => item.id === editingId.value)?.name ??
+    ''
+  addingConnection.value = false
+}
 const pendingAction = ref<'save' | 'import' | 'reset' | null>(null)
 const feedback = ref<{
   action: 'save' | 'import' | 'reset'
@@ -70,17 +113,30 @@ const leaseRenewIntervalError = computed(() => {
     ? t('settings.peerLeaseRenewIntervalInvalid')
     : ''
 })
-const SettingsExportSchema = z.object({
-  version: z.literal(2),
-  metaConfig: MetaConfigSchema,
-  locale: z.enum(SUPPORT_LOCALES),
-})
+const SettingsExportSchema = z.union([
+  z.object({
+    version: z.literal(2),
+    metaConfig: MetaConfigSchema,
+    locale: z.enum(SUPPORT_LOCALES),
+  }),
+  z.object({
+    version: z.literal(3),
+    metaConfig: MetaConfigSchema,
+    locale: z.enum(SUPPORT_LOCALES),
+    connections: ConnectionSettingsSchema,
+  }),
+])
 
 // Synchronize metaFormConfig with configStore.metaConfig
 watch(
   () => configStore.metaConfig,
   (newMetaConfig) => {
     Object.assign(metaFormConfig, newMetaConfig)
+    editingId.value = configStore.connectionSettings.activeConnectionId ?? crypto.randomUUID()
+    connectionName.value =
+      configStore.connectionSettings.connections.find((item) => item.id === editingId.value)
+        ?.name ?? ''
+    addingConnection.value = false
   },
   { deep: true }
 )
@@ -108,18 +164,24 @@ const onSave = async () => {
   try {
     const validatedMeta = MetaConfigSchema.parse(metaFormConfig)
     await prepareWebPeerConfigurationChange(validatedMeta)
-    const runtime = await configStore.connectAndSave(validatedMeta, WEB_PEER_IDENTITY)
+    const name = connectionName.value.trim() || new URL(validatedMeta.INKCRE_PGREST_URL).host
+    const runtime = await configStore.connectAndSave(validatedMeta, WEB_PEER_IDENTITY, {
+      id: editingId.value,
+      name,
+    })
     await adoptWebPeerRuntime(runtime)
     void refreshCurrentWebPeer()
     Object.assign(metaFormConfig, configStore.metaConfig)
     feedback.value = { action: 'save', error: false, message: t('settings.saveSuccess') }
     toast.success(t('settings.saveSuccess'))
+    return true
   } catch (error) {
     if (webPeerConnectionState.value === 'idle' && hasConnectedConfig.value)
       webPeerConnectionState.value = 'failed'
     console.error('Failed to save config:', error)
     feedback.value = { action: 'save', error: true, message: t('common.saveFailed') }
     toast.error(t('common.saveFailed'))
+    return false
   } finally {
     pendingAction.value = null
   }
@@ -142,7 +204,8 @@ const onReset = async () => {
 
 const onExport = () => {
   const portableConfig = SettingsExportSchema.parse({
-    version: 2,
+    version: 3,
+    connections: configStore.connectionSettings,
     metaConfig: configStore.metaConfig,
     locale: currentLocale.value,
   })
@@ -173,8 +236,21 @@ const onFileSelected = async (event: Event) => {
   feedback.value = null
   try {
     const imported = SettingsExportSchema.parse(JSON.parse(await file.text()))
-    await prepareWebPeerConfigurationChange(imported.metaConfig)
-    const runtime = await configStore.connectAndSave(imported.metaConfig, WEB_PEER_IDENTITY)
+    const connections: ConnectionSettings =
+      imported.version === 3
+        ? imported.connections
+        : readConnectionSettings(imported.metaConfig, imported.metaConfig)
+    const selected = connections.connections.find(
+      (item) => item.id === connections.activeConnectionId
+    )
+    if (!selected) throw new Error('The backup has no selected connection')
+    await prepareWebPeerConfigurationChange(selected.config)
+    const runtime = await configStore.connectAndSave(
+      selected.config,
+      WEB_PEER_IDENTITY,
+      selected,
+      connections
+    )
     await adoptWebPeerRuntime(runtime)
     void refreshCurrentWebPeer()
     await setLocale(imported.locale)
@@ -203,6 +279,32 @@ const onFileSelected = async (event: Event) => {
     >
       <fieldset class="settings-view__group">
         <legend>{{ t('settings.deploymentConnection') }}</legend>
+        <InkDropdown
+          v-if="connectionOptions.length"
+          :model-value="configStore.connectionSettings.activeConnectionId"
+          :label="t('settings.currentConnection')"
+          :options="connectionOptions"
+          :disabled="formBusy"
+          @update:model-value="switchConnection"
+        />
+        <div class="settings-view__actions">
+          <InkButton
+            :text="t('settings.addConnection')"
+            :disabled="formBusy"
+            @click="newConnection"
+          />
+          <InkButton
+            v-if="addingConnection && configStore.connectionSettings.activeConnectionId"
+            :text="t('common.cancel')"
+            :disabled="formBusy"
+            @click="restoreCurrentConnection"
+          />
+        </div>
+        <InkInput
+          v-model="connectionName"
+          :label="t('settings.connectionName')"
+          :disabled="formBusy"
+        />
         <InkInput
           v-model="metaFormConfig.INKCRE_PGREST_URL"
           :label="t('settings.pgrestUrl')"
@@ -267,7 +369,7 @@ const onFileSelected = async (event: Event) => {
 
       <div class="settings-view__actions">
         <InkButton
-          :text="t('settings.saveConfig')"
+          :text="t('settings.saveAndUseConnection')"
           theme="primary"
           :disabled="formBusy"
           :is-loading="pendingAction === 'save'"

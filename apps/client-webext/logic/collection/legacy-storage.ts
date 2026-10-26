@@ -1,7 +1,13 @@
 import { browser } from 'wxt/browser'
 import { idbResult, transaction } from './store'
 
-const protectedKeys = ['inkcre_app_config', 'llmProviders', 'tasks'] as const
+const protectedKeys = [
+  'inkcre_app_config',
+  'inkcreApi',
+  'inkcreApiConnections',
+  'llmProviders',
+  'tasks',
+] as const
 function assertExtensionOrigin() {
   if (!['chrome-extension:', 'moz-extension:'].includes(location.protocol))
     throw new Error('连接和旧配置仅允许扩展自身页面读取。')

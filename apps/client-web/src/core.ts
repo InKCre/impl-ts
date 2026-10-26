@@ -17,6 +17,7 @@ import {
   localStorageAdapter,
   registerCoreResolvers,
   TextResolver,
+  ResolverCache,
   AudioResolver,
   EpubResolver,
   FileResolver,
@@ -340,6 +341,7 @@ export async function stopWebPeerRuntime(): Promise<void> {
   if (webPeerRuntime !== null) return
   extensionHostStartup = null
   extensionHostRestoreState.value = 'idle'
+  ResolverCache.clear()
 }
 
 /** Drain work against the old connection before configuration changes its database authority. */

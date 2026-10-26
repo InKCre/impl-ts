@@ -1569,3 +1569,90 @@ test('extension retains an incomplete graph and continues after browser restart'
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
 })
+
+test('named connections migrate atomically and survive reload and cross-page switching', async ({
+  context,
+  extensionId,
+  restartContext,
+}) => {
+  const first = { id: crypto.randomUUID(), peerId: crypto.randomUUID(), name: '个人' }
+  const second = { id: crypto.randomUUID(), peerId: crypto.randomUUID(), name: '工作' }
+  const secret = 'synthetic-migration-secret-not-for-real-use'
+  const previous = {
+    activeConnectionId: second.id,
+    connections: [first, second].map((item, index) => ({
+      id: item.id,
+      name: item.name,
+      config: {
+        INKCRE_PGREST_URL: `https://database-${index}.example`,
+        INKCRE_JWT_SECRET: secret,
+        INKCRE_PEER_ID: item.peerId,
+      },
+    })),
+  }
+  const initial = await context.newPage()
+  await initial.goto(`chrome-extension://${extensionId}/options.html`)
+  await expect(initial.getByRole('heading', { name: '信息库', exact: true })).toBeVisible()
+  const [worker] = context.serviceWorkers()
+  await worker.evaluate(async (previous) => {
+    const chrome = (globalThis as any).chrome
+    await chrome.storage.local.set({
+      inkcre_app_config: JSON.stringify(previous),
+      inkcreApi: 'https://legacy-api.example',
+      inkcreApiConnections: JSON.stringify({
+        connections: [{ name: '旧 API', url: 'https://legacy-api.example' }],
+      }),
+    })
+  }, previous)
+  const restarted = await restartContext()
+  const page = await restarted.newPage()
+  await page.goto(`chrome-extension://${extensionId}/options.html`)
+  await expect(page.getByRole('combobox', { name: '当前信息库' })).toHaveText('工作')
+  await expect(page.getByLabel('本 Peer ID')).toHaveText(second.peerId)
+  const other = await restarted.newPage()
+  await other.goto(`chrome-extension://${extensionId}/options.html`)
+  await expect(other.getByLabel('本 Peer ID')).toHaveText(second.peerId)
+  // Exercise local connection persistence without requiring a native host-permission prompt.
+  const added = await page.evaluate(
+    async (secret) =>
+      (globalThis as any).chrome.runtime.sendMessage({
+        type: 'collection-connect',
+        connection: { name: '新增', url: 'https://new-database.example', secret, storageId: -4 },
+      }),
+    secret
+  )
+  expect(added.ok).toBe(true)
+  await expect(other.getByRole('combobox', { name: '当前信息库' })).toHaveText('新增')
+  await page.getByRole('combobox', { name: '当前信息库' }).click()
+  await page.getByRole('option', { name: /^个人/ }).click()
+  await expect(other.getByLabel('本 Peer ID')).toHaveText(first.peerId)
+  await other.reload()
+  await expect(other.getByRole('combobox', { name: '当前信息库' })).toHaveText('个人')
+  const again = await restartContext()
+  const restored = await again.newPage()
+  await restored.goto(`chrome-extension://${extensionId}/options.html`)
+  await expect(restored.getByLabel('本 Peer ID')).toHaveText(first.peerId)
+  const status = await restored.evaluate(
+    async () =>
+      (await (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-status' })).value
+  )
+  expect(status.connections).toHaveLength(3)
+  expect(status.connections).toEqual(
+    expect.arrayContaining([expect.objectContaining(first), expect.objectContaining(second)])
+  )
+  const legacyUrl = await restored.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open('inkcre-webext-collection')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const tx = db.transaction('legacy')
+          const value = tx.objectStore('legacy').get('inkcreApi')
+          value.onsuccess = () => resolve(value.result)
+          tx.oncomplete = () => db.close()
+        }
+      })
+  )
+  expect(legacyUrl).toBe('https://legacy-api.example')
+})

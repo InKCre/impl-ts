@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MetaConfigSchema, readConnectionSettings } from '@inkcre/core'
 import { browser, type Browser } from 'wxt/browser'
 import { textPart, type SubmitMaterial } from '@inkcre/web-collection'
 import { PageCaptureSchema, type PageCapture } from './capture'
@@ -12,6 +13,8 @@ import {
   ConnectionSchema,
   SettingsSchema,
   allowsAutomatic,
+  idbResult,
+  transaction,
   connection,
   connections,
   outbox,
@@ -160,17 +163,33 @@ export async function initializeCollection() {
   if (!(await connections()).length) {
     const stored = await readLegacyValue('inkcre_app_config')
     try {
-      const meta = typeof stored === 'string' ? JSON.parse(stored) : stored
-      if (meta?.INKCRE_PGREST_URL && meta?.INKCRE_JWT_SECRET) {
-        const target = ConnectionSchema.parse({
-          id: crypto.randomUUID(),
-          name: '从旧配置迁入',
-          url: databaseURL(meta.INKCRE_PGREST_URL),
-          secret: meta.INKCRE_JWT_SECRET,
-          peerId: crypto.randomUUID(),
-          storageId: -4,
+      if (stored !== null) {
+        const input = typeof stored === 'string' ? JSON.parse(stored) : stored
+        const previous = readConnectionSettings(input, MetaConfigSchema.parse(input))
+        const migrated = previous.connections.map(({ id, name, config }) =>
+          ConnectionSchema.parse({
+            id,
+            name,
+            url: databaseURL(config.INKCRE_PGREST_URL),
+            secret: config.INKCRE_JWT_SECRET,
+            peerId: config.INKCRE_PEER_ID,
+            storageId: -4,
+          })
+        )
+        // Keep the whole migration atomic and never replace an already configured collection Peer.
+        await transaction(['connections', 'settings'], 'readwrite', async (tx) => {
+          if (await idbResult(tx.objectStore('connections').count())) return
+          const config = SettingsSchema.parse(
+            await idbResult(tx.objectStore('settings').get('current'))
+          )
+          for (const target of migrated)
+            await idbResult(tx.objectStore('connections').put(target, target.id))
+          await idbResult(
+            tx
+              .objectStore('settings')
+              .put({ ...config, activeConnectionId: previous.activeConnectionId }, 'current')
+          )
         })
-        await saveConnection(target)
       }
     } catch {
       migrationWarning = '旧连接配置不能自动转换，原值已保留。请在下方配置新的数据库连接。'
