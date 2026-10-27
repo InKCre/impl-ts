@@ -15,6 +15,10 @@ export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
   hooks: {
     'build:publicAssets'(_wxt, files) {
+      files.push({
+        absoluteSrc: fileURLToPath(new URL('../../THIRD_PARTY_NOTICES.txt', import.meta.url)),
+        relativeDest: 'THIRD_PARTY_NOTICES.txt',
+      })
       for (const [relativeDest, asset] of [
         ['icon/16.png', 'png/original-white/inkcre-original-white-16.png'],
         ['icon/32.png', 'png/original-white/inkcre-original-white-32.png'],

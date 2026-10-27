@@ -25,6 +25,7 @@ export { ResolverCache } from './cache'
 
 // Concrete resolver implementations
 export { TextResolver } from './text'
+export { MarkdownResolver } from './markdown'
 export { HtmlResolver, type HtmlRawContent } from './html'
 export { ImageResolver, type ImageSolvedContent } from './image'
 export { AudioResolver, type AudioSolvedContent } from './audio'
@@ -43,12 +44,14 @@ import { HtmlResolver } from './html'
 import { ImageResolver } from './image'
 import { PdfResolver } from './pdf'
 import { TextResolver } from './text'
+import { MarkdownResolver } from './markdown'
 import { VideoResolver } from './video'
 import { ZipResolver } from './zip'
 
 export function registerCoreResolvers(): void {
   for (const resolverClass of [
     TextResolver,
+    MarkdownResolver,
     HtmlResolver,
     ImageResolver,
     AudioResolver,

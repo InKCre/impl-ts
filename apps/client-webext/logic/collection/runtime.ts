@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { MetaConfigSchema, readConnectionSettings } from '@inkcre/core'
 import { browser, type Browser } from 'wxt/browser'
-import { textPart, type SubmitMaterial } from '@inkcre/web-collection'
+import { contentPart, type SubmitMaterial } from '@inkcre/web-collection'
 import { PageCaptureSchema, type PageCapture } from './capture'
 import { refreshPeer, peerErrors, databaseURL, materialClient } from './database'
 import { fetchMaterial } from './fetch'
@@ -405,7 +405,7 @@ export async function handleCollectionMessage(
           method: draft.method ?? 'selected-text',
           coverage: ['用户主动保留的文字。'],
         },
-        parts: [textPart('text', draft.text)],
+        parts: [contentPart('body', 'text', draft.text)],
         note,
       })
     )

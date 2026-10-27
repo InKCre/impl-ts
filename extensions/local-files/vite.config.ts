@@ -17,6 +17,11 @@ export default defineConfig({
           fileName: 'LICENSE',
           source: readFileSync(new URL('./LICENSE', import.meta.url), 'utf8'),
         })
+        this.emitFile({
+          type: 'asset',
+          fileName: 'THIRD_PARTY_NOTICES.txt',
+          source: readFileSync(new URL('../../THIRD_PARTY_NOTICES.txt', import.meta.url), 'utf8'),
+        })
       },
     },
     federation({
@@ -24,7 +29,10 @@ export default defineConfig({
       filename: 'remoteEntry.js',
       manifest: true,
       exposes: { '.': fileURLToPath(new URL('./src/index.ts', import.meta.url)) },
-      shared: mfShared(extensionPackage.inkcre.module_federation.host_sdk_version),
+      shared: mfShared(
+        extensionPackage.inkcre.module_federation.host_sdk_version,
+        extensionPackage.devDependencies['@inkcre/ui-web']
+      ),
     }),
   ],
   base: './',

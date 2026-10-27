@@ -31,6 +31,7 @@
     "@opentelemetry/sdk-trace-web": "^2.11.0",
     "@supabase/postgrest-js": "^2.84.0",
     "dayjs": "^1.11.0",
+    "htmlparser2": "10.1.0",
     "jose": "^5.0.0",
     "semver": "7.8.5",
     "zod": "^4.1.12",

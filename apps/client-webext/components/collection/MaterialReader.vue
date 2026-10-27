@@ -1,18 +1,23 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { InkButton } from '@inkcre/ui-web'
-import { decodeBytes, type MaterialRead } from '@inkcre/web-collection'
+import { InkButton, InkContentReader } from '@inkcre/ui-web'
+import { decodeBytes, partRole, partFormat, type MaterialRead } from '@inkcre/web-collection'
 const props = defineProps<{ material: MaterialRead }>()
-const text = computed(() => {
-  const part = props.material.parts.find((part) => part.role === 'text')
-  return part ? new TextDecoder('utf-8', { fatal: true }).decode(decodeBytes(part.base64)) : ''
-})
+const body = computed(() => props.material.parts.find((part) => partRole(part) === 'body'))
+const format = computed(() => (body.value ? partFormat(body.value) : null))
+const content = computed(() =>
+  body.value && format.value !== 'pdf'
+    ? new TextDecoder('utf-8', { fatal: true }).decode(decodeBytes(body.value.base64))
+    : ''
+)
 const html = computed(() => {
-  const part = props.material.parts.find((part) => part.role === 'html')
+  const part = props.material.parts.find(
+    (part) => partRole(part) === 'original' && partFormat(part) === 'html'
+  )
   return part ? new TextDecoder('utf-8', { fatal: true }).decode(decodeBytes(part.base64)) : ''
 })
 function download() {
-  const part = props.material.parts.find((part) => part.role === 'pdf')!
+  const part = props.material.parts.find((part) => partFormat(part) === 'pdf')!
   const data = decodeBytes(part.base64)
   const url = URL.createObjectURL(
     new Blob([data as Uint8Array<ArrayBuffer>], { type: 'application/pdf' })
@@ -47,9 +52,14 @@ function download() {
       取得于 {{ material.material.captured_at }} · {{ material.material.method }}
     </p>
     <p v-for="gap in material.material?.coverage" :key="gap" class="muted">{{ gap }}</p>
-    <pre v-if="text">{{ text }}</pre>
+    <InkContentReader
+      v-if="format === 'html' || format === 'markdown'"
+      :content="content"
+      :format="format"
+    />
+    <pre v-else-if="format === 'text'">{{ content }}</pre>
     <InkButton
-      v-if="material.parts.some((part) => part.role === 'pdf')"
+      v-if="material.parts.some((part) => partFormat(part) === 'pdf')"
       text="下载已保存的 PDF 原始内容"
       @click="download"
     />

@@ -6,13 +6,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/material.ts",
-    "./resolvers": "./src/resolvers.ts"
+    "./resolvers": "./src/resolvers.ts",
+    "./extract": "./src/extract.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@inkcre/core": "workspace:*",
+    "@mozilla/readability": "^0.6.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {

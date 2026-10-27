@@ -1,5 +1,6 @@
 export const CORE_RESOLVER_IDS = [
   'core.text.v1',
+  'core.markdown.v1',
   'core.html.v1',
   'core.image.v1',
   'core.audio.v1',

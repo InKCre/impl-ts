@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@inkcre/ext-dev-utils": "workspace:*",
-    "@inkcre/ui-web": "2.3.0",
+    "@inkcre/ui-web": "2.7.0",
     "@module-federation/vite": "^1.1.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "catalog:",
@@ -35,7 +35,7 @@
     "nickname": "本地文件",
     "module_federation": {
       "host_sdk": "@inkcre/core",
-      "host_sdk_version": ">=0.4.0 <0.5.0"
+      "host_sdk_version": ">=0.4.3 <0.5.0"
     }
   },
   "intent": {

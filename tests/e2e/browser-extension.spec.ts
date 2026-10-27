@@ -5,10 +5,16 @@ import { SignJWT } from 'jose'
 import { access, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { WebMaterialClient } from '../../packages/web-collection/src/material'
-import { textPart, WEB_MATERIAL_RESOLVER } from '../../packages/web-collection/src/index'
+import {
+  textPart,
+  contentPart,
+  WEB_MATERIAL_RESOLVER,
+} from '../../packages/web-collection/src/index'
 import {
   Block,
   TextResolver,
+  HtmlResolver,
+  MarkdownResolver,
   MetaConfigSchema,
   WebPeerRuntime,
 } from '../../packages/core/dist/index.js'
@@ -28,8 +34,8 @@ test('Discourse imports retain each author, short replies, links and code', asyn
     <div class="crawler-post" id="post_4"><div class="post"><pre><code>    keep_indent()\n</code></pre></div></div>
     <div class="crawler-post" id="post_5"><div class="post"><blockquote><div class="crawler-post-meta"><span class="creator">Quoted author</span><time datetime="2020-01-01">old date</time><span itemprop="position">99</span></div></blockquote><p>A quoted author is not the author of this post.</p></div></div>
     <footer>Privacy policy</footer></body></html>`
-  const parse = (value: string) =>
-    worker.evaluate(
+  const parse = async (value: string) => {
+    const result = await worker.evaluate(
       async (input) =>
         (globalThis as any).chrome.runtime.sendMessage({
           type: 'collection-parse-html',
@@ -38,13 +44,18 @@ test('Discourse imports retain each author, short replies, links and code', asyn
         }),
       value
     )
+    const text = await new HtmlResolver(
+      Block.parse({ id: -1, storage: null, resolver: 'core.html.v1', content: result.html })
+    ).getText()
+    return { ...result, text }
+  }
   const result = await parse(html)
   expect(result.text).toContain('#1 · Alice · 2025-01-20T03:10:17Z')
   expect(result.text).toContain('#2 · Bob · 2025-02-07T16:15:12Z')
   expect(result.text).toContain('#3 · Alice\n\nThanks!')
   expect(result.text).toContain('Packaging forum (https://forum.example/c/packaging/14)')
   expect(result.text).toContain('if ready:\n    contribute()\n')
-  expect(result.text).toContain('#4\n\n    keep_indent()')
+  expect(result.text).toContain('    keep_indent()\n')
   expect(result.text).toContain('#5\n\n')
   expect(result.text).not.toContain('#5 · Quoted author')
   expect(result.text).toContain('Quoted text is not another post.')
@@ -60,6 +71,101 @@ test('Discourse imports retain each author, short replies, links and code', asyn
     html.replace('content="Discourse 2026.10"', 'content="Other software"')
   )
   expect(ordinary.text).not.toContain('#1 · Alice')
+})
+
+test('acquired structures retain read-only content, messages and embedded posts', async ({
+  context,
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/parser.html`)
+  const worker = context.serviceWorkers()[0]!
+  const parse = (html: string, url: string) =>
+    worker.evaluate(
+      async (input) =>
+        (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-parse-html', ...input }),
+      { html, url }
+    )
+  const notion = await parse(
+    '<title>Guide</title><main class="notion-frame"><h1 contenteditable="false">Guide title</h1><div class="notion-page-content"><p contenteditable="false">Getting Started <a href="https://example.org/start">Start here</a></p><pre contenteditable="false">keep\n  indent</pre><p contenteditable="true">private draft</p></div></main>',
+    'https://example.notion.site/guide'
+  )
+  expect(notion.html).toContain('Guide title')
+  expect(notion.html).toContain('Getting Started')
+  expect(notion.html).toContain('https://example.org/start')
+  expect(notion.html).not.toContain('private draft')
+  const messages = await parse(
+    '<main><div data-message-id="first" data-message-author-role="user"><p>Short question?</p></div><div data-message-id="second" data-message-author-role="assistant"><pre><code>answer\n  code</code></pre></div></main>',
+    'https://chatgpt.com/share/synthetic'
+  )
+  expect(messages.html).toContain('id="first"')
+  expect(messages.html).toContain('<header>user</header>')
+  expect(messages.html).toContain('<header>assistant</header>')
+  expect(messages.html).toContain('answer\n  code')
+  const shell = await parse(
+    '<title>Shared conversation</title><nav>Home Sign in</nav><main></main><script>bootstrap()</script>',
+    'https://chatgpt.com/share/unloaded'
+  ).catch(() => null)
+  expect(shell?.html).toBeUndefined()
+  const embedded = JSON.stringify({
+    '@type': 'ProfilePage',
+    hasPart: [
+      {
+        '@type': 'DiscussionForumPosting',
+        url: 'https://bsky.app/profile/a.test/post/one',
+        author: { name: 'Alice' },
+        datePublished: '2025-01-01T00:00:00Z',
+        text: 'First post',
+        sharedContent: {
+          '@type': 'DiscussionForumPosting',
+          url: 'https://bsky.app/profile/b.test/post/quoted',
+          author: { name: 'Bob' },
+          text: 'Quoted post',
+        },
+      },
+      {
+        '@type': 'DiscussionForumPosting',
+        url: 'https://bsky.app/profile/a.test/post/two',
+        author: { name: 'Alice' },
+        text: 'Thanks!',
+      },
+    ],
+  })
+  const posts = await parse(
+    `<script type="application/ld+json">${embedded}</script><script>throw new Error('must not execute')</script>`,
+    'https://bsky.app/profile/a.test'
+  )
+  const facts = await page.evaluate((html) => {
+    const d = new DOMParser().parseFromString(html, 'text/html')
+    return {
+      articles: d.body.querySelectorAll(':scope > article').length,
+      quotes: d.querySelectorAll('blockquote article').length,
+      text: d.body.textContent,
+    }
+  }, posts.html)
+  expect(facts.articles).toBe(2)
+  expect(facts.quotes).toBe(1)
+  expect(facts.text).toContain('Alice')
+  expect(facts.text).toContain('Bob')
+  expect(facts.text).toContain('Thanks!')
+  const media = await parse(
+    '<article><h1>Media</h1><p>Saved transcript and its original media references.</p><video src="/video.mp4"><track src="/captions.vtt" label="English" srclang="en"></video><table><tr><td>Audio</td><td>Visual description</td></tr></table></article>',
+    'https://example.org/guide'
+  )
+  expect(media.html).toContain('https://example.org/video.mp4')
+  expect(media.html).toContain('https://example.org/captions.vtt')
+  expect(media.html).toContain('<table>')
+  const mediaText = await new HtmlResolver(
+    Block.parse({ id: -1, storage: null, resolver: 'core.html.v1', content: media.html })
+  ).getText()
+  expect(mediaText).toContain('https://example.org/captions.vtt')
+
+  const markdown = '# Title\n\n```html\n<node>& value\n  indent\n```\n[link](https://example.org)\n'
+  expect(
+    await new MarkdownResolver(
+      Block.parse({ id: -1, storage: null, resolver: 'core.markdown.v1', content: markdown })
+    ).getText()
+  ).toBe(markdown)
 })
 
 test('material collection uses existing graph CRUD and byte storage without a web RPC', async () => {
@@ -115,7 +221,7 @@ test('material collection uses existing graph CRUD and byte storage without a we
   ).read(saved.root_id)
   expect(Buffer.from(read.parts[0]!.base64, 'base64').toString()).toBe('主动保存原文')
   expect(read.notes[0]!.text).toBe('独立附注')
-  const text = await client.blocks.from().select().eq('id', saved.part_ids.text!).single()
+  const text = await client.blocks.from().select().eq('id', saved.part_ids.body!).single()
   expect(await new TextResolver(Block.parse(text.data)).getText()).toBe('主动保存原文')
   const current = {
     ...fixed,
@@ -136,6 +242,139 @@ test('material collection uses existing graph CRUD and byte storage without a we
   expect(Buffer.from((await client.read(next.root_id)).parts[0]!.base64, 'base64').toString()).toBe(
     '更新后的正文'
   )
+  const bodyID = next.part_ids.body!
+  const partRow = await client.relations
+    .from()
+    .select()
+    .eq('from_', next.root_id)
+    .eq('content', 'extensions.web-collection.part.body')
+    .single()
+  await client.relations
+    .update({ content: 'extensions.web-collection.part.text' })
+    .eq('id', partRow.data!.id)
+  const reference = await client.relations
+    .insert({ from_: saved.root_id, to_: bodyID, content: 'synthetic-reference' })
+    .select()
+    .single()
+  const frozen = JSON.stringify(current)
+  const upgraded = await client.submit({
+    ...current,
+    request_id: crypto.randomUUID(),
+    parts: [
+      contentPart(
+        'body',
+        'html',
+        '<h1>结构正文</h1><pre>keep\n  indent</pre><table><tr><td>A</td><td>12</td></tr></table>'
+      ),
+    ],
+  })
+  expect(upgraded.part_ids.body).toBe(bodyID)
+  expect(
+    (await client.relations.from().select().eq('id', partRow.data!.id).single()).data!.content
+  ).toBe('extensions.web-collection.part.body')
+  expect(
+    (await client.relations.from().select().eq('id', reference.data!.id).single()).data!.to_
+  ).toBe(bodyID)
+  const body = (await client.read(upgraded.root_id)).parts[0]!
+  expect(body.role).toBe('body')
+  expect('format' in body && body.format).toBe('html')
+  const projected = await new HtmlResolver(
+    Block.parse({
+      id: bodyID,
+      storage: null,
+      resolver: 'core.html.v1',
+      content: Buffer.from(body.base64, 'base64').toString(),
+    })
+  ).getText()
+  expect(projected).toContain('keep\n  indent')
+  expect(projected).toContain('A\t12')
+  const replay = await client.submit(current)
+  expect(replay.part_ids.body).toBe(bodyID)
+  expect(JSON.stringify(current)).toBe(frozen)
+  expect(
+    (
+      await client.relations
+        .from()
+        .select()
+        .eq('from_', replay.root_id)
+        .like('content', 'extensions.web-collection.part.%')
+    ).data
+  ).toHaveLength(1)
+  // An interruption after relation relabeling leaves a readable legacy text body.
+  const partialRead = await client.read(replay.root_id)
+  expect('format' in partialRead.parts[0]! && partialRead.parts[0]!.format).toBe('text')
+  expect(
+    (await client.submit({ ...current, parts: [contentPart('body', 'html', '<p>重试正文</p>')] }))
+      .part_ids.body
+  ).toBe(bodyID)
+  // A previously stored fixed graph keeps its legacy relation shape and accepted values.
+  await client.relations
+    .update({ content: 'extensions.web-collection.part.text' })
+    .eq('from_', saved.root_id)
+    .eq('content', 'extensions.web-collection.part.body')
+  const fixedRetry = await client.submit({
+    ...fixed,
+    material: { ...material, title: '不应覆盖' },
+    parts: [textPart('text', '不应覆盖')],
+  })
+  expect(fixedRetry.part_ids.text).toBe(saved.part_ids.body)
+  const retained = await client.read(saved.root_id)
+  expect(retained.material!.title).toBe(material.title)
+  expect(Buffer.from(retained.parts[0]!.base64, 'base64').toString()).toBe('主动保存原文')
+  const incomplete = {
+    ...fixed,
+    request_id: crypto.randomUUID(),
+    parts: [textPart('html', '<p>原材料</p>'), textPart('text', '冻结正文')],
+  }
+  const oldRoot = await client.blocks
+    .insert({
+      resolver: WEB_MATERIAL_RESOLVER,
+      storage: null,
+      content: JSON.stringify({
+        key: incomplete.request_id,
+        ...incomplete,
+        parts: undefined,
+        note: undefined,
+      }),
+    })
+    .select()
+    .single()
+  const original = await client.blocks
+    .insert({ resolver: 'core.html.v1', storage: null, content: '<p>原材料</p>' })
+    .select()
+    .single()
+  await client.relations.insert({
+    from_: oldRoot.data!.id,
+    to_: original.data!.id,
+    content: 'extensions.web-collection.part.html',
+  })
+  await expect(
+    client.submit({ ...incomplete, parts: [contentPart('body', 'html', '<p>不同格式</p>')] })
+  ).rejects.toThrow('原格式')
+  expect((await client.relations.from().select().eq('from_', oldRoot.data!.id)).data).toHaveLength(
+    1
+  )
+  const completed = await client.submit(incomplete)
+  expect(completed.part_ids.html).toBe(original.data!.id)
+  expect(completed.part_ids.text).toBeDefined()
+  expect(
+    (await client.blocks.from().select().eq('id', completed.part_ids.text!).single()).data!.resolver
+  ).toBe('core.text.v1')
+  const conflicting = await client.blocks
+    .insert({ storage: null, resolver: 'core.text.v1', content: 'conflicting body' })
+    .select()
+    .single()
+  const ambiguous = await client.relations
+    .insert({
+      from_: next.root_id,
+      to_: conflicting.data!.id,
+      content: 'extensions.web-collection.part.text',
+    })
+    .select()
+    .single()
+  await expect(client.submit(current)).rejects.toThrow('歧义')
+  await expect(client.read(next.root_id)).rejects.toThrow('歧义')
+  await client.relations.from().delete().eq('id', ambiguous.data!.id)
   const record = {
     request_id: crypto.randomUUID(),
     mode: 'record' as const,
@@ -1081,7 +1320,7 @@ test('automatic observation reuses current material and preserves manual saves',
           })
           return read.parts.some(
             (part: any) =>
-              part.role === 'text' &&
+              part.role === 'body' &&
               Buffer.from(part.base64, 'base64').toString().includes(articleText)
           )
         },
@@ -1094,7 +1333,7 @@ test('automatic observation reuses current material and preserves manual saves',
       blockId: fixedRoot,
     })
     expect(
-      Buffer.from(fixed.parts.find((part: any) => part.role === 'text').base64, 'base64').toString()
+      Buffer.from(fixed.parts.find((part: any) => part.role === 'body').base64, 'base64').toString()
     ).toContain('本次浏览的正文。')
     expect(fixed.notes[0].text).toBe('主动留下的附注')
     await source.evaluate(() => {
@@ -1478,7 +1717,7 @@ test('extension retains an incomplete graph and continues after browser restart'
       return
     }
     response.end(
-      `<!doctype html><html><head><title>现场页面</title></head><body><main><h1>已加载的正文</h1><p id="quote">需要留下的原句。</p><div id="shadow"></div><iframe src="/frame"></iframe><textarea>未提交草稿不要保存</textarea><input type="password" value="private-password"><div contenteditable>编辑中的秘密</div></main><script>document.querySelector('#shadow').attachShadow({mode:'open'}).innerHTML='<p>Shadow DOM 正文</p>';window.fixtureExecuted=true;</script></body></html>`
+      `<!doctype html><html><head><title>现场页面</title></head><body><main><h1>已加载的正文</h1><p id="quote" contenteditable="false">需要留下的原句。</p><a href="#part">文内目录</a><h2 id="part">章节</h2><table><tr><th>名称</th><th>数值</th></tr><tr><td>A</td><td>12</td></tr></table><pre><code>&lt;node&gt;&amp; value\n  indented</code></pre><p onmouseover="window.readerExecuted=true">事件边界</p><img src="/reader-resource" alt="已取得图片地址"><div id="shadow"></div><iframe src="/frame"></iframe><textarea>未提交草稿不要保存</textarea><input type="password" value="private-password"><div contenteditable>编辑中的秘密</div></main><script>document.querySelector('#shadow').attachShadow({mode:'open'}).innerHTML='<p>Shadow DOM 正文</p>';window.fixtureExecuted=true;</script></body></html>`
     )
   })
   server.listen(0, '127.0.0.1')
@@ -1585,16 +1824,39 @@ test('extension retains an incomplete graph and continues after browser restart'
     expect(
       afterSwitch.value.items.find((item: { id: string }) => item.id === requestId).connectionId
     ).toBe(originalTarget)
+    sourceRequests.length = 0
     await recovered.getByRole('button', { name: '读取已保存材料' }).click()
     const reader = recovered.getByRole('article', { name: '已保存材料' })
-    await expect(reader).toContainText('需要留下的原句。')
-    await expect(reader).toContainText('Shadow DOM 正文')
-    await expect(reader).toContainText('同源框架里的正文')
+    const bodyReader = reader.frameLocator('iframe')
+    await expect(bodyReader.locator('body')).toContainText('需要留下的原句。')
+    await expect(bodyReader.locator('body')).toContainText('Shadow DOM 正文')
+    await expect(bodyReader.locator('body')).toContainText('同源框架里的正文')
     await expect(reader).toContainText('我的附注')
-    await expect(reader).not.toContainText('未提交草稿不要保存')
-    await expect(reader).not.toContainText('private-password')
-    await expect(reader).not.toContainText('编辑中的秘密')
+    await expect(bodyReader.locator('body')).not.toContainText('未提交草稿不要保存')
+    await expect(bodyReader.locator('body')).not.toContainText('private-password')
+    await expect(bodyReader.locator('body')).not.toContainText('编辑中的秘密')
     expect(await recovered.evaluate(() => (globalThis as any).fixtureExecuted)).toBeUndefined()
+    await expect(bodyReader.locator('table')).toContainText('名称数值A12')
+    expect(await bodyReader.locator('pre').textContent()).toContain('<node>& value\n  indented')
+    await bodyReader.getByText('事件边界').dispatchEvent('mouseover')
+    expect(
+      await bodyReader.locator('body').evaluate(() => (window as any).readerExecuted)
+    ).toBeUndefined()
+    await expect(bodyReader.locator('img,[src]')).toHaveCount(0)
+    await expect(bodyReader.getByRole('link', { name: '已取得图片地址' })).toHaveAttribute(
+      'href',
+      origin + '/reader-resource'
+    )
+    expect(sourceRequests).not.toContain('/reader-resource')
+    await bodyReader.getByRole('link', { name: '文内目录' }).click()
+    await expect(bodyReader.getByRole('heading', { name: '章节', exact: true })).toBeVisible()
+    expect(
+      await bodyReader.locator('body').evaluate(() => {
+        const target = document.getElementById(decodeURIComponent(location.hash.slice(1)))
+        return { url: location.href.split('#')[0], target: target?.textContent }
+      })
+    ).toEqual({ url: 'about:srcdoc', target: '章节' })
+
     const jwt = await new SignJWT({ role: 'authenticated' })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuer('inkcre-peer')
@@ -1611,6 +1873,19 @@ test('extension retains an incomplete graph and continues after browser restart'
     expect(
       roots.filter((row: { content: string }) => JSON.parse(row.content).request_id === requestId)
     ).toHaveLength(1)
+    const root = roots.find(
+      (row: { content: string }) => JSON.parse(row.content).request_id === requestId
+    )
+    const anotherPeer = new WebMaterialClient(endpoint, async () => jwt)
+    const shared = await anotherPeer.read(root.id)
+    const original = shared.parts.find((part) => part.role === 'original')!
+    const deletion = await anotherPeer.blocks.from().delete().eq('id', original.id)
+    expect(deletion.error).toBeNull()
+    const independent = await new WebMaterialClient(endpoint, async () => jwt).read(root.id)
+    const body = independent.parts.find((part) => part.role === 'body')!
+    expect(body.format).toBe('html')
+    expect(Buffer.from(body.base64, 'base64').toString()).toContain('需要留下的原句。')
+    expect(independent.parts.some((part) => part.role === 'original')).toBe(false)
     expect(publicAuthHeaders).toBe(0)
     await recovered.screenshot({ path: 'test-results/webext-material-reader.png', fullPage: true })
   } finally {

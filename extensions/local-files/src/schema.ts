@@ -51,4 +51,6 @@ export type SolvedFile = {
   metadata: z.infer<typeof fileMetadata>
   text: string | null
   bodyID: number | null
+  content: string | null
+  format: 'text' | 'html' | 'markdown' | null
 }

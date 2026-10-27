@@ -1,6 +1,7 @@
-import { Block, Resolver, TextResolver, type ProjectionOptions } from '@inkcre/core'
+import { Block, Resolver, type ProjectionOptions } from '@inkcre/core'
 import {
   WEB_RECORD_RESOLVER,
+  selectMaterialParts,
   WEB_MATERIAL_RESOLVER,
   type SourceRecord,
   type MaterialMetadata,
@@ -25,11 +26,13 @@ abstract class WebCollectionResolver extends Resolver<string, WebCollectionConte
       root.material?.url ?? root.source.metadata.url,
     ].filter((value): value is string => typeof value === 'string')
     const relations = await this.getRelations({ ...options, includeIn: false, includeOut: true })
-    const body = relations.find(
-      (relation) => relation.content === 'extensions.web-collection.part.text'
-    )
-    if (body?.to_ !== undefined)
-      text.push(await new TextResolver(await Block.get(body.to_)).getText(options))
+    const body = selectMaterialParts(relations).body
+    if (body?.to_ !== undefined && body.to_ !== null) {
+      const block = await Block.get(body.to_)
+      // PDF retains its existing root metadata projection; its text capability stays unsupported.
+      if (block.resolver !== 'core.pdf.v1')
+        text.push((await new (Resolver.getClass(block.resolver))(block).getText(options)) ?? '')
+    }
     return text.filter(Boolean).join('\n\n')
   }
 }

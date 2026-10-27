@@ -1,11 +1,11 @@
 // Shared dependencies for Module Federation remote (extensions).
 
 import packageJson from '../apps/client-web/package.json'
-export default function mfShared(hostSdkVersion: string) {
+export default function mfShared(hostSdkVersion: string, uiVersion: string) {
   return {
     '@inkcre/ui-web': {
       singleton: true,
-      requiredVersion: packageJson.dependencies['@inkcre/ui-web'],
+      requiredVersion: uiVersion,
     },
     vue: { singleton: true, requiredVersion: packageJson.dependencies.vue },
     pinia: { singleton: true, requiredVersion: packageJson.dependencies.pinia },

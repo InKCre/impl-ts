@@ -29,7 +29,10 @@ export const mailFederationOptions = {
   filename: 'remoteEntry.js',
   manifest: true,
   exposes: { '.': path.resolve(__dirname, './src/index.ts') },
-  shared: mfShared(extensionPackage.inkcre.module_federation.host_sdk_version),
+  shared: mfShared(
+    extensionPackage.inkcre.module_federation.host_sdk_version,
+    extensionPackage.devDependencies['@inkcre/ui-web']
+  ),
 }
 
 export default defineConfig(async ({ command }) => {

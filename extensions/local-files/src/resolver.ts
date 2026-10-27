@@ -5,7 +5,8 @@ import FileContent from './FileContent.vue'
 import FilePreview from './FilePreview.vue'
 
 export class LocalFileResolver extends Resolver<string, SolvedFile> {
-  static readonly type = 'extensions.local_files.file.v1'
+  static readonly type: string = 'extensions.local_files.file.v1'
+  protected readonly bodyResolvers: readonly string[] = ['core.text.v1']
   static readonly previewRenderer = markRaw(FilePreview)
   static readonly solvedContentRenderer = markRaw(FileContent)
 
@@ -20,11 +21,21 @@ export class LocalFileResolver extends Resolver<string, SolvedFile> {
     if (bodies.length > 1 || (metadata.revision && !bodies.length))
       throw new Error('文件资料的正文关系无效。')
     const body = bodies[0]
-    if (!body) return { metadata, text: null, bodyID: null }
+    if (!body) return { metadata, text: null, bodyID: null, content: null, format: null }
     const block = await Block.find(body.to_)
-    if (!block || block.resolver !== 'core.text.v1' || block.storage !== null)
+    if (!block || !this.bodyResolvers.includes(block.resolver) || block.storage !== null)
       throw new Error('文件正文不存在或类型不符。')
-    return { metadata, text: block.content, bodyID: block.id }
+    const text =
+      block.resolver === 'core.text.v1'
+        ? block.content
+        : await new (Resolver.getClass(block.resolver))(block).getText(options)
+    const format =
+      block.resolver === 'core.html.v1'
+        ? 'html'
+        : block.resolver === 'core.markdown.v1'
+          ? 'markdown'
+          : 'text'
+    return { metadata, text, bodyID: block.id, content: block.content, format }
   }
 
   override async getText(options: ProjectionOptions = {}): Promise<string> {
@@ -40,4 +51,9 @@ export class LocalFileResolver extends Resolver<string, SolvedFile> {
     if (text !== null) parts.push(text)
     return parts.join('\n\n')
   }
+}
+
+export class LocalFileV2Resolver extends LocalFileResolver {
+  static override readonly type = 'extensions.local_files.file.v2'
+  protected override readonly bodyResolvers = ['core.text.v1', 'core.html.v1', 'core.markdown.v1']
 }
