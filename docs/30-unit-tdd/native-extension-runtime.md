@@ -32,7 +32,7 @@ semantically equal and to accept the build SDK. SDK sharing remains a Host-only 
 a bundled fallback. UI compatibility is declared independently and is not implied by the SDK range.
 
 Host 与 Web 扩展通过现有 Module Federation 配置共享 `@inkcre/ui-web` 单例，
-并声明当前锁定 UI 版本的要求。UI 的 i18n、路由和表单上下文使用模块内的 Vue 注入 key；
+并由每个生产者的 package.json 声明自身锁定的 UI 版本要求，构建不得用 Host 的 UI 版本覆盖它。UI 的 i18n、路由和表单上下文使用模块内的 Vue 注入 key；
 如果扩展另用一份 UI 运行时，即使外观相同，也无法继承 Host 的这些上下文。
 独立 playground 仍可使用包自身的 fallback 模块，样式由各自应用入口加载。
 

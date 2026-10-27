@@ -34,7 +34,10 @@ export const twitterFederationOptions = {
       './src/components/contentTweet/contentTweet.vue'
     ),
   },
-  shared: mfShared(extensionPackage.inkcre.module_federation.host_sdk_version),
+  shared: mfShared(
+    extensionPackage.inkcre.module_federation.host_sdk_version,
+    extensionPackage.devDependencies['@inkcre/ui-web']
+  ),
 }
 
 export default defineConfig(async ({ command }) => {
