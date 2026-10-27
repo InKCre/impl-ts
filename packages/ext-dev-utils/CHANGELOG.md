@@ -1,5 +1,12 @@
 # @inkcre/ext-dev-utils
 
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [85a3f16]
+  - @inkcre/core@0.4.3
+
 ## 0.1.5
 
 ### Patch Changes
