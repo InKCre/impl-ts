@@ -1,0 +1,54 @@
+name: webext deployment
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current-main source to retry
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webext-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+    env:
+      SOURCE_REVISION: ${{ inputs.source_sha || github.sha }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set Changesets baseline to the release revision
+        run: git branch main "$SOURCE_REVISION"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Select prepared WebExt version
+        id: plan
+        run: node scripts/webext-release.mjs plan
+      - name: Build and verify browser packages
+        if: steps.plan.outputs.publish == 'true'
+        run: node scripts/webext-release.mjs build
+      - name: Publish verified packages
+        if: steps.plan.outputs.publish == 'true'
+        run: node scripts/webext-release.mjs publish

@@ -17,6 +17,8 @@
     "contract:check": "node scripts/sync-database-contract.mjs --check",
     "changeset": "changeset",
     "release:version": "changeset version",
+    "release:webext:build": "node scripts/webext-release.mjs build",
+    "release:webext:check": "node scripts/webext-release.mjs check",
     "dev:all": "concurrently \"pnpm dev\" \"pnpm -r --filter './extensions/*' dev\"",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",

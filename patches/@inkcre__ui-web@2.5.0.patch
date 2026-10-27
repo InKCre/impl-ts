@@ -1,0 +1,13 @@
+diff --git a/dist/index.js b/dist/index.js
+index 3d2a15070340e6c232b45cc8a81888626fdf9fd5..178d6616d9692748b04d9eea172f6c783e4ed939 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -496,7 +496,7 @@ const Je = {
+               Y(E.$slots, "default", {}, () => [
+                 G(T(E.modelValue || E.placeholder), 1)
+               ], !0)
+-            ], 16, Wt)) : E.type !== "inline" || !E.editable ? (l(), v("span", {
++            ], 16, Wt)) : !E.editable ? (l(), v("span", {
+               key: 3,
+               id: d(i),
+               class: "ink-input__value"

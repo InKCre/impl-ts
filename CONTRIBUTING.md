@@ -9,7 +9,7 @@ required by that policy.
 
 The lockfile downloads the original `@inkcre/ui-web` tarballs from public versioned GitHub Releases.
 Local clone and fork setup requires no organization membership, package access, or GitHub/npm token.
-Root overrides route exactly UI `2.3.0` and `2.5.0` to those assets; the integrity values remain those
+Root overrides route exactly UI `2.3.0`, `2.5.0`, and `2.6.0` to those assets; the integrity values remain those
 of the originally published packages.
 
 Keep workspace `package.json` UI dependencies as semver: Module Federation reads them as

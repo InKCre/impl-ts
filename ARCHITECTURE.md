@@ -57,6 +57,7 @@ types and runtime metadata project the admitted impl-py contract through stable 
   Pages preview/production.
 - [First-party Extension Delivery](docs/40-deployment/native-extension-delivery.md) owns Changesets,
   Registry publication, provenance, and release secret boundaries.
+- [WebExt 版本与分发](docs/40-deployment/webext-delivery.md) 管理独立浏览器 Peer 的版本、下载包、更新与身份迁移，不使用 MF Registry。
 
 Pull-request preview authority is a trusted same-repository controller. It checks out the exact PR
 head separately, installs frozen pnpm/PDM environments, builds the SPA and selected Module

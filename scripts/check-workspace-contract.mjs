@@ -37,6 +37,12 @@ const workspaces = [
     buildExemption: 'source-only Vue support package; consuming Vite applications own output',
   },
   {
+    path: 'packages/web-collection',
+    name: '@inkcre/web-collection',
+    requiredScripts: ['type-check'],
+    buildExemption: 'source-only browser material contract; consuming peers own output',
+  },
+  {
     path: 'apps/client-web',
     name: '@inkcre/client-web',
     requiredScripts: ['build', 'dev', 'type-check'],

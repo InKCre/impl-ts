@@ -70,14 +70,14 @@ jobs:
           private-key: ${{ secrets.INKCRE_RELEASE_APP_PRIVATE_KEY }}
           owner: InKCre
           repositories: impl-ts
-      - name: Create or update the Extension Version PR
+      - name: Create or update the workspace Version PR
         id: changesets
         uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
           github-token: ${{ steps.release-app-token.outputs.token }}
           version-script: pnpm release:version
-          pr-title: 'chore(extensions): version pending releases'
-          commit-message: 'chore(extensions): version pending releases'
+          pr-title: 'chore(release): 准备待发布版本'
+          commit-message: 'chore(release): 准备待发布版本'
           pr-base-branch: main
           create-github-releases: false
           push-git-tags: false

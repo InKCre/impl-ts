@@ -12,7 +12,8 @@
 export { store } from './store'
 
 // Base layer
-export { APIError, DBAPIClient } from './base'
+export { APIError, DBAPIClient, rawPostgrestFetch } from './base'
+export type { RawPostgrestRequestOptions, DatabaseTokenProvider } from './base/db-api'
 
 // Native Web Extension Host and Module Federation lifecycle
 export {
@@ -253,7 +254,7 @@ export {
 } from './database'
 
 // Authentication
-export { authStore } from './auth'
+export { authStore, signDatabaseToken } from './auth'
 
 // Utils
 export {

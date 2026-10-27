@@ -38,6 +38,7 @@ export class APIError extends Error {
 export type RawPostgrestRequestOptions = RequestInit & {
   schema?: 'inkcre'
   baseUrl?: string
+  tokenProvider?: DatabaseTokenProvider
 }
 
 /**
@@ -50,7 +51,12 @@ export async function rawPostgrestFetch(
   path: string,
   options: RawPostgrestRequestOptions = {}
 ): Promise<Response> {
-  const { schema = 'inkcre', baseUrl, ...init } = options
+  const {
+    schema = 'inkcre',
+    baseUrl,
+    tokenProvider = () => authStore.getToken(),
+    ...init
+  } = options
   const configuredBaseUrl = baseUrl ?? sharedConfigStore.metaConfig.INKCRE_PGREST_URL
   if (!configuredBaseUrl) {
     throw new APIError('PostgREST URL is not configured.', 0)
@@ -60,7 +66,7 @@ export async function rawPostgrestFetch(
     ? configuredBaseUrl
     : `${configuredBaseUrl}/`
   const url = new URL(path.replace(/^\//, ''), normalizedBaseUrl)
-  const token = await authStore.getToken()
+  const token = await tokenProvider()
   const headers = new Headers(init.headers)
   headers.set('Authorization', `Bearer ${token}`)
   headers.set('Accept-Profile', schema)
