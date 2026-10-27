@@ -9,6 +9,7 @@ export {
   Resolver,
   ResolverCache,
   TextResolver,
+  MarkdownResolver,
   AudioResolver,
   EpubResolver,
   FileResolver,

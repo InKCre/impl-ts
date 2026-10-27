@@ -8,13 +8,15 @@ WebExt 只交付采集、导入、保存结果与材料阅读。旧 Explain/Writ
 
 ## 普通信息图
 
-材料根使用 `extensions.web-collection.material.v1`，inline JSON 保存 mode、来源 scope/key/metadata、实际获取地址、时间、方式及覆盖说明。`extensions.web-collection.part.html|text|pdf` 出关系指向标准 `core.html.v1`、`core.text.v1`、`core.pdf.v1` 内容块；`extensions.web-collection.note` 指向独立 core text 附注。关联 ID 只在 Relation 中，不复制进根 JSON。
+材料根使用 `extensions.web-collection.material.v1`，inline JSON 保存 mode、来源 scope/key/metadata、实际获取地址、时间、方式及覆盖说明。`extensions.web-collection.part.original|body` 区分取得的原材料与唯一可用正文，部件携带明确的 `format`，映射到标准 text／HTML／Markdown／PDF resolver；`extensions.web-collection.note` 指向独立 core text 附注。关联 ID 只在 Relation 中，不复制进根 JSON。
 
-HTML/text 是 inline 语义内容，PDF 通过所选 Storage 保存实际字节。书签/历史具有独立原生身份与时间，使用 `extensions.web-collection.record.v1` 来源记录根，其 `extensions.web-collection.material` 出关系连接取得的材料。普通手动保存不额外建立一个没有独立用途的来源记录，也不创建 Source/Job。
+HTML／Markdown／text 是 inline 语义内容，PDF 通过所选 Storage 保存实际字节。书签/历史具有独立原生身份与时间，使用 `extensions.web-collection.record.v1` 来源记录根，其 `extensions.web-collection.material` 出关系连接取得的材料。普通手动保存不额外建立一个没有独立用途的来源记录，也不创建 Source/Job。
 
 根上的 `key` 是普通 text 列查询的派生筛选键，`request_id` 标识本机一次保存；它们不是全局唯一约束或另一个信息权威。`WebMaterialClient` 用普通 Block/Relation 查询筛选并核对完整身份。固定材料仅按同一次请求尽力复用；current 按本机 profile、完整地址和获取方式复用，允许同 URL 切账户后 current 被替换。主动保存和附注不与 current 共用可变内容。
 
-`@inkcre/web-collection` 根入口只导出 DTO 和字节转换，避免 content script 连带加载 core 运行态。`/client` 是普通图读取/写入入口，接收固定 URL 和 token provider；`/resolvers` 提供两个根的 Resolver 实现，使用者像 core Resolver 一样绑定自己的呈现并注册。另一 Peer 可沿 Relation 直接读取标准语义内容，不要求 WebExt 在线；未安装领域解码能力的 Peer 不应猜测自定义根的含义。
+旧 `part.html|text|pdf` 图仍可读取：html 是原材料，text／pdf 是正文。冻结旧载荷只在提交内存中映射用途，不修改待办。current 更新复用旧正文 Block 和关系，先重标用途再更新实际格式；旧 fixed 保留关系形状及已有内容，只补缺失部件。多个正文候选明确报错，不用优先级掩盖歧义。没有全库迁移或第二份正文。
+
+`@inkcre/web-collection` 根入口只导出 DTO、关系选择和字节转换，避免 content script 连带加载 core 运行态。`/extract` 只解析已经取得的 HTML／DOM 和 JSON-LD，不初始化 core、网络或数据库；`/client` 是普通图读取/写入入口，接收固定 URL 和 token provider；`/resolvers` 提供两个根的 Resolver 实现，使用者像 core Resolver 一样绑定自己的呈现并注册。另一 Peer 可沿 Relation 直接读取标准语义内容，不要求 WebExt 在线；未安装领域解码能力的 Peer 不应猜测自定义根的含义。
 
 ## 生命周期与恢复
 
@@ -42,11 +44,12 @@ content script 不读取连接密钥，不初始化 core 配置，不提供任�
 
 SPA 路由使用 WXT 的 location-change 能力，不另建后台导航转发；重复注入由 WXT context 管理，并在 context 失效时移除消息监听器。
 
-公开批量获取不带浏览账户凭据或 InKCre JWT，接受普通重定向和声明编码。出现密码字段本身不代表正文需要登录；解析器去掉表单后取得可读正文，空正文或短登录/验证码页面才报补采。Chrome 使用随包 offscreen 页面做 DOM 解析，Firefox 使用可用 DOM 环境。阅读仅以文本、源码和 PDF 原始字节展示，不执行来源脚本；不为读操作复制历史材料。
+公开批量获取不带浏览账户凭据或 InKCre JWT，接受普通重定向和声明编码。出现密码字段本身不代表正文需要登录；解析器去掉表单后取得可读正文，空正文或短登录/验证码页面才报补采。Chrome 使用随包 offscreen 页面做 DOM 解析，Firefox 使用可用 DOM 环境。HTML／Markdown 使用 `InkContentReader` 的净化隔离阅读，纯文保持字面含义，PDF 沿用原始字节下载。不执行来源脚本或自动加载资源，不为读操作复制历史材料。
 
-Discourse 页面的正文采用来源结构解析：识别 generator 标记及已取得的帖子容器，按页面顺序保留帖号、作者、
-时间、正文、HTTP(S) 链接地址和代码。公开导入与现场采集复用 `logic/collection/discourse.ts`；现场解析使用已排除隐藏内容、
-编辑草稿及活动代码的 DOM 副本。帖子结构不足或同号副本冲突时保留既有通用路径，不丢弃整份材料。
-原 HTML 与 text 仍是现有语义 Block；这个函数不写图、不调用模型、不补抓帖子，也不推断缺失的回复关系。
+网页采集与公开导入共用 `packages/web-collection/src/extract.ts`，保留 Readability 的 HTML content。Discourse 按明确 generator 和帖子容器保留帖号、作者、时间及正文；GitHub、ChatGPT、Notion 只使用已经取得的对象边界及标识。Bluesky 已加载 DOM 保持其实际范围，HTTP 页面可从已有 JSON-LD 的 hasPart／sharedContent 保留顶层帖与引用，不执行脚本或用较短摘要替换已取得的正文。通用路径足够时不增加来源处理，也不按“技术资料／论坛问答”分类。
+
+可编辑草稿排除，`contenteditable="false"` 的只读正文保留。JSON-LD 只作为来源声明数据解析；不解析任意应用启动脚本、不展开隐藏评论、不下载字幕或附件。正文直接使用普通 HTML，保留代码空白、表格单元、引用与链接；不为每帖建 Block，也不增加 Organization 操作。
+
+[Hister](https://github.com/asciimoo/hister) 的来源结构处理与取得后客户端提取提供了参考，核对修订 `2e017c05cf544b812b8fd509ff3fc07c5c7e464e`。本实现独立编写，复用已有 Mozilla Readability 与普通格式库；未复制、改写或运行其 AGPL-3.0-or-later 源码。致谢属于项目说明，不进入用户正文，也不表示上游背书。
 
 Chromium 当前最低版本为 116，不能直接使用更高版本的 offscreen 检查接口而只靠类型检查宣布支持。Firefox 构建与运行分别验证。运行代码随扩展打包，不加载 client-web 的远程 Module Federation 模块。

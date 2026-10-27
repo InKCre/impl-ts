@@ -7,10 +7,15 @@ const props = defineProps<SolvedContentRendererProps<unknown>>()
 const kind = computed(() => props.resolver.block.resolver.split('.')[1]?.toUpperCase() ?? 'BLOCK')
 const text = computed(() => {
   if (typeof props.solvedContent !== 'string') return null
-  const plain = props.solvedContent
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
+  const source = props.solvedContent
+  const plain = (
+    props.resolver.block.resolver === 'core.html.v1'
+      ? source
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+      : source
+  )
     .replace(/\s+/g, ' ')
     .trim()
   return plain.length > 180 ? `${plain.slice(0, 180)}…` : plain

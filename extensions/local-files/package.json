@@ -35,7 +35,7 @@
     "nickname": "本地文件",
     "module_federation": {
       "host_sdk": "@inkcre/core",
-      "host_sdk_version": ">=0.4.0 <0.5.0"
+      "host_sdk_version": ">=0.4.3 <0.5.0"
     }
   },
   "intent": {

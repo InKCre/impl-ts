@@ -1,11 +1,11 @@
 import {
   MaterialMetadataSchema,
   MaterialPartSchema,
-  textPart,
+  contentPart,
   MATERIAL_BYTE_LIMIT,
 } from '@inkcre/web-collection'
 import { z } from 'zod'
-import { discourseText } from './discourse'
+import { extractPage } from '@inkcre/web-collection/extract'
 
 export const PageCaptureSchema = z.object({
   material: MaterialMetadataSchema,
@@ -25,32 +25,12 @@ const omitted = new Set([
   'OBJECT',
   'EMBED',
 ])
-const blockElements = new Set([
-  'ARTICLE',
-  'SECTION',
-  'MAIN',
-  'HEADER',
-  'FOOTER',
-  'DIV',
-  'P',
-  'LI',
-  'H1',
-  'H2',
-  'H3',
-  'H4',
-  'PRE',
-  'TR',
-  'BLOCKQUOTE',
-  'BR',
-])
-
 /** Copy loaded structure without active code, editable drafts, or extension UI. */
 export function capturePage(selectionOnly: boolean): PageCapture {
   const coverage: string[] = [
     '仅包含当前已加载的 DOM；不包含已卸载的虚拟列表、canvas 或封闭组件内部内容。',
   ]
   const output = document.implementation.createHTMLDocument(document.title)
-  const text: string[] = []
   let size = 0
   const seenDocuments = new Set<Document>()
   function copy(node: Node, targetDocument: Document): Node | null {
@@ -58,14 +38,14 @@ export function capturePage(selectionOnly: boolean): PageCapture {
       const value = node.textContent ?? ''
       size += value.length
       if (size > MATERIAL_BYTE_LIMIT) throw new Error('页面过大，请保存选区或仅保存链接。')
-      text.push(value)
       return targetDocument.createTextNode(value)
     }
     if (!(node instanceof Element) && node.nodeType !== Node.ELEMENT_NODE) return null
     const element = node as Element
     if (
       omitted.has(element.tagName) ||
-      element.hasAttribute('contenteditable') ||
+      (element.hasAttribute('contenteditable') &&
+        element.getAttribute('contenteditable')?.toLowerCase() !== 'false') ||
       element.closest('[data-inkcre-ui]') ||
       element.getAttribute('aria-hidden') === 'true'
     )
@@ -97,6 +77,14 @@ export function capturePage(selectionOnly: boolean): PageCapture {
       )
         continue
       if (['href', 'src', 'action', 'formaction', 'poster'].includes(name)) {
+        if (
+          name === 'href' &&
+          attribute.value.startsWith('#') &&
+          element.ownerDocument === document
+        ) {
+          clone.setAttribute(name, attribute.value)
+          continue
+        }
         try {
           const url = new URL(attribute.value, element.ownerDocument.URL)
           if (!['http:', 'https:'].includes(url.protocol)) continue
@@ -106,7 +94,6 @@ export function capturePage(selectionOnly: boolean): PageCapture {
         }
       } else clone.setAttribute(name, attribute.value)
     }
-    if (blockElements.has(element.tagName)) text.push('\n')
     const children =
       element.shadowRoot?.mode === 'open' ? element.shadowRoot.childNodes : element.childNodes
     for (const child of children) {
@@ -121,14 +108,17 @@ export function capturePage(selectionOnly: boolean): PageCapture {
         if (copied) clone.append(copied)
       }
     }
-    if (blockElements.has(element.tagName)) text.push('\n')
     return clone
   }
+  const structured = [...document.querySelectorAll('script[type="application/ld+json"]')]
+    .map((element) => element.textContent ?? '')
+    .filter((value) => value.length <= 32_768)
+    .slice(0, 8)
   let parts
   if (selectionOnly) {
     const selected = window.getSelection()?.toString() ?? ''
     if (!selected.trim()) throw new Error('请先在网页中选中要保存的文字。')
-    parts = [textPart('text', selected)]
+    parts = [contentPart('body', 'text', selected)]
   } else {
     if (!document.body) throw new Error('页面尚未加载正文。')
     seenDocuments.add(document)
@@ -139,27 +129,15 @@ export function capturePage(selectionOnly: boolean): PageCapture {
       if (/^(description|author|keywords|date|generator|article:|og:|twitter:)/i.test(name))
         output.head.append(meta.cloneNode(true))
     }
-    const readable =
-      discourseText(output, document.URL) ??
-      text
-        .join('')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim()
-    if (!readable) throw new Error('没有取得可读正文；可改为仅保存链接。')
-    parts = [
-      textPart('html', `<!doctype html>\n${output.documentElement.outerHTML}`),
-      textPart('text', readable),
-    ]
+    const original = `<!doctype html>\n${output.documentElement.outerHTML}`
+    const content = extractPage(original, document.URL, structured)
+    parts = [contentPart('original', 'html', original), contentPart('body', 'html', content.html)]
   }
   const navigation = performance.getEntriesByType('navigation')[0] as
     | PerformanceNavigationTiming
     | undefined
   const status =
     navigation && 'responseStatus' in navigation ? navigation.responseStatus : undefined
-  const structured = [...document.querySelectorAll('script[type="application/ld+json"]')]
-    .map((element) => element.textContent ?? '')
-    .filter((value) => value.length <= 32_768)
-    .slice(0, 8)
   return PageCaptureSchema.parse({
     parts,
     material: {

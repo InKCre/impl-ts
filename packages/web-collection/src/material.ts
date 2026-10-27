@@ -13,13 +13,19 @@ import {
   decodeBytes,
   encodeBytes,
   validateSubmission,
+  PART_RELATION,
+  CONTENT_RESOLVERS,
+  selectMaterialParts,
+  partRole,
+  partFormat,
+  type MaterialFormat,
   type SubmitMaterial,
   type MaterialReceipt,
   type MaterialRead,
   type SourceRecord,
 } from './index'
 
-const PART = 'extensions.web-collection.part.'
+const PART = PART_RELATION
 const NOTE = 'extensions.web-collection.note'
 const MATERIAL = 'extensions.web-collection.material'
 type Root = {
@@ -172,26 +178,55 @@ export class WebMaterialClient {
       check(created)
       row = created.data!
     }
+    const linked = await this.relations
+      .from()
+      .select()
+      .eq('from_', row.id)
+      .like('content', PART + '%')
+    check(linked)
+    const selected = selectMaterialParts(linked.data!)
+    const legacyFixed =
+      command.mode === 'fixed' &&
+      linked.data!.some((relation) =>
+        ['html', 'text', 'pdf'].includes(relation.content.slice(PART.length))
+      )
     const partIds: Record<string, number> = {}
     for (const part of command.parts ?? []) {
-      const relation = PART + part.role
-      const existing = await this.related(row.id, relation)
+      const use = partRole(part)
+      const format = partFormat(part)
+      const previous = selected[use]
+      const role = legacyFixed
+        ? use === 'original'
+          ? 'html'
+          : format === 'pdf'
+            ? 'pdf'
+            : 'text'
+        : use
+      const relation = PART + role
+      const existing = previous ? await this.related(row.id, previous.content) : null
+      if (previous && !existing) throw new Error('材料部件已移除，请保留待办并检查图。')
       if (existing && command.mode !== 'current') {
-        partIds[part.role] = existing.id
+        partIds[previous!.content.slice(PART.length)] = existing.id
         continue
       }
+      if (legacyFixed && format !== role)
+        throw new Error('旧固定材料只能按原格式补全，请保留待办并检查载荷。')
       const bytes = decodeBytes(part.base64)
-      const storage = part.role === 'pdf' ? await this.storage(command.storage_id) : null
+      const storage = format === 'pdf' ? await this.storage(command.storage_id) : null
       const content = storage
         ? await storage.createRawContent(bytes)
         : new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-      const values = { content, storage: storage?.id ?? null, resolver: `core.${part.role}.v1` }
+      // Relabel first: an interrupted update remains readable through the Block's actual format.
+      if (previous && previous.content !== relation) {
+        check(await this.relations.update({ content: relation }).eq('id', previous.id))
+      }
+      const values = { content, storage: storage?.id ?? null, resolver: CONTENT_RESOLVERS[format] }
       const saved = existing
         ? await this.blocks.update(values).eq('id', existing.id).select().single()
         : await this.blocks.insert(values).select().single()
       check(saved)
-      partIds[part.role] = saved.data!.id
-      await this.link(row.id, saved.data!.id, relation)
+      partIds[role] = saved.data!.id
+      if (!previous) await this.link(row.id, saved.data!.id, relation)
     }
     if (command.note && !(await this.related(row.id, NOTE))) {
       const saved = await this.blocks
@@ -205,8 +240,10 @@ export class WebMaterialClient {
       check(saved)
       await this.link(row.id, saved.data!.id, NOTE)
     }
-    const updated = await this.blocks.update({ content: JSON.stringify(root) }).eq('id', row.id)
-    check(updated)
+    if (command.mode !== 'fixed') {
+      const updated = await this.blocks.update({ content: JSON.stringify(root) }).eq('id', row.id)
+      check(updated)
+    }
     if (command.mode === 'fixed') {
       const recordCommand: SubmitMaterial = { ...command, mode: 'record' }
       const record = await this.findRoot(recordCommand, await this.key(recordCommand))
@@ -250,15 +287,32 @@ export class WebMaterialClient {
       parts: [],
       notes: [],
     }
-    for (const role of ['html', 'text', 'pdf'] as const) {
-      const part = await this.related(row.data!.id, PART + role)
-      if (!part) continue
+    const linked = await this.relations
+      .from()
+      .select()
+      .eq('from_', row.data!.id)
+      .like('content', PART + '%')
+    check(linked)
+    const selected = selectMaterialParts(linked.data!)
+    for (const relation of Object.values(selected)) {
+      const role = relation.content.slice(PART.length)
+      const part = await this.related(row.data!.id, relation.content)
+      if (!part) throw new Error('材料正文不存在。')
+      const format = (Object.keys(CONTENT_RESOLVERS) as MaterialFormat[]).find(
+        (value) => CONTENT_RESOLVERS[value] === part.resolver
+      )
+      if (!format) throw new Error(`不支持的材料正文格式：${part.resolver}`)
       const bytes =
         part.storage === null
           ? new TextEncoder().encode(part.content)
           : await (await this.storage(part.storage)).getRawContent(part)
       result.part_ids[role] = part.id
-      result.parts.push({ id: part.id, role, base64: encodeBytes(bytes) })
+      result.parts.push({
+        id: part.id,
+        role: partRole({ role }),
+        format,
+        base64: encodeBytes(bytes),
+      })
     }
     const note = await this.related(row.data!.id, NOTE)
     if (note) result.notes.push({ id: note.id, text: note.content })

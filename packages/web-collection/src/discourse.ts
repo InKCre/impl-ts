@@ -1,5 +1,5 @@
 /** Preserve facts explicitly present in loaded Discourse posts. */
-export function discourseText(document: Document, url: string): string | null {
+export function discourseHTML(document: Document): string | null {
   const generator = document.querySelector('meta[name="generator"]')?.getAttribute('content')
   if (!generator || !/^Discourse(?:\s|$)/i.test(generator)) return null
 
@@ -27,37 +27,15 @@ export function discourseText(document: Document, url: string): string | null {
     const time = date?.getAttribute('datetime') ?? date?.textContent?.replace(/\s+/g, ' ').trim()
     const heading = [`#${number}`, name, time].filter(Boolean).join(' · ')
 
-    const copy = body.cloneNode(true) as Element
-    const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT)
-    const layout: Node[] = []
-    while (walker.nextNode()) {
-      const node = walker.currentNode
-      if (
-        node.textContent?.includes('\n') &&
-        !node.textContent.trim() &&
-        !node.parentElement?.closest('pre,code')
-      )
-        layout.push(node)
-    }
-    for (const node of layout) node.parentNode?.removeChild(node)
-    for (const link of copy.querySelectorAll('a[href]')) {
-      if (link.closest('pre,code')) continue
-      const href = link.getAttribute('href')!
-      try {
-        const target = new URL(href, url)
-        if (['http:', 'https:'].includes(target.protocol) && link.textContent !== target.href)
-          link.append(` (${target.href})`)
-      } catch {
-        // An invalid source URL has no usable link target; retain its visible text.
-      }
-    }
-    for (const br of copy.querySelectorAll('br')) br.replaceWith('\n')
-    for (const block of copy.querySelectorAll('p,div,li,pre,blockquote,h1,h2,h3,h4,h5,h6'))
-      block.append('\n\n')
-    const section = `${heading}\n\n${copy.textContent?.replace(/^\n+|\n+$/g, '')}`
+    const article = document.createElement('article')
+    article.id = `post_${number}`
+    const label = document.createElement('header')
+    label.textContent = heading
+    article.append(label, body.cloneNode(true))
+    const section = article.outerHTML
     // Responsive copies may repeat a post; conflicting copies need the generic path.
     if (sections.has(number) && sections.get(number) !== section) return null
     sections.set(number, section)
   }
-  return [...sections.values()].join('\n\n')
+  return [...sections.values()].join('\n')
 }

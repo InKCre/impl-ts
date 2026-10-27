@@ -1533,6 +1533,69 @@ test('core Peer publishes and serves its exact capability inbounds', async ({ pa
   })
 })
 
+test('saved content keeps Markdown structure and literal text in Web reading and previews', async ({
+  page,
+}) => {
+  const authorization = `Bearer ${await token()}`
+  const headers = { Authorization: authorization, 'Content-Type': 'application/json' }
+  const created = await fetch(`${postgrestUrl}blocks`, {
+    method: 'POST',
+    headers: { ...headers, Prefer: 'return=representation' },
+    body: JSON.stringify([
+      {
+        resolver: 'core.markdown.v1',
+        storage: null,
+        content:
+          '# Saved Markdown\n\n`<node>` stays literal\n\n| Name | Value |\n| --- | --- |\n| A | 12 |\n\n```text\n<node>\n  indented\n```\n\n- [x] retained task',
+      },
+      { resolver: 'core.text.v1', storage: null, content: 'Plain <node> stays literal' },
+      {
+        resolver: 'core.html.v1',
+        storage: null,
+        content:
+          '<h1>Saved HTML</h1><table><tr><th>Name</th><th>Value</th></tr><tr><td>A</td><td>12</td></tr></table><pre><code>&lt;node&gt;\n  indented</code></pre>',
+      },
+    ]),
+  })
+  expect(created.status).toBe(201)
+  const blocks: { id: number; resolver: string; content: string }[] = await created.json()
+  try {
+    for (const block of blocks) {
+      await page.goto(`/info-base/list/blocks/${block.id}/content`)
+      if (block.resolver === 'core.text.v1') {
+        await expect(page.locator('.solved-content-popup__content')).toContainText(block.content)
+      } else {
+        const reader = page.frameLocator('iframe.ink-content-reader')
+        await expect(reader.getByRole('heading', { level: 1 })).toHaveText(
+          block.resolver === 'core.markdown.v1' ? 'Saved Markdown' : 'Saved HTML'
+        )
+        await expect(reader.getByRole('cell', { name: '12', exact: true })).toBeVisible()
+        expect(await reader.locator('pre').textContent()).toMatch(/^<node>\n  indented\n?$/)
+        if (block.resolver === 'core.markdown.v1') {
+          await expect(reader.getByRole('checkbox')).toBeChecked()
+          await expect(reader.getByRole('checkbox')).toBeDisabled()
+          await page.screenshot({ path: 'test-results/web-markdown-reader.png' })
+        }
+      }
+      if (block.resolver !== 'core.html.v1') {
+        await page.goto(`/info-base/graph/blocks/${block.id}`)
+        await expect(
+          page.locator('.content-preview').filter({ hasText: 'stays literal' }).first()
+        ).toContainText('<node>')
+      }
+    }
+  } finally {
+    const cleanup = await fetch(
+      `${postgrestUrl}blocks?id=in.(${blocks.map((block) => block.id).join(',')})`,
+      {
+        method: 'DELETE',
+        headers,
+      }
+    )
+    expect(cleanup.status).toBe(204)
+  }
+})
+
 test('Block Inspector delegates rumination through the discovered Peer', async ({ page }) => {
   const authorization = `Bearer ${await token()}`
   const content = `E2E rumination focal block ${Date.now()}`

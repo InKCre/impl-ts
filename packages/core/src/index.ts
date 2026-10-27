@@ -184,6 +184,7 @@ export {
   type ProjectionOptions,
   type TextProjectionContext,
   TextResolver,
+  MarkdownResolver,
   AudioResolver,
   EpubResolver,
   FileResolver,

@@ -1,7 +1,7 @@
 import {
   MATERIAL_BYTE_LIMIT,
   encodeBytes,
-  textPart,
+  contentPart,
   type MaterialMetadata,
   type MaterialPart,
 } from '@inkcre/web-collection'
@@ -13,7 +13,7 @@ let openingParser: Promise<void> | undefined
 async function parseHTML(
   html: string,
   url: string
-): Promise<{ text: string; title: string; canonical?: string }> {
+): Promise<{ html: string; title: string; canonical?: string }> {
   if (typeof DOMParser !== 'undefined') return parsePublicHTML(html, url)
   const contexts = await browser.runtime.getContexts({
     contextTypes: ['OFFSCREEN_DOCUMENT'],
@@ -82,12 +82,18 @@ export async function fetchMaterial(
     coverage: ['本次从原站获取的内容；不代表历史访问或收藏时的网页。'],
   }
   if (isPDF && (pdfOnly || type === 'application/pdf'))
-    return { material: base, parts: [{ role: 'pdf', base64: encodeBytes(bytes) }] }
+    return { material: base, parts: [{ role: 'body', format: 'pdf', base64: encodeBytes(bytes) }] }
   if (pdfOnly) throw new Error('原站没有返回可识别的 PDF 原始内容；可仅保存链接。')
-  if (type === 'text/plain')
+  if (type === 'text/plain' || type === 'text/markdown')
     return {
       material: base,
-      parts: [textPart('text', new TextDecoder('utf-8', { fatal: true }).decode(bytes))],
+      parts: [
+        contentPart(
+          'body',
+          type === 'text/markdown' ? 'markdown' : 'text',
+          new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+        ),
+      ],
     }
   if (!['text/html', 'application/xhtml+xml'].includes(type ?? ''))
     throw new Error(`暂不支持该内容类型：${type ?? '未知'}；来源记录已保留。`)
@@ -101,6 +107,6 @@ export async function fetchMaterial(
   const content = await parseHTML(html, response.url || url)
   return {
     material: { ...base, title: content.title, canonical: content.canonical },
-    parts: [textPart('html', html), textPart('text', content.text)],
+    parts: [contentPart('original', 'html', html), contentPart('body', 'html', content.html)],
   }
 }

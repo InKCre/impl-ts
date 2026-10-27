@@ -17,6 +17,11 @@ export default defineConfig({
           fileName: 'LICENSE',
           source: readFileSync(new URL('./LICENSE', import.meta.url), 'utf8'),
         })
+        this.emitFile({
+          type: 'asset',
+          fileName: 'THIRD_PARTY_NOTICES.txt',
+          source: readFileSync(new URL('../../THIRD_PARTY_NOTICES.txt', import.meta.url), 'utf8'),
+        })
       },
     },
     federation({

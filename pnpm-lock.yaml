@@ -640,6 +640,9 @@ importers:
       dayjs:
         specifier: ^1.11.0
         version: 1.11.21
+      htmlparser2:
+        specifier: 10.1.0
+        version: 10.1.0
       jose:
         specifier: ^5.0.0
         version: 5.10.0
@@ -705,6 +708,9 @@ importers:
       '@inkcre/core':
         specifier: workspace:*
         version: link:../core
+      '@mozilla/readability':
+        specifier: ^0.6.0
+        version: 0.6.0
       zod:
         specifier: ^4.1.12
         version: 4.4.3

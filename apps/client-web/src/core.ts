@@ -17,6 +17,7 @@ import {
   localStorageAdapter,
   registerCoreResolvers,
   TextResolver,
+  MarkdownResolver,
   ResolverCache,
   AudioResolver,
   EpubResolver,
@@ -118,6 +119,8 @@ export async function refreshCurrentWebPeer(): Promise<void> {
  * Each resolver needs a Vue component to render content.
  */
 export function setupResolvers(): void {
+  MarkdownResolver.previewRenderer = ContentPreview
+  MarkdownResolver.solvedContentRenderer = ContentHtml
   TextResolver.previewRenderer = ContentPreview
   AudioResolver.previewRenderer = ContentPreview
   EpubResolver.previewRenderer = ContentPreview

@@ -52,7 +52,7 @@ or solved meaning.
 
 `Resolver.getClass(id)` requires an exact registered class. Registration is idempotent only for
 the same class and rejects collisions; there is no default decoder. `Resolver.unregister(id, exactClass)` removes only that class’s registration and returns false when no matching owner remains. Stale module cleanup cannot remove another module’s class. Core bootstrap independently
-registers the versioned text, HTML, image, audio, video, PDF, EPUB, ZIP, and file contracts.
+registers the versioned text, HTML, Markdown, image, audio, video, PDF, EPUB, ZIP, and file contracts.
 Extensions register their own namespaced, versioned contracts rather than aliases for retired IDs.
 
 Every concrete Resolver exposes `getText({ context })`, where `default` and `lexical` are named,
@@ -79,8 +79,7 @@ Byte-oriented Resolvers may expose Blob or Object URL handles for image, audio, 
 ZIP, and file content. Handles are private runtime state, never persisted solved-graph authority.
 They are revoked on Resolver refresh, disposal, cache replacement, and eviction.
 
-HTML remains source/text preview unless a separate sanitizer contract exists; it is not passed
-directly to `v-html`. A parser-derived field may remain `null` when no proportionate browser parser
+HTML 与 Markdown 完整阅读使用 UI 包的 `InkContentReader`，净化后置于禁止来源脚本及自动资源加载的 iframe，不直接交给 `v-html`。文字预览仍有界；只有 HTML 投影去标签，plain text 与 Markdown 保持字面内容。Markdown 的 solved／getText 均返回源文；HTML getText 保留段落、代码空白、表格单元及链接目标。 A parser-derived field may remain `null` when no proportionate browser parser
 exists while open/render/download remains supported.
 
 `BlockContent.vue` makes exact Resolver setup errors visible, obtains solved content, passes it to
