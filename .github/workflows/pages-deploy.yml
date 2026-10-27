@@ -53,7 +53,6 @@ jobs:
     permissions:
       contents: read
       deployments: write
-      packages: read
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment:
@@ -79,14 +78,10 @@ jobs:
           node-version-file: release/package.json
           cache: pnpm
           cache-dependency-path: release/pnpm-lock.yaml
-          registry-url: https://npm.pkg.github.com
-          scope: '@inkcre'
 
       - name: Install the frozen release workspace
         working-directory: release
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build the exact-main release
         working-directory: release

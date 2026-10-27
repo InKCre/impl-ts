@@ -19,6 +19,9 @@ End users consume the published web build and browser extension through the depl
 
 ### Develop locally
 
+Read the [contribution guide](CONTRIBUTING.md) before installing. Locked UI packages download from
+public Release assets; local setup requires no organization package token.
+
 ```bash
 git submodule update --init --recursive
 pnpm install --frozen-lockfile
@@ -26,7 +29,9 @@ pnpm run doctor
 pnpm dev
 ```
 
-`pnpm check` is the required format/lint/type/test/build gate used by CI. See the [organization contribution guide](https://github.com/InKCre/.github/blob/main/CONTRIBUTING.md) and [docs/40-deployment/development-runtime.md](docs/40-deployment/development-runtime.md) for the full local and SSH runtime contract.
+`pnpm check` is the required format/lint/type/test/build gate used by CI. See
+[docs/40-deployment/development-runtime.md](docs/40-deployment/development-runtime.md) for the full
+local and SSH runtime contract.
 
 ## Documentation
 

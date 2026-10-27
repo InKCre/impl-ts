@@ -106,13 +106,9 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
-          registry-url: https://npm.pkg.github.com
-          scope: '@inkcre'
 
       - name: Install the frozen workspace
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 校验 TS7、Vue 类型、静态规则及产物合同
         run: pnpm check
@@ -151,13 +147,9 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
-          registry-url: https://npm.pkg.github.com
-          scope: '@inkcre'
 
       - name: Install the frozen workspace
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install the exact browser engine
         run: pnpm exec playwright install --with-deps chromium
@@ -202,13 +194,9 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
-          registry-url: https://npm.pkg.github.com
-          scope: '@inkcre'
 
       - name: Install the frozen workspace
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install the exact browser engine
         run: pnpm exec playwright install --with-deps chromium

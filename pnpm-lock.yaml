@@ -14,6 +14,9 @@ catalogs:
       version: 3.3.8
 
 overrides:
+  '@inkcre/ui-web@2.3.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
+  '@inkcre/ui-web@2.5.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
+  '@inkcre/ui-web@2.6.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.6.0/inkcre-ui-web-2.6.0.tgz
   typescript: npm:typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2
   '@babel/core@<=7.29.0': 7.29.7
   adm-zip@<0.6.0: 0.6.0
@@ -104,8 +107,8 @@ importers:
         specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz
         version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.1/inkcre-extension-runtime-client-web-0.4.1.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.21.6)
       '@inkcre/ui-web':
-        specifier: 2.5.0
-        version: 2.5.0(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
+        specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
+        version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       '@module-federation/runtime':
         specifier: ^0.21.4
         version: 0.21.6
@@ -216,8 +219,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@inkcre/ui-web':
-        specifier: 2.6.0
-        version: 2.6.0(patch_hash=510778c1fcb3c445ae29f4434bc6543f3e1504cb336211665db056c9c00f25b2)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
+        specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.6.0/inkcre-ui-web-2.6.0.tgz
+        version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.6.0/inkcre-ui-web-2.6.0.tgz(patch_hash=510778c1fcb3c445ae29f4434bc6543f3e1504cb336211665db056c9c00f25b2)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       '@inkcre/web-collection':
         specifier: workspace:*
         version: link:../../packages/web-collection
@@ -281,8 +284,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.3.0
-        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
+        specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
+        version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -324,8 +327,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.3.0
-        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
+        specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
+        version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -376,8 +379,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.3.0
-        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
+        specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
+        version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -434,8 +437,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.3.0
-        version: 2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
+        specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
+        version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -483,8 +486,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ext-dev-utils
       '@inkcre/ui-web':
-        specifier: 2.5.0
-        version: 2.5.0(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
+        specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
+        version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       '@module-federation/vite':
         specifier: ^1.1.0
         version: 1.7.1(rollup@4.59.0)
@@ -586,8 +589,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@inkcre/ui-web':
-        specifier: 2.5.0
-        version: 2.5.0(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
+        specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
+        version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
     devDependencies:
       pinia:
         specifier: ^3.0.3
@@ -1437,23 +1440,35 @@ packages:
       '@inkcre/core': '>=0.4.0 <0.5.0'
       '@module-federation/runtime': '>=0.21.4 <0.23.0'
 
-  '@inkcre/ui-web@2.3.0':
-    resolution: {integrity: sha512-fXfAro12+zzyhtjiZqfQBvyMJKVnclrm/qvHst70dnRFZekYIkE+rSfabEJ//avAvvJyVZL7kK6XewXK4PgdJg==, tarball: https://npm.pkg.github.com/download/@inkcre/ui-web/2.3.0/2c81dee78ac6797018f0e62a2a988747cd3c7a3e}
+  '@inkcre/ui-web@https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz':
+    resolution: {integrity: sha512-fXfAro12+zzyhtjiZqfQBvyMJKVnclrm/qvHst70dnRFZekYIkE+rSfabEJ//avAvvJyVZL7kK6XewXK4PgdJg==, tarball: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz}
+    version: 2.3.0
     peerDependencies:
       unocss: ^66.5.0
       vue: ^3.5.25
+    peerDependenciesMeta:
+      unocss:
+        optional: true
 
-  '@inkcre/ui-web@2.5.0':
-    resolution: {integrity: sha512-7mnMmiKpjZrpBlocSPGkZ8PXqwNxVD0h0FdVlOZUWQdxnZHmAGEt93azHEyIqNjoGQeEYGoezMbu6/D2ntM+zA==, tarball: https://npm.pkg.github.com/download/@inkcre/ui-web/2.5.0/328d74232baff2904431dabee92627b33eab0b7a}
+  '@inkcre/ui-web@https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz':
+    resolution: {integrity: sha512-7mnMmiKpjZrpBlocSPGkZ8PXqwNxVD0h0FdVlOZUWQdxnZHmAGEt93azHEyIqNjoGQeEYGoezMbu6/D2ntM+zA==, tarball: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz}
+    version: 2.5.0
     peerDependencies:
       unocss: ^66.5.0
       vue: ^3.5.25
+    peerDependenciesMeta:
+      unocss:
+        optional: true
 
-  '@inkcre/ui-web@2.6.0':
-    resolution: {integrity: sha512-sXV4a4vAHt0wMnmq7DuPht1CI2skR/s1V8CRglxu929eJIelB6t4pLKbTuwNpR93QUHTW0TbtmIM2ePc29oCsQ==, tarball: https://npm.pkg.github.com/download/@inkcre/ui-web/2.6.0/2b393c82d8131793b1e7eebf95157582a2750222}
+  '@inkcre/ui-web@https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.6.0/inkcre-ui-web-2.6.0.tgz':
+    resolution: {integrity: sha512-sXV4a4vAHt0wMnmq7DuPht1CI2skR/s1V8CRglxu929eJIelB6t4pLKbTuwNpR93QUHTW0TbtmIM2ePc29oCsQ==, tarball: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.6.0/inkcre-ui-web-2.6.0.tgz}
+    version: 2.6.0
     peerDependencies:
       unocss: ^66.5.0
       vue: ^3.5.25
+    peerDependenciesMeta:
+      unocss:
+        optional: true
 
   '@intlify/core-base@11.4.7':
     resolution: {integrity: sha512-MSB/sBKwEWJTILvQIhg2rnIcwPpLayo3wGwvVA+dJTNeUBD9GoqQgAaSOLdI9iOPDHCm9YoVnLqpfzza98MpkQ==}
@@ -6760,7 +6775,7 @@ snapshots:
       semver: 7.8.5
       zod: 4.1.12
 
-  '@inkcre/ui-web@2.3.0(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
+  '@inkcre/ui-web@https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
     dependencies:
       '@codemirror/autocomplete': 6.20.3
       '@codemirror/commands': 6.11.1
@@ -6771,12 +6786,13 @@ snapshots:
       '@vue/shared': 3.5.25
       '@vueuse/core': 14.4.0(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       dayjs: 1.11.23
+      vscode-json-languageservice: 5.6.4
+      vscode-languageserver-textdocument: 1.0.14
+      vue: 3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2)
+    optionalDependencies:
       unocss: 66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))
-      vscode-json-languageservice: 5.6.4
-      vscode-languageserver-textdocument: 1.0.14
-      vue: 3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2)
 
-  '@inkcre/ui-web@2.5.0(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
+  '@inkcre/ui-web@https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
     dependencies:
       '@codemirror/autocomplete': 6.20.3
       '@codemirror/commands': 6.11.1
@@ -6787,12 +6803,13 @@ snapshots:
       '@vue/shared': 3.5.25
       '@vueuse/core': 14.4.0(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       dayjs: 1.11.23
+      vscode-json-languageservice: 5.6.4
+      vscode-languageserver-textdocument: 1.0.14
+      vue: 3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2)
+    optionalDependencies:
       unocss: 66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))
-      vscode-json-languageservice: 5.6.4
-      vscode-languageserver-textdocument: 1.0.14
-      vue: 3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2)
 
-  '@inkcre/ui-web@2.5.0(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
+  '@inkcre/ui-web@https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
     dependencies:
       '@codemirror/autocomplete': 6.20.3
       '@codemirror/commands': 6.11.1
@@ -6803,12 +6820,13 @@ snapshots:
       '@vue/shared': 3.5.25
       '@vueuse/core': 14.4.0(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       dayjs: 1.11.23
-      unocss: 66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))
       vscode-json-languageservice: 5.6.4
       vscode-languageserver-textdocument: 1.0.14
       vue: 3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2)
+    optionalDependencies:
+      unocss: 66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))
 
-  '@inkcre/ui-web@2.6.0(patch_hash=510778c1fcb3c445ae29f4434bc6543f3e1504cb336211665db056c9c00f25b2)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
+  '@inkcre/ui-web@https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.6.0/inkcre-ui-web-2.6.0.tgz(patch_hash=510778c1fcb3c445ae29f4434bc6543f3e1504cb336211665db056c9c00f25b2)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
     dependencies:
       '@codemirror/autocomplete': 6.20.3
       '@codemirror/commands': 6.11.1
@@ -6819,10 +6837,11 @@ snapshots:
       '@vue/shared': 3.5.25
       '@vueuse/core': 14.4.0(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
       dayjs: 1.11.23
-      unocss: 66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))
       vscode-json-languageservice: 5.6.4
       vscode-languageserver-textdocument: 1.0.14
       vue: 3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2)
+    optionalDependencies:
+      unocss: 66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))
 
   '@intlify/core-base@11.4.7':
     dependencies:
@@ -7882,6 +7901,7 @@ snapshots:
       tinyglobby: 0.2.17
       unplugin-utils: 0.3.2
       vite: 8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)
+    optional: true
 
   '@vitejs/plugin-vue-jsx@5.1.6(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))(vue@3.5.40(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
     dependencies:
@@ -10442,6 +10462,7 @@ snapshots:
       '@unocss/vite': 66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0))
     transitivePeerDependencies:
       - vite
+    optional: true
 
   unplugin-utils@0.2.5:
     dependencies:

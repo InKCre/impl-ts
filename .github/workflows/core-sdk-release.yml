@@ -69,7 +69,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      packages: read
     runs-on: ubuntu-latest
     env:
       SOURCE_REVISION: ${{ needs.identity.outputs.source_revision }}
@@ -90,17 +89,13 @@ jobs:
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 11.11.0
-      - name: Configure workspace package access
+      - name: Set up workspace runtime
         if: needs.identity.outputs.artifact_id == ''
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: package.json
-          registry-url: https://npm.pkg.github.com
-          scope: '@inkcre'
       - name: Build and capture prebuilt SDK
         if: needs.identity.outputs.artifact_id == ''
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter @inkcre/core build
