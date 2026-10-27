@@ -25,7 +25,7 @@ Firefox ZIP **未签名，仅供 `about:debugging` 临时加载**，不能作为
 
 ## 准备版本与产物
 
-用户可见变更携带针对 `@inkcre/client-webext` 的 Changeset。复用工作区 Version PR 消费这些文件，更新版本和 changelog；不要手改生成的 manifest。重写首次交付使用 minor 变更意图，由 Version PR 将 `0.1.3` 准备为 `0.2.0`，不是仅合并功能 PR 就发布 `0.1.3`。
+用户可见变更携带针对 `@inkcre/client-webext` 的 Changeset。复用工作区 Version PR 消费这些文件，更新版本和 changelog；不要手改生成的 manifest。重写首次交付使用 minor 变更意图，由 Version PR 将当前 `0.1.4` 准备为 `0.2.0`，不是仅合并功能 PR 就发布当前版本。
 
 版本使用三段纯数字 SemVer，每段不超过 65535。不要以 `-beta` 后缀区分浏览器包：WXT 会把后缀从 manifest 版本中去掉，两个候选可能因此成为同一个浏览器版本。测试候选用来源提交区分，不冒充正式新版本。
 
