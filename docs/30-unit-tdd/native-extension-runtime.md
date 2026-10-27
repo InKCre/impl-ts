@@ -35,6 +35,7 @@ Host 与 Web 扩展通过现有 Module Federation 配置共享 `@inkcre/ui-web` 
 并由每个生产者的 package.json 声明自身锁定的 UI 版本要求，构建不得用 Host 的 UI 版本覆盖它。UI 的 i18n、路由和表单上下文使用模块内的 Vue 注入 key；
 如果扩展另用一份 UI 运行时，即使外观相同，也无法继承 Host 的这些上下文。
 独立 playground 仍可使用包自身的 fallback 模块，样式由各自应用入口加载。
+如果生产入口没有消费 UI JavaScript，构建产物可以没有 UI share；声明开发依赖并不代表生产入口使用了该模块。产物一旦包含 UI share，就必须只有一个，并使用生产者声明的版本。
 
 The producer emits the native `mf-manifest.json`, Remote entry, and referenced shared/exposed asset
 closure with relative asset semantics. The Registry Release records an immutable manifest
