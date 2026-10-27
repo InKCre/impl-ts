@@ -1,5 +1,11 @@
 # WebExt 浏览器采集与已有资料导入
 
+## 2026-10-27 Discourse 增量合并
+
+用户已授权合并 PR #170 并进行本地清理。父 PR #161 已 squash 合并为 `115ca68`；本轮只将 Discourse 增量从原父分支 restack 到最新 main，保留原解析函数、两个采集入口、回归用例、文档及 patch Changeset，不新增站点或插件机制。完整检查及解析器回归通过后，将 PR base 改为 main、转 Ready，待最终 CI 通过后 squash 合并。
+
+清理范围为本任务的 `hister-source-text` worktree、本地和远端功能分支，以及此前为本 PR 暂留的远端 `feat/webext-collection` 父分支；先核对子 PR 与未提交文件。旧候选安装包、仓库外身份私钥、其他 checkout、stash 和日常浏览器保留。最终合并与检查状态以 PR #170 为准；本轮不进行商店签名或手动发布。
+
 ## 2026-10-27 合并与本地清理
 
 用户已授权合并 PR #161 并清理本任务的本地 worktree 与分支。合并前发现 main `59436e5` 的公开依赖安装改动与本分支锁文件冲突；保留 WebExt 正式 InkUI 2.6.0、两个输入组件补丁和 main 的免凭据安装方式，补齐 2.6.0 的公开 Release override，并重新生成锁文件。WebExt 发布工作流同步移除过时的私有包认证。随后继续同步 main `b93548b`，保留其 Core 0.4.2、WebExt 0.1.4 和正式 Runtime 消费者改动；未消费的 WebExt minor Changeset 仍阻止当前版本发布，后续由 Version PR 准备 0.2.0。
