@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@inkcre/core": "workspace:*",
-    "@inkcre/ui-web": "2.6.0",
+    "@inkcre/ui-web": "2.7.0",
     "@inkcre/web-collection": "workspace:*",
     "@mozilla/readability": "^0.6.0",
     "vue": "^3.5.21",
