@@ -22,7 +22,7 @@ export const ExtensionVersionSchema = z.string().refine(
   { error: 'Extension version must be strict SemVer without build metadata.' }
 )
 
-export const NativeDistributionSchema = z.enum(['python', 'module_federation'])
+export const NativeDistributionSchema = z.string().min(1)
 export type NativeDistribution = z.infer<typeof NativeDistributionSchema>
 
 /** Shared identity and configuration; native versions belong to individual Peers. */

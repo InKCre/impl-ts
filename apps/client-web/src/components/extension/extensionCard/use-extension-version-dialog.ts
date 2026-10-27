@@ -1,4 +1,5 @@
 import { computed, onUnmounted, ref, shallowRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   configStore,
   ExtensionParticipationModel,
@@ -28,6 +29,7 @@ export function useExtensionVersionDialog(options: {
   data: ExtensionCardData
   runtime: ReturnType<typeof useExtensionPeerRuntime>
 }) {
+  const { t } = useI18n()
   const { data, runtime } = options
   const selectedPeer = shallowRef<Peer | null>(null)
   const versionOpen = ref(false)
@@ -39,7 +41,7 @@ export function useExtensionVersionDialog(options: {
   const distributionOptions = computed(() =>
     selectedPeer.value
       ? runtime.supportedFormats(selectedPeer.value).map((format) => ({
-          label: format === 'python' ? 'Python' : 'Module Federation',
+          label: runtime.distributionLabel(format),
           value: format,
         }))
       : []
@@ -68,7 +70,14 @@ export function useExtensionVersionDialog(options: {
     versionLoading.value = true
     versionOptions.value = []
     versionError.value = ''
-    const readPublished = async (format: NativeDistribution): Promise<ReleaseRecord[]> => {
+    if (distribution !== 'python' && distribution !== 'module_federation') {
+      versionError.value = t('extension.managedByPeer')
+      versionLoading.value = false
+      return
+    }
+    const readPublished = async (
+      format: 'python' | 'module_federation'
+    ): Promise<ReleaseRecord[]> => {
       try {
         const catalog = await getExtensionRegistry().getExtension(data.extension.name, format)
         const releases = sortPublishedReleases(catalog.releases ?? [])
@@ -98,7 +107,7 @@ export function useExtensionVersionDialog(options: {
         : (preferredPublishedRelease(releases)?.version ?? '')
       if (!releases.length) {
         // On explicit install, show another published native format without implying this Peer supports it.
-        const other: NativeDistribution = distribution === 'python' ? 'module_federation' : 'python'
+        const other = distribution === 'python' ? 'module_federation' : 'python'
         if (runtime.publishedFormats.value[other] === undefined) await readPublished(other)
       }
     } catch (error) {

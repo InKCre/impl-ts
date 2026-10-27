@@ -1,0 +1,46 @@
+{
+  "name": "@inkcre/ext-capture",
+  "version": "0.2.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@inkcre/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@inkcre/ext-dev-utils": "workspace:*",
+    "@inkcre/ui-web": "2.3.0",
+    "@module-federation/vite": "^1.1.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "catalog:",
+    "typescript": "catalog:",
+    "vite": "^7.0.6",
+    "vue-tsc": "catalog:"
+  },
+  "peerDependencies": {
+    "@vueuse/core": "^14.0.0",
+    "pinia": "^3.0.0",
+    "vue": "^3.5.25",
+    "vue-router": "^4.5.0",
+    "zod": "^4.1.0"
+  },
+  "inkcre": {
+    "name": "inkcre/capture",
+    "nickname": "随手收集",
+    "module_federation": {
+      "host_sdk": "@inkcre/core",
+      "host_sdk_version": ">=0.4.0 <0.5.0"
+    }
+  },
+  "intent": {
+    "skills": [
+      "@inkcre/ui-web"
+    ]
+  }
+}

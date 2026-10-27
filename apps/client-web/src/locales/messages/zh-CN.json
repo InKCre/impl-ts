@@ -255,7 +255,8 @@
     "runtimeUnknown": "运行状态未知",
     "unavailableOnPeer": "此 Peer 不可用",
     "publishedDistributions": "已发布分发",
-    "noPublishedDistribution": "尚无已发布的 {distribution} 版本。"
+    "noPublishedDistribution": "尚无已发布的 {distribution} 版本。",
+    "managedByPeer": "请在对应 Peer 管理此分发和查看文档。"
   },
   "job": {
     "loadFailed": "无法读取此任务。",

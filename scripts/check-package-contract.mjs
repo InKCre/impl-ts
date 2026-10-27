@@ -38,6 +38,8 @@ await Promise.all(
     'apps/client-webext/.output/chrome-mv3/popup.html',
     'extensions/github/dist/client-web/remoteEntry.js',
     'extensions/caldav/dist/client-web/remoteEntry.js',
+    'extensions/capture/dist/client-web/remoteEntry.js',
+    'extensions/local-files/dist/client-web/remoteEntry.js',
     'extensions/mail/dist/client-web/remoteEntry.js',
     'extensions/memos/dist/client-web/remoteEntry.js',
     'extensions/twitter/dist/client-web/remoteEntry.js',

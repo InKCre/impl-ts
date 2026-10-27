@@ -255,7 +255,8 @@
     "runtimeUnknown": "Runtime status unavailable",
     "unavailableOnPeer": "Unavailable on this Peer",
     "publishedDistributions": "Published distributions",
-    "noPublishedDistribution": "No published {distribution} releases."
+    "noPublishedDistribution": "No published {distribution} releases.",
+    "managedByPeer": "Manage this distribution and consult its documentation on the corresponding Peer."
   },
   "job": {
     "loadFailed": "Unable to load this job.",

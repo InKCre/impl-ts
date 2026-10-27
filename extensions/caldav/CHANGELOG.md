@@ -1,5 +1,14 @@
 # @inkcre/ext-caldav
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [854291e]
+- Updated dependencies [854291e]
+- Updated dependencies [02ef335]
+  - @inkcre/core@0.4.2
+
 ## 0.1.0
 
 ### Minor Changes
