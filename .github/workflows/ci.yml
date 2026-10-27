@@ -113,13 +113,6 @@ jobs:
       - name: 校验 TS7、Vue 类型、静态规则及产物合同
         run: pnpm check
 
-      - name: Validate the native Twitter Module Federation snapshot
-        run: >-
-          node scripts/verify-native-extension-distribution.mjs inspect-local
-          --package extensions/twitter/package.json
-          --core-package packages/core/package.json
-          --artifact-directory extensions/twitter/dist/client-web
-
       - name: Verify independent MF publication
         run: >-
           node --test scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs

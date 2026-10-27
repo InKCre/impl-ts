@@ -38,11 +38,13 @@ export function checkManifest(manifest, version, browser, key) {
   assert.ok(!manifest.permissions.includes('debugger'))
 }
 
-async function api(route) {
+async function api(route, options = {}) {
   const response = await fetch(`https://api.github.com/repos/${repository}/${route}`, {
+    ...options,
     headers: {
       Authorization: `Bearer ${process.env.GH_TOKEN}`,
       Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
     },
     signal: AbortSignal.timeout(30_000),
   })
@@ -79,6 +81,7 @@ async function findRelease(tag) {
 }
 
 export function assertDraft(release, tag, source) {
+  assert.ok(release, 'GitHub draft release was not found')
   assert.equal(release.tag_name, tag)
   assert.equal(
     release.draft,
@@ -90,6 +93,22 @@ export function assertDraft(release, tag, source) {
     source,
     'Draft belongs to another source; do not replace it'
   )
+}
+
+export async function createDraftRelease({ tag, source, version, news }) {
+  const body = `${news}\n\nChromium：下载 chrome ZIP，解压到固定目录加载，覆盖目录后重新加载更新，不要卸载。Firefox ZIP 未签名，仅供临时加载，不能作为正式安装包。source.tar.gz 为对应仓库源码，不含私有依赖，尚非 AMO 独立审查包。\n\n来源 ${source}。source.json 记录实际包的 SHA256。`
+  const release = await api('releases', {
+    method: 'POST',
+    body: JSON.stringify({
+      tag_name: tag,
+      target_commitish: source,
+      draft: true,
+      name: `WebExt ${version}`,
+      body,
+    }),
+  })
+  assertDraft(release, tag, source)
+  return release
 }
 
 async function verifyCandidate() {
@@ -211,22 +230,7 @@ export async function main(command) {
   if (!release) {
     const changelog = await readFile(`${app}/CHANGELOG.md`, 'utf8')
     const news = changelog.split(`## ${version}\n`)[1]?.split('\n## ')[0]?.trim() ?? ''
-    const body = `${news}\n\nChromium：下载 chrome ZIP，解压到固定目录加载，覆盖目录后重新加载更新，不要卸载。Firefox ZIP 未签名，仅供临时加载，不能作为正式安装包。source.tar.gz 为对应仓库源码，不含私有依赖，尚非 AMO 独立审查包。\n\n来源 ${receipt.source_revision}。source.json 记录实际包的 SHA256。`
-    gh([
-      'release',
-      'create',
-      tag,
-      '--repo',
-      repository,
-      '--target',
-      receipt.source_revision,
-      '--draft',
-      '--title',
-      `WebExt ${version}`,
-      '--notes',
-      body,
-    ])
-    release = await findRelease(tag)
+    release = await createDraftRelease({ tag, source: receipt.source_revision, version, news })
   }
   assertDraft(release, tag, receipt.source_revision)
   // Only an unpublished same-source draft may be completed/rebuilt after an interrupted upload.
@@ -240,7 +244,7 @@ export async function main(command) {
     ...receipt.assets.map((asset) => `${directory}/${asset.name}`),
     `${directory}/source.json`,
   ])
-  release = await findRelease(tag)
+  release = await api(`releases/${release.id}`)
   for (const asset of [
     ...receipt.assets,
     { name: 'source.json', sha256: sha256(await readFile(`${directory}/source.json`)) },

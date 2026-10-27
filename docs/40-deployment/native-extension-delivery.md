@@ -194,6 +194,7 @@ manifest structure, and the exact bytes of every referenced asset.
 
 The executable contract is
 [`scripts/verify-native-extension-distribution.mjs`](../../scripts/verify-native-extension-distribution.mjs).
+`pnpm check:package` 在本地与 CI 中检查所有生产扩展的真实 MF 产物，并确认 Twitter 这类使用 UI 组件的扩展保留共享 UI 模块。
 Verify locally without publishing:
 
 ```bash

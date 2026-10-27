@@ -134,9 +134,11 @@ export async function inspectNativeModuleFederation({
   const uiVersion =
     extensionPackage.dependencies?.['@inkcre/ui-web'] ??
     extensionPackage.devDependencies?.['@inkcre/ui-web']
-  if (uiVersion) {
-    const uiShare = manifest.shared?.filter((shared) => shared.name === '@inkcre/ui-web') ?? []
-    assert.equal(uiShare.length, 1, 'manifest must share @inkcre/ui-web to inherit Host UI context')
+  const uiShare = manifest.shared?.filter((shared) => shared.name === '@inkcre/ui-web') ?? []
+  assert.ok(uiShare.length <= 1, 'manifest must not duplicate @inkcre/ui-web shares')
+  // 未消费 UI JavaScript 的生产入口不会在构建产物中生成 UI share。
+  if (uiShare.length) {
+    assert.ok(uiVersion, 'shared @inkcre/ui-web must declare the producer UI version')
     assert.equal(uiShare[0].requiredVersion, uiVersion)
   }
   assert.equal(coreShare.length, 1, 'manifest must contain exactly one @inkcre/core shared module')
