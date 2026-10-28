@@ -2,7 +2,13 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { test } from 'node:test'
-import { assertDraft, checkManifest, extensionId, preparedVersion } from '../webext-release.mjs'
+import {
+  assertDraft,
+  checkManifest,
+  createDraftRelease,
+  extensionId,
+  preparedVersion,
+} from '../webext-release.mjs'
 
 const require = createRequire(new URL('../../apps/client-webext/package.json', import.meta.url))
 
@@ -21,6 +27,26 @@ void test('draft recovery cannot overwrite a public version or another source', 
   assertDraft(draft, draft.tag_name, source)
   assert.throws(() => assertDraft({ ...draft, draft: false }, draft.tag_name, source))
   assert.throws(() => assertDraft(draft, draft.tag_name, 'b'.repeat(40)))
+  assert.throws(() => assertDraft(undefined, draft.tag_name, source), /draft release was not found/)
+})
+
+void test('a new draft uses its creation response before release inventory catches up', async (t) => {
+  const source = 'a'.repeat(40)
+  const draft = { id: 42, tag_name: 'webext-v0.2.0', target_commitish: source, draft: true }
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, 'https://api.github.com/repos/InKCre/impl-ts/releases')
+    assert.equal(options.method, 'POST')
+    const request = JSON.parse(options.body)
+    assert.equal(request.tag_name, draft.tag_name)
+    assert.equal(request.target_commitish, source)
+    assert.equal(request.draft, true)
+    assert.match(request.body, /发布说明/)
+    return Response.json(draft, { status: 201 })
+  })
+  assert.deepEqual(
+    await createDraftRelease({ tag: draft.tag_name, source, version: '0.2.0', news: '发布说明' }),
+    draft
+  )
 })
 
 void test('browser artifacts preserve identity, numeric version and readable toolbar variants', async () => {

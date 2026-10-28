@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { access, readFile, readdir, realpath } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { inspectBrowserArtifact } from './browser-runtime-contract.mjs'
+import { inspectNativeModuleFederation } from './verify-native-extension-distribution.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const jsonOutput = process.argv.includes('--json')
@@ -45,6 +46,36 @@ await Promise.all(
     'extensions/twitter/dist/client-web/remoteEntry.js',
   ].map((path) => requireFile(`${repoRoot}/${path}`))
 )
+
+for (const entry of await readdir(`${repoRoot}/extensions`, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue
+  const directory = `${repoRoot}/extensions/${entry.name}`
+  let metadata
+  try {
+    metadata = JSON.parse(await readFile(`${directory}/package.json`, 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT') continue
+    throw error
+  }
+  if (!metadata.inkcre?.module_federation) continue
+  try {
+    await inspectNativeModuleFederation({
+      packagePath: `${directory}/package.json`,
+      corePackagePath: `${coreRoot}/package.json`,
+      artifactDirectory: `${directory}/dist/client-web`,
+    })
+    if (entry.name === 'twitter') {
+      const manifest = JSON.parse(
+        await readFile(`${directory}/dist/client-web/mf-manifest.json`, 'utf8')
+      )
+      if (!manifest.shared?.some((shared) => shared.name === '@inkcre/ui-web')) {
+        errors.push('Twitter UI components must share @inkcre/ui-web with the Host')
+      }
+    }
+  } catch (error) {
+    errors.push(`${metadata.name} native distribution inspection failed: ${error.message}`)
+  }
+}
 
 const twitterRemoteEntry = `${repoRoot}/extensions/twitter/dist/client-web/remoteEntry.js`
 try {
