@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { manageExtensionOnPeer } from '@inkcre/core'
+
 import { computed, inject, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { InkButton, InkDropdown, InkForm, InkInput, INK_I18N_KEY } from '@inkcre/ui-web'
 import {
@@ -10,7 +12,7 @@ import {
   type InstalledExtension,
   type Peer,
 } from '@inkcre/core'
-import { manageExtensionOnPeer } from '@inkcre/extension-runtime-client-web'
+
 import {
   extensionName,
   ensureMemosParticipation,

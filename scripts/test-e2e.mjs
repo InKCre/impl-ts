@@ -1,6 +1,10 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile, mkdtemp, rm, cp } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { pendingCoreVersion } from './sdk-compatibility.mjs'
+import { prepareSdkCandidate } from './prepare-sdk-candidate.mjs'
 
 import {
   availablePort,
@@ -49,6 +53,27 @@ async function waitForWeb(url) {
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
   throw new Error(`built web artifact did not become ready at ${url}`)
+}
+
+// A raised minimum SDK must be tested with the Changesets-derived Host, not an
+// old package version that happens to contain the new source API.
+if (await pendingCoreVersion(repoRoot)) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'inkcre-web-candidate-'))
+  const candidate = path.join(directory, 'source')
+  try {
+    await prepareSdkCandidate(repoRoot, candidate, {
+      committedSvc: process.env.INKCRE_CANDIDATE_COMMITTED_SVC === '1',
+    })
+    run('pnpm', ['test:e2e:web', ...process.argv.slice(2)], { cwd: candidate, timeout: 600_000 })
+  } finally {
+    const evidence = path.join(repoRoot, 'test-results/sdk-candidate')
+    await rm(evidence, { recursive: true, force: true })
+    await cp(path.join(candidate, 'test-results'), evidence, { recursive: true }).catch((error) => {
+      if (error.code !== 'ENOENT') throw error
+    })
+    await rm(directory, { recursive: true, force: true })
+  }
+  process.exit(0)
 }
 
 const identityHash = createHash('sha256')

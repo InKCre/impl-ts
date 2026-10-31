@@ -7,13 +7,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./bootstrap": "./src/bootstrap.ts",
-    "./Layout": "./src/components/Layout.vue"
+    "./Layout": "./src/components/Layout.vue",
+    "./selection": "./src/selection.ts"
   },
   "scripts": {
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@inkcre/core": "workspace:*",
+    "@inkcre/extension-runtime-client-web": "https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz",
     "@inkcre/ui-web": "2.5.0"
   },
   "devDependencies": {

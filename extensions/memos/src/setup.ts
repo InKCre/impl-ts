@@ -1,22 +1,19 @@
-import corePackage from '../../../packages/core/package.json'
+import { readExtensionPeerStatus, listAdvertisedExtensionManagementPeers } from '@inkcre/core'
+import {
+  ensureExtensionSelection,
+  runtimeFailed,
+  waitingForRuntime,
+} from '@inkcre/ext-dev-utils/selection'
 import {
   ExtensionModel,
-  ExtensionParticipationModel,
   configStore,
   ExtensionRegistryOriginResolver,
   PeerManager,
   PeerProtocolResponseSchema,
   type InstalledExtension,
-  type Peer,
+  Peer,
 } from '@inkcre/core'
-import {
-  getExtensionDocumentation,
-  RegistryReleaseReader,
-  sortPublishedReleases,
-  manageExtensionOnPeer,
-  readExtensionPeerStatus,
-  listAdvertisedExtensionManagementPeers,
-} from '@inkcre/extension-runtime-client-web'
+import { getExtensionDocumentation } from '@inkcre/extension-runtime-client-web'
 
 export const extensionName = 'inkcre/memos'
 export const tokenPattern = /^memos_pat_[0-9A-Za-z]{32}$/
@@ -53,23 +50,10 @@ export async function readSetup(): Promise<{ extension: ExtensionModel; peers: P
 
 /** An explicit connection-preparation action may create a native selection, never background restore. */
 export async function ensureMemosParticipation(peerId: string): Promise<void> {
-  if (await ExtensionParticipationModel.get(peerId, extensionName)) return
-  const origin = await new ExtensionRegistryOriginResolver(
-    () => configStore.peerConfig.extension_registry_url
-  ).resolve()
-  const reader = new RegistryReleaseReader({
-    registryOrigin: origin,
-    hostSdk: { name: '@inkcre/core', version: corePackage.version },
-  })
-  const catalog = await reader.getExtension(extensionName, 'python')
-  const release = sortPublishedReleases(catalog.releases ?? [])[0]
-  if (!release) throw new Error('Memos has no published Python distribution.')
-  await manageExtensionOnPeer(peerId, {
-    action: 'select',
-    extension: extensionName,
-    distribution: 'python',
-    version: release.version,
-  })
+  const status = await ensureExtensionSelection(await Peer.get(peerId), extensionName, 'python')
+  if (runtimeFailed(status)) throw new Error('Recover the failed Peer operation before continuing.')
+  if (waitingForRuntime(status))
+    throw new Error('Wait for the selected Peer to finish and refresh before continuing.')
 }
 
 export class MemosConnectionError extends Error {

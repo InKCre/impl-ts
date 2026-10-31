@@ -195,3 +195,95 @@ void test('byte resolver handles survive concurrent readers and end with their o
     })
   }
 })
+
+void test('an extension declares lazy bytes without its own queue, URL or dispose override', async () => {
+  const arrivals = []
+  class MediaResolver extends Resolver {
+    media = this.createByteContent(async () => {
+      const arrival = Promise.withResolvers()
+      arrivals.push(arrival)
+      return arrival.promise
+    })
+    _getSolvedContent() {
+      return Promise.resolve({ title: 'metadata only' })
+    }
+    getText() {
+      return Promise.resolve('metadata only')
+    }
+    loadContent(options) {
+      return this.media.load(undefined, options)
+    }
+  }
+  const resolver = new MediaResolver(block('test.media.v1'))
+  await resolver.getSolvedContent()
+  assert.equal(arrivals.length, 0, 'metadata previews never fetch bytes')
+  const first = resolver.loadContent()
+  const second = resolver.loadContent()
+  await Promise.resolve()
+  assert.equal(arrivals.length, 1)
+  arrivals[0].resolve({ content: new Uint8Array([1]), mediaType: 'video/mp4' })
+  const initial = await first
+  assert.equal(await second, initial)
+  const refresh = resolver.loadContent({ refresh: true })
+  await Promise.resolve()
+  arrivals[1].resolve({ content: new Uint8Array([2]) })
+  const updated = await refresh
+  await assert.rejects(fetch(initial.objectUrl))
+  const late = assert.rejects(resolver.loadContent({ refresh: true }), /disposed/)
+  await Promise.resolve()
+  await resolver.dispose()
+  arrivals[2].resolve({ content: new Uint8Array([3]) })
+  await late
+  await assert.rejects(fetch(updated.objectUrl))
+})
+
+void test('borrow loads complete relations while historical constructors preserve supplied snapshots', async (t) => {
+  const { Relation } = await import('../../packages/core/dist/index.js')
+  const complete = [Relation.parse({ id: 1, from_: 701, to_: 702, content: 'member' })]
+  const query = t.mock.method(Relation, 'getByBlock', async () => complete)
+  TextResolver.previewRenderer = { render: () => null }
+  TextResolver.solvedContentRenderer = { render: () => null }
+  Resolver.register(TextResolver.type, TextResolver)
+  t.after(() => {
+    ResolverCache.clear()
+    Resolver.unregister(TextResolver.type, TextResolver)
+  })
+  const borrowed = await ResolverCache.borrow(block(TextResolver.type))
+  assert.deepEqual(await borrowed.getRelations(), complete)
+  assert.equal(query.mock.callCount(), 1)
+  const legacy = new TextResolver(block(TextResolver.type), [])
+  assert.deepEqual(await legacy.getRelations(), [])
+  const knownComplete = Resolver.createOwned(block(TextResolver.type), {
+    complete: true,
+    relations: [],
+  })
+  assert.deepEqual(await knownComplete.getRelations(), [])
+  assert.equal(query.mock.callCount(), 1)
+})
+
+void test('a media snapshot is both the byte-cache identity and the exact loader input', async () => {
+  const reads = []
+  class MediaResolver extends Resolver {
+    media = this.createByteContent(async (source) => {
+      reads.push(source)
+      return { content: new Uint8Array([source.revision]) }
+    })
+    getText() {
+      return Promise.resolve(null)
+    }
+    loadContent(source) {
+      return this.media.load(source)
+    }
+  }
+  const resolver = new MediaResolver(block('test.media.v1'))
+  const firstSource = { revision: 1 }
+  const first = await resolver.loadContent(firstSource)
+  assert.equal(await resolver.loadContent(firstSource), first)
+  const secondSource = { revision: 2 }
+  const second = await resolver.loadContent(secondSource)
+  assert.deepEqual(reads, [firstSource, secondSource])
+  assert.equal(reads[1], secondSource)
+  assert.deepEqual([...second.content], [2])
+  await assert.rejects(fetch(first.objectUrl))
+  await resolver.dispose()
+})

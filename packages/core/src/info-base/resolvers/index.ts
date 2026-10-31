@@ -4,6 +4,8 @@ export {
   Resolver,
   // Protocol interfaces
   type ResolverContentState,
+  type ResolverReader,
+  type CompleteResolverRelations,
   type RecallTarget,
   type SolvedContentRendererProps,
 } from './base'
@@ -34,7 +36,12 @@ export { PdfResolver, type PdfSolvedContent } from './pdf'
 export { EpubResolver, type EpubSolvedContent } from './epub'
 export { ZipResolver, type ZipSolvedContent } from './zip'
 export { FileResolver, type FileSolvedContent } from './file'
-export type { ByteSolvedContent } from './actual-content'
+export type {
+  ByteSolvedContent,
+  ByteContentSource,
+  ByteContentOptions,
+  ByteContentResource,
+} from './actual-content'
 
 import { AudioResolver } from './audio'
 import { Resolver } from './base'

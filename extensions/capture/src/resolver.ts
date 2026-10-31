@@ -20,7 +20,7 @@ async function solve(
   const block = await Block.find(id)
   if (!block) throw new Error(`采集材料 Block ${id} 已不存在。`)
   if (!allowed.includes(block.resolver)) throw new Error(`采集材料 Block ${id} 的格式不符合合同。`)
-  const resolver = await ResolverCache.getResolver(block)
+  const resolver = await ResolverCache.borrow(block)
   return {
     block,
     resolver,

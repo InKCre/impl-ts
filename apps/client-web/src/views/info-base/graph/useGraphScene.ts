@@ -233,7 +233,7 @@ export function useGraphScene(hooks: GraphSceneHooks) {
     const lookupBeforeRestore =
       allowRestoreRetry && ['idle', 'restoring'].includes(extensionHostRestoreState.value)
     try {
-      const resolver = await ResolverCache.getResolver(entry.block, entry.relations)
+      const resolver = await ResolverCache.borrow(entry.block)
       const solvedContent = await resolver.getSolvedContent({ materializeMissing: false })
       if (!entry.owns()) return
       nodes.value = nodes.value.map((node) =>

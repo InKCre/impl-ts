@@ -180,3 +180,26 @@ Twitter 的详情 renderer 以作者、正文、媒体与引用、发布时间�
 每个媒体视图拥有独立的运行态 Resolver 和 Object URL，随视图切换、卸载或加载结果被替换而撤销；视图关闭后的异步结果也会被释放，不与同时打开的视图共享待撤销的句柄。旧格式 renderer 使用相同阅读布局，但其 Resolver 原有的附件关系解析仍可能读取字节；本轮没有改写旧格式解析合同。UI 候选验收入口及边界见 [`scripts/tests/twitter-rendering`](../../scripts/tests/twitter-rendering/README.md)。
 
 媒体显示使用运行态 Object URL，随 Resolver 刷新、释放和缓存替换撤销。协议 DTO、provider 响应及共同信息模型的转换属于 Twitter 适配器，不能让客户端协议字段集变成 info-base 或 Resolver 的持久数据权威。
+
+### Resolver 作者的资源与读取所有权
+
+新增按需字节能力使用 `this.createByteContent(loader)`。loader 接收本次 source 快照并只负责返回
+`{ content: Uint8Array, mediaType?: string }`；`resource.load(source, { refresh })` 由 Core 合并读取、
+按 source 身份保留读取与显式刷新顺序、替换 Object URL，并随 Resolver dispose 拒绝晚到结果与释放句柄。
+元数据 `_getSolvedContent` 可以独立于该操作，预览不必下载媒体。使用该操作的子类不必
+覆盖 dispose；已有第三方覆写仍须调用 `super.dispose()`。底层 I/O 不承诺取消。
+`getSolvedContent` 的 ProjectionOptions 与字节操作的 refresh 各自拥有其请求语义；
+派生权限仍由领域 Resolver 显式处理，资源 loader 不隐式创建共享派生信息。
+
+`ResolverCache.borrow(block)` 返回不含 dispose 的 `ResolverReader`，缓存拥有其寿命。
+`Resolver.createOwned(block)` 返回独立实例，调用者在关闭/替换时负责 dispose。
+旧 `getResolver` 保留兼容，但新代码不应把它返回的共享实例当作视图私有资源。
+借用的销毁权限是 TypeScript 接口约束，不是隔离第三方 JavaScript 的安全沙箱。
+
+新图场景使用不接受关系片段的 `borrow(block)`，首次 `getRelations` 从数据库取得完整关系。
+已确认完整的调用者可使用 `Resolver.createOwned(block, { complete: true, relations })`。
+旧构造器的 `Relation[]` 仍被视为完整快照，以保留第三方离线/合成图的既有行为；
+Core factory 不向只接受旧数组形状的第三方构造器传入新形状。
+现有 graph 路径不再把 fragment 传入 Resolver，这会增加部分预览的首次查询，换取完整语义。
+媒体操作把同一次 metadata 读取的对象作为 source；source 改变时旧 bytes 不再复用，
+Core 按对象身份协调加载，loader 不应重新读取另一份 metadata 快照。

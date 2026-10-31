@@ -21,6 +21,8 @@ export {
   registerCoreResolvers,
   // Resolver base types and utilities
   type ResolverContentState,
+  type ResolverReader,
+  type CompleteResolverRelations,
   type RecallTarget,
   type SolvedContentRendererProps,
   CORE_RESOLVER_IDS,
@@ -34,6 +36,9 @@ export {
   type TextProjectionContext,
   type AudioSolvedContent,
   type ByteSolvedContent,
+  type ByteContentSource,
+  type ByteContentOptions,
+  type ByteContentResource,
   type EpubSolvedContent,
   type FileSolvedContent,
   type HtmlRawContent,

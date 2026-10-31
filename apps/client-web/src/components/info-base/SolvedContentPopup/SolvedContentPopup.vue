@@ -39,8 +39,7 @@ async function load(refresh = false): Promise<void> {
       return
     }
     lookupBeforeRestore = ['idle', 'restoring'].includes(extensionHostRestoreState.value)
-    const resolverClass = Resolver.getClass(block.resolver)
-    next = new resolverClass(block)
+    next = Resolver.createOwned(block)
     const solved = await next.getSolvedContent({ refresh, materializeMissing: false })
     if (current !== generation) {
       await next.dispose()

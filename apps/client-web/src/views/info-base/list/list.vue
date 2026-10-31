@@ -16,7 +16,7 @@ import {
   LexicalRetrievalManager,
   SemanticRetrievalManager,
   ResolverCache,
-  type Resolver,
+  type ResolverReader,
   type SemanticRetrievalResult,
   presentLexicalMatches,
   type RecallGroup,
@@ -47,7 +47,7 @@ type SemanticMatch = SemanticRetrievalResult['matches'][number]
 const semanticMatches = shallowRef<
   {
     match: SemanticMatch
-    resolver?: Resolver
+    resolver?: ResolverReader
     solvedContent?: unknown
   }[]
 >([])
@@ -85,7 +85,7 @@ async function retrieve(query: string): Promise<void> {
         result.matches.map(async (match, index) => {
           if (match.type !== 'block') return
           try {
-            const resolver = await ResolverCache.getResolver(match.entity)
+            const resolver = await ResolverCache.borrow(match.entity)
             const solvedContent = await resolver.getSolvedContent({ materializeMissing: false })
             if (current !== generation) return
             semanticMatches.value = semanticMatches.value.map((item, position) =>

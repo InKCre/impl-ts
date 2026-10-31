@@ -57,7 +57,7 @@ async function solveBlock<Content>(
   block: Block,
   options: ProjectionOptions
 ): Promise<SolvedBlock<Content>> {
-  const resolver = await ResolverCache.getResolver(block)
+  const resolver = await ResolverCache.borrow(block)
   return {
     block,
     solvedContent: (await resolver.getSolvedContent({
@@ -260,7 +260,7 @@ export class EmailResolver extends Resolver<string, SolvedEmail> {
     if (block.resolver !== MailMimePartResolver.type) {
       throw new TypeError(`Block ${blockRef} is not a Mail MIME part`)
     }
-    const resolver = await ResolverCache.getResolver<MailMimePartResolver>(block)
+    const resolver = await ResolverCache.borrow<MailMimePartResolver>(block)
     await resolver.getSolvedContent({ refresh: true, materializeMissing: true })
     return this.getSolvedContent({ refresh: true, materializeMissing: false })
   }

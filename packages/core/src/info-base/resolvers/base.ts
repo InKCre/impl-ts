@@ -13,6 +13,12 @@
  */
 
 import { ref, type Component, type Ref } from 'vue'
+import {
+  ManagedByteContent,
+  type ByteContentSource,
+  type ByteContentOptions,
+  type ByteContentResource,
+} from './actual-content'
 import type { Block } from '../block'
 import type { Relation } from '../relation'
 import type { LexicalRetrievalMatch } from '../../lexical-retrieval/main'
@@ -53,7 +59,9 @@ export interface RecallTarget {
  */
 export interface SolvedContentRendererProps<
   SolvedContentT = any,
-  ResolverT extends Resolver<any, SolvedContentT> = Resolver<any, SolvedContentT>,
+  ResolverT extends ResolverReader<Resolver<any, SolvedContentT>> = ResolverReader<
+    Resolver<any, SolvedContentT>
+  >,
 > {
   /** The resolver instance (provides access to block and relations) */
   resolver: ResolverT
@@ -63,6 +71,11 @@ export interface SolvedContentRendererProps<
 // ============================================================================
 // Resolver Base Class (with DB Integration)
 // ============================================================================
+
+/** A borrowed reader exposes no instance-disposal authority. */
+export type ResolverReader<R extends Resolver<any, any> = Resolver> = Omit<R, 'dispose'>
+
+export type CompleteResolverRelations = { complete: true; relations: Relation[] }
 
 export interface ResolverClass {
   new (block: Block, relations?: Relation[]): Resolver
@@ -127,6 +140,13 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
     return resolverClass
   }
 
+  /** An independent reader; its creator owns disposal, unlike a cache borrow. */
+  static createOwned(block: Block, relations?: CompleteResolverRelations): Resolver {
+    const reader = new (this.getClass(block.resolver))(block)
+    if (relations) reader._relations = relations.relations
+    return reader
+  }
+
   static matchMediaType(mediaType: string | null | undefined): string | null {
     if (mediaType == null) return null
     const normalized = mediaType.split(';', 1)[0]!.trim().toLowerCase()
@@ -166,6 +186,7 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
   declare protected _solvedContent: SolvedContentT
   private _hasSolvedContent = false
   private disposed = false
+  private readonly byteResources: { dispose(): void }[] = []
   private pendingContent: {
     options: Required<ProjectionOptions>
     promise: Promise<SolvedContentT>
@@ -174,11 +195,13 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
   /**
    * Create a resolver instance for a block.
    * @param block - The block to resolve
-   * @param relations - Optional pre-loaded relations (lazy-loads if not provided)
+   * @param relations - Only an explicitly complete snapshot can replace a database read. Legacy arrays retain their complete-snapshot contract.
    */
-  constructor(block: Block, relations?: Relation[]) {
+  constructor(block: Block, relations?: Relation[] | CompleteResolverRelations) {
     this.block = block as Block
-    this._relations = relations ?? null // null means not loaded yet
+    // Legacy arrays retain their complete-snapshot contract. Scene fragments use
+    // cache.borrow(block), which deliberately supplies no preloaded relations.
+    this._relations = Array.isArray(relations) ? relations : (relations?.relations ?? null)
   }
 
   /**
@@ -212,10 +235,17 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
     return this._relations as Relation[]
   }
 
-  /**
-   * Get raw content (lazy-loaded).
-   * Fetches from Storage if block.storage is set, otherwise returns block.content.
-   */
+  /** Declare a lazy byte resource whose queue and browser handle belong to this resolver. */
+  protected createByteContent<Source>(
+    read: (source: Source, options: ByteContentOptions) => Promise<ByteContentSource>
+  ): ByteContentResource<Source> {
+    this.ensureNotDisposed()
+    const resource = new ManagedByteContent(read)
+    this.byteResources.push(resource)
+    return resource
+  }
+
+  /** Read raw content lazily from this Block's storage or inline content. */
   async getRawContent(options: Pick<ProjectionOptions, 'refresh'> = {}): Promise<RawContentT> {
     return this.block.getHydratedContent(options) as Promise<RawContentT>
   }
@@ -301,6 +331,7 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
    */
   async dispose(): Promise<void> {
     this.disposed = true
+    for (const resource of this.byteResources) resource.dispose()
     this._hasSolvedContent = false
     this.solvedContentState.value = { status: 'idle', error: null }
   }

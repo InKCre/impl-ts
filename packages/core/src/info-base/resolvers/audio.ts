@@ -1,4 +1,4 @@
-import { ActualContentHandle, type ByteSolvedContent } from './actual-content'
+import { type ByteSolvedContent } from './actual-content'
 import { Resolver } from './base'
 import { type ProjectionOptions, UnsupportedResolverCapability } from './contracts'
 
@@ -13,12 +13,13 @@ export interface AudioSolvedContent extends ByteSolvedContent {
 
 export class AudioResolver extends Resolver<Uint8Array, AudioSolvedContent> {
   static readonly type = 'core.audio.v1'
-  private readonly actualContent = new ActualContentHandle()
+  private readonly actualContent = this.createByteContent(async (_source: undefined, options) => ({
+    content: await this.getRawContent(options),
+  }))
 
   protected async _getSolvedContent(options: ProjectionOptions): Promise<AudioSolvedContent> {
-    const rawContent = await this.getRawContent(options)
     return {
-      ...this.actualContent.replace(rawContent),
+      ...(await this.actualContent.load(undefined, options)),
       container: null,
       codec: null,
       duration_ms: null,
@@ -30,10 +31,5 @@ export class AudioResolver extends Resolver<Uint8Array, AudioSolvedContent> {
 
   async getText(_options: ProjectionOptions = {}): Promise<never> {
     throw new UnsupportedResolverCapability(AudioResolver.type, 'text')
-  }
-
-  async dispose(): Promise<void> {
-    this.actualContent.dispose()
-    await super.dispose()
   }
 }

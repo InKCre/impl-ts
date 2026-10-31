@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Block, Resolver } from '@inkcre/core'
+import type { Block, ResolverReader } from '@inkcre/core'
 
 export const captureMetadata = z.object({
   submission_id: z.uuid(),
@@ -22,7 +22,7 @@ export const attachmentMetadata = z.object({
 
 export interface SolvedMaterial {
   block: Block
-  resolver: Resolver
+  resolver: ResolverReader
   solvedContent: unknown
 }
 export interface SolvedCapture {

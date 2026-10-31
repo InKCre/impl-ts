@@ -22,13 +22,10 @@ import { z } from 'zod'
 import { setLocale, SUPPORT_LOCALES, LOCALE_NAMES, type SupportLocale } from '@/locales'
 import i18n from '@/locales'
 import {
-  adoptWebPeerRuntime,
-  prepareWebPeerConfigurationChange,
+  switchWebPeerConnection,
+  resetWebPeerConnection,
   webPeerConnectionState,
   startConfiguredWebPeerRuntime,
-  stopWebPeerRuntime,
-  WEB_PEER_IDENTITY,
-  refreshCurrentWebPeer,
 } from '@/core'
 
 const { t } = useI18n()
@@ -163,21 +160,16 @@ const onSave = async () => {
   feedback.value = null
   try {
     const validatedMeta = MetaConfigSchema.parse(metaFormConfig)
-    await prepareWebPeerConfigurationChange(validatedMeta)
     const name = connectionName.value.trim() || new URL(validatedMeta.INKCRE_PGREST_URL).host
-    const runtime = await configStore.connectAndSave(validatedMeta, WEB_PEER_IDENTITY, {
+    await switchWebPeerConnection(validatedMeta, {
       id: editingId.value,
       name,
     })
-    await adoptWebPeerRuntime(runtime)
-    void refreshCurrentWebPeer()
     Object.assign(metaFormConfig, configStore.metaConfig)
     feedback.value = { action: 'save', error: false, message: t('settings.saveSuccess') }
     toast.success(t('settings.saveSuccess'))
     return true
   } catch (error) {
-    if (webPeerConnectionState.value === 'idle' && hasConnectedConfig.value)
-      webPeerConnectionState.value = 'failed'
     console.error('Failed to save config:', error)
     feedback.value = { action: 'save', error: true, message: t('common.saveFailed') }
     toast.error(t('common.saveFailed'))
@@ -192,8 +184,7 @@ const onReset = async () => {
   pendingAction.value = 'reset'
   feedback.value = null
   try {
-    await stopWebPeerRuntime()
-    await configStore.resetMeta()
+    await resetWebPeerConnection()
     Object.assign(metaFormConfig, configStore.metaConfig)
   } catch {
     feedback.value = { action: 'reset', error: true, message: t('common.saveFailed') }
@@ -244,21 +235,11 @@ const onFileSelected = async (event: Event) => {
       (item) => item.id === connections.activeConnectionId
     )
     if (!selected) throw new Error('The backup has no selected connection')
-    await prepareWebPeerConfigurationChange(selected.config)
-    const runtime = await configStore.connectAndSave(
-      selected.config,
-      WEB_PEER_IDENTITY,
-      selected,
-      connections
-    )
-    await adoptWebPeerRuntime(runtime)
-    void refreshCurrentWebPeer()
+    await switchWebPeerConnection(selected.config, selected, connections)
     await setLocale(imported.locale)
     Object.assign(metaFormConfig, configStore.metaConfig)
     feedback.value = { action: 'import', error: false, message: t('settings.importSuccess') }
   } catch (error) {
-    if (webPeerConnectionState.value === 'idle' && hasConnectedConfig.value)
-      webPeerConnectionState.value = 'failed'
     console.error('Failed to import config:', error)
     feedback.value = { action: 'import', error: true, message: t('settings.importError') }
   } finally {

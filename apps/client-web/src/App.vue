@@ -13,6 +13,7 @@ import { useI18n } from 'vue-i18n'
 import { configStore } from '@inkcre/core'
 import {
   currentWebPeer,
+  connectionGeneration,
   extensionHostConnectionReady,
   webPeerConnectionState,
   initializeCore,
@@ -31,17 +32,6 @@ const connectionNoticeKey = computed(() => {
   return 'startup.peerConnecting'
 })
 const reload = () => window.location.reload()
-const connectionGeneration = ref(0)
-watch(
-  () => [
-    configStore.metaConfig.INKCRE_PGREST_URL,
-    configStore.metaConfig.INKCRE_JWT_SECRET,
-    configStore.metaConfig.INKCRE_PEER_ID,
-  ],
-  () => {
-    connectionGeneration.value += 1
-  }
-)
 
 onMounted(async () => {
   const loadPeerConfig = shouldLoadPeerConfigAtBootstrap(window.location.pathname)

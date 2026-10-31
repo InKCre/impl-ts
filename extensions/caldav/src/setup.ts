@@ -1,23 +1,18 @@
-import corePackage from '../../../packages/core/package.json'
+import {
+  listAdvertisedExtensionManagementPeers,
+  manageExtensionOnPeer,
+  readExtensionPeerStatus,
+} from '@inkcre/core'
+import { ensureExtensionSelection } from '@inkcre/ext-dev-utils/selection'
 import {
   ExtensionModel,
-  ExtensionRegistryOriginResolver,
-  DBAPIClient,
   PeerManager,
   PeerProtocolResponseSchema,
   type ExtensionRuntimeStatus,
   type Peer,
 } from '@inkcre/core'
-import {
-  listAdvertisedExtensionManagementPeers,
-  manageExtensionOnPeer,
-  readExtensionPeerStatus,
-  RegistryReleaseReader,
-  sortPublishedReleases,
-} from '@inkcre/extension-runtime-client-web'
 
 import {
-  configuredRegistry,
   generatePassword,
   runtimeFailed,
   runtimeReady,
@@ -86,43 +81,9 @@ export async function readConnection(
 
 /** Each explicit action advances only this Peer; a restart requires a read before further writes. */
 export async function prepareConnection(peer: Peer): Promise<ExtensionRuntimeStatus> {
-  const observed = await readExtensionPeerStatus(peer.id, extensionName)
-  if (!observed.supported_distributions.includes('python'))
-    throw new Error('Python is not supported.')
-  let status = observed.extensions.find((row) => row.name === extensionName) ?? null
+  let status = await ensureExtensionSelection(peer, extensionName, 'python')
   if (runtimeFailed(status)) throw new Error('Recover the failed Peer operation before continuing.')
-  if (waitingForRuntime(status)) return status!
-  if (!status?.version) {
-    const override = peer.config.extension_registry_url
-    let deployment = null
-    if (override == null || override === '') {
-      const result = await new DBAPIClient<'configs'>('configs')
-        .from()
-        .select('schema,value')
-        .eq('key', 'extension.registry')
-        .maybeSingle()
-      if (result.error) throw new Error('Unable to read deployment Registry configuration.')
-      deployment = result.data
-    }
-    const configured = configuredRegistry(override, deployment)
-    const registryOrigin = await new ExtensionRegistryOriginResolver(() => configured).resolve()
-    const reader = new RegistryReleaseReader({
-      registryOrigin,
-      hostSdk: { name: '@inkcre/core', version: corePackage.version },
-    })
-    const release = sortPublishedReleases(
-      (await reader.getExtension(extensionName, 'python')).releases ?? []
-    )[0]
-    if (!release) throw new Error('No published Python release.')
-    status = await manageExtensionOnPeer(peer.id, {
-      action: 'select',
-      extension: extensionName,
-      distribution: 'python',
-      version: release.version,
-    })
-    if (runtimeFailed(status) || waitingForRuntime(status)) return status
-  }
-  if (status.distribution !== 'python') throw new Error('The selected distribution is not Python.')
+  if (waitingForRuntime(status)) return status
   const extension = await ExtensionModel.get(extensionName)
   if (!extension) throw new Error('CalDAV is not installed.')
   if (!savedPassword(extension)) {

@@ -43,8 +43,7 @@ async function relatedGroups(
   resolver: Resolver,
   relationships: Relationship[]
 ): Promise<RelatedGroup[]> {
-  // A graph scene can preload only a bounded incident fragment; membership needs stored edges.
-  const relations = await resolver.getRelations({ refresh: true })
+  const relations = await resolver.getRelations()
   const groups: RelatedGroup[] = []
   for (const relationship of relationships) {
     const matches = relations.filter((relation) => {

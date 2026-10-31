@@ -8,7 +8,10 @@
 import {
   configStore,
   PeerConfigSchema,
+  MetaConfigSchema,
+  ConnectionSettingsSchema,
   type MetaConfig,
+  type ConnectionSettings,
   initializeTelemetry,
   shutdownTelemetry,
   flushTelemetry,
@@ -92,6 +95,18 @@ export const WEB_PEER_IDENTITY = {
 
 // Runtime identity for this browser; never persisted as a second copy of the Peer name.
 export const currentWebPeer = Vue.shallowRef<Pick<Peer, 'id' | 'name'> | null>(null)
+
+export const connectionGeneration = Vue.ref(0)
+Vue.watch(
+  () => [
+    configStore.metaConfig.INKCRE_PGREST_URL,
+    configStore.metaConfig.INKCRE_JWT_SECRET,
+    configStore.metaConfig.INKCRE_PEER_ID,
+  ],
+  () => {
+    connectionGeneration.value += 1
+  }
+)
 
 export async function refreshCurrentWebPeer(): Promise<void> {
   const peerId = configStore.metaConfig.INKCRE_PEER_ID
@@ -242,8 +257,56 @@ export function getExtensionSetupContribution(name: string): ExtensionSetupContr
   return getExtensionHost().getModule(name)?.setup ?? null
 }
 
+/** Settings, imports and future switchers share the complete connection transition. */
+let connectionTransition: Promise<unknown> = Promise.resolve()
+function changeConnection<T>(change: () => Promise<T>): Promise<T> {
+  const result = connectionTransition.then(change)
+  connectionTransition = result.catch(() => undefined)
+  return result
+}
+
+export function switchWebPeerConnection(
+  meta: MetaConfig,
+  selection?: { id: string; name: string },
+  imported?: ConnectionSettings
+): Promise<void> {
+  const candidate = MetaConfigSchema.parse(meta)
+  const selected = selection ? { ...selection } : undefined
+  const importedSettings = imported ? ConnectionSettingsSchema.parse(imported) : undefined
+  return changeConnection(async () => {
+    try {
+      await prepareWebPeerConfigurationChange(candidate)
+      const runtime = await configStore.connectAndSave(
+        candidate,
+        WEB_PEER_IDENTITY,
+        selected,
+        importedSettings
+      )
+      await adoptWebPeerRuntime(runtime)
+      void refreshCurrentWebPeer()
+    } catch (error) {
+      // Preserve the existing recovery policy: a failed replacement leaves the old
+      // persisted connection available, but does not silently restart its runtime.
+      if (
+        webPeerConnectionState.value === 'idle' &&
+        configStore.metaConfig.INKCRE_PGREST_URL &&
+        configStore.metaConfig.INKCRE_JWT_SECRET
+      )
+        webPeerConnectionState.value = 'failed'
+      throw error
+    }
+  })
+}
+
+export function resetWebPeerConnection(): Promise<void> {
+  return changeConnection(async () => {
+    await stopWebPeerRuntime()
+    await configStore.resetMeta()
+  })
+}
+
 /** Replace the browser-owned lease runtime after a validated Settings cutover. */
-export async function adoptWebPeerRuntime(runtime: WebPeerRuntime): Promise<void> {
+async function adoptWebPeerRuntime(runtime: WebPeerRuntime): Promise<void> {
   if (webPeerRuntime !== runtime) webPeerRuntime?.stop()
   webPeerRuntime = runtime
   await applyWebPeerParticipation(runtime, { ...configStore.metaConfig })
@@ -348,7 +411,7 @@ export async function stopWebPeerRuntime(): Promise<void> {
 }
 
 /** Drain work against the old connection before configuration changes its database authority. */
-export async function prepareWebPeerConfigurationChange(next: MetaConfig): Promise<void> {
+async function prepareWebPeerConfigurationChange(next: MetaConfig): Promise<void> {
   const current = configStore.metaConfig
   const sameConnection =
     next.INKCRE_PGREST_URL === current.INKCRE_PGREST_URL &&

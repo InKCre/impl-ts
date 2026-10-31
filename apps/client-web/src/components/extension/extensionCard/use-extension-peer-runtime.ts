@@ -1,3 +1,4 @@
+import { manageExtensionOnPeer } from '@inkcre/core'
 import {
   computed,
   nextTick,
@@ -19,7 +20,7 @@ import {
   type NativeDistribution,
   type Peer,
 } from '@inkcre/core'
-import { manageExtensionOnPeer } from '@inkcre/extension-runtime-client-web'
+
 import {
   extensionHostRestoreState,
   extensionHostConnectionReady,

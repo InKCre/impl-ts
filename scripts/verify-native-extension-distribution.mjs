@@ -114,13 +114,17 @@ export async function inspectNativeModuleFederation({
   packagePath,
   corePackagePath,
   artifactDirectory,
+  candidateCoreVersion,
 }) {
   const [extensionPackage, corePackage, manifest] = await Promise.all([
     readJson(packagePath),
     readJson(corePackagePath),
     readJson(path.join(artifactDirectory, 'mf-manifest.json')),
   ])
-  const association = readAssociation(extensionPackage, corePackage)
+  const checkedCore = candidateCoreVersion
+    ? { ...corePackage, version: candidateCoreVersion }
+    : corePackage
+  const association = readAssociation(extensionPackage, checkedCore)
   const closure = manifestClosure(manifest)
 
   for (const relativePath of closure) {
@@ -150,8 +154,8 @@ export async function inspectNativeModuleFederation({
     'manifest @inkcre/core range must match the Registry Host SDK range'
   )
   assert.ok(
-    satisfies(corePackage.version, sharedRange),
-    `manifest shared range does not accept @inkcre/core ${corePackage.version}`
+    satisfies(checkedCore.version, sharedRange),
+    `manifest shared range does not accept @inkcre/core ${checkedCore.version}`
   )
 
   return {

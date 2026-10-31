@@ -113,14 +113,8 @@ jobs:
       - name: 校验 TS7、Vue 类型、静态规则及产物合同
         run: pnpm check
 
-      - name: Verify independent MF publication
-        run: >-
-          node --test scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs
-          scripts/tests/independent-extension-release.test.mjs
-          scripts/tests/release-checkout.test.mjs
-          scripts/tests/core-sdk-compatibility.test.mjs
-          scripts/tests/resolver-lifecycle.test.mjs
-          scripts/tests/pages-preview.test.mjs
+      - name: Verify minimum supported SDK consumers
+        run: pnpm verify:sdk
 
   peer-database:
     name: client-web E2E

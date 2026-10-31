@@ -440,6 +440,47 @@ test('switching connections cannot renew a pending old registration against eith
   }
 })
 
+test('a failed connection replacement keeps saved identity stopped until an explicit reconnect', async ({
+  page,
+}) => {
+  await page.clock.install()
+  await page.clock.setFixedTime(new Date())
+  let leases = 0
+  let scans = 0
+  await page.route('**/rpc/renew_peer_lease', async (route) => {
+    leases++
+    await route.fulfill({ json: new Date(Date.now() + 90_000).toISOString() })
+  })
+  await page.route('**/jobs?**', async (route) => {
+    if (new URL(route.request().url()).searchParams.get('status') === 'eq.pending') scans++
+    await route.fulfill({ json: [] })
+  })
+  const rejectedUrl = 'https://connection-rejected.invalid/'
+  await page.route(`${rejectedUrl}**`, async (route) => {
+    await route.fulfill({ status: 401, json: { message: 'Rejected candidate credentials' } })
+  })
+  await page.goto('/sources')
+  await expect.poll(() => leases).toBeGreaterThan(0)
+  await openSettings(page)
+  const saved = await page.evaluate(() => localStorage.getItem('inkcre_app_config'))
+  const save = page.getByRole('button', { name: 'Save and use connection', exact: true })
+  await page.getByLabel('PostgREST URL').fill(rejectedUrl)
+  await save.click()
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Unable to save')
+  await expect(save).toBeEnabled()
+  expect(await page.evaluate(() => localStorage.getItem('inkcre_app_config'))).toBe(saved)
+  const stoppedLeases = leases
+  const stoppedScans = scans
+  await page.clock.fastForward(35_000)
+  expect(leases).toBe(stoppedLeases)
+  expect(scans).toBe(stoppedScans)
+  // The next explicit operation must still run after the rejected queue entry.
+  await page.getByLabel('PostgREST URL').fill(postgrestUrl)
+  await save.click()
+  await expect(save).toBeEnabled()
+  await expect.poll(() => leases).toBeGreaterThan(stoppedLeases)
+})
+
 test('a new browser identity waits for insertion before opening business pages', async ({
   page,
 }) => {

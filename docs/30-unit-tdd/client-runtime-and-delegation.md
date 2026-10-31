@@ -231,3 +231,11 @@ Peer HTTP 是唯一新增 W3C 传播 owner，目标来自已验证的 Peer adver
 PostgREST 请求只生成本地 client span，不注入传播头，也不冒充远端 server/SQL span。
 开启传播的 Peer 请求使用 `redirect: error`，包括同 origin 跳转也不跟随；重定向失败仍为
 `PeerOutcomeUnknown` 且不重试，关闭态保留既有 fetch 行为。无全局 fetch patch；外部 provider、Source 和内容读取不会意外携带内部 trace 或 baggage。
+
+### Web 连接切换入口
+
+保存和导入使用 Client-Web 的 `switchWebPeerConnection`，重置使用 `resetWebPeerConnection`。
+该 owner 串行处理请求，先排空旧连接的工作，再验证/保存目标并接管新运行时；UI 不再直接
+编排 prepare、config store 和 adopt。连接 generation 也由此运行模块观察，业务视图只消费它。
+保留原恢复行为：旧运行时已停而目标验证/保存失败时，不暗中恢复旧运行时；已持久保存的
+旧连接仍可在设置页重试。重置保存失败仍遵循原有停止后报错行为。

@@ -1,6 +1,6 @@
-import type { Resolver } from '@inkcre/core'
+import type { ResolverReader } from '@inkcre/core'
 
 export interface SolvedContentRendererProps {
-  resolver: Resolver
+  resolver: ResolverReader
   solvedContent: unknown
 }

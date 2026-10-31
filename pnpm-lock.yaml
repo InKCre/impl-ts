@@ -682,6 +682,9 @@ importers:
       '@inkcre/core':
         specifier: workspace:*
         version: link:../core
+      '@inkcre/extension-runtime-client-web':
+        specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz
+        version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)
       '@inkcre/ui-web':
         specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
         version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz(patch_hash=2b0f967ae08c3559202523c4ccb3ed4769ff9d8863a52c600259231171d56051)(unocss@66.7.5(vite@8.1.5(@types/node@22.17.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.44(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))

@@ -102,6 +102,12 @@ jobs:
         env:
           PDM_CHECK_UPDATE: 'false'
 
+      - name: Derive unpublished compatible SDK and producer versions
+        working-directory: candidate
+        run: |
+          git update-ref refs/heads/main HEAD
+          pnpm release:version
+
       - name: Build the exact-head SPA and Module Federation snapshots
         working-directory: candidate
         run: pnpm build

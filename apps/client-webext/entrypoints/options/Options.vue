@@ -45,7 +45,7 @@ const currentConnection = computed(() =>
 const origin = ref('')
 const exclusions = ref('')
 const folders = ref([{ label: '全部书签', value: '' }])
-const importKind = ref('bookmarks')
+const importKind = ref<'bookmarks' | 'history'>('bookmarks')
 const folder = ref('')
 const since = ref(new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10))
 const until = ref(new Date().toISOString().slice(0, 10))
@@ -58,7 +58,7 @@ const draft = ref<{
   url: string
   title: string
   captured_at: string
-  method?: string
+  method?: 'selected-text' | 'legacy-note-recovery'
 }>()
 const note = ref('')
 const connectionOptions = computed(
@@ -293,7 +293,7 @@ onMounted(() => {
         layout="col"
         @submit="
           action(
-            () => collectionMessage({ type: 'collection-save-draft', draft, note }),
+            () => collectionMessage({ type: 'collection-save-draft', draft: draft!, note }),
             '已在本机等待发送。'
           )
         "

@@ -1,4 +1,9 @@
 import {
+  EXTENSION_MANAGEMENT_CAPABILITY,
+  manageExtensionOnPeer,
+  readExtensionPeerStatus,
+} from '@inkcre/core'
+import {
   ExtensionModel,
   ExtensionParticipationModel,
   Peer,
@@ -7,9 +12,6 @@ import {
   type NativeDistribution,
 } from '@inkcre/core'
 import {
-  EXTENSION_MANAGEMENT_CAPABILITY,
-  manageExtensionOnPeer,
-  readExtensionPeerStatus,
   type ExtensionManager,
   type RegistryReleaseReader,
 } from '@inkcre/extension-runtime-client-web'

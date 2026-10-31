@@ -23,7 +23,7 @@ export default defineContentScript({
       running = true
       try {
         routeObservation()
-        const allowed = await collectionMessage<{ allowed: boolean }>({
+        const allowed = await collectionMessage({
           type: 'collection-auto-allowed',
         })
         if (!allowed?.allowed) {
@@ -37,20 +37,15 @@ export default defineContentScript({
           title: capture.material.title,
         })
         if (previous !== fingerprint) {
-          const result = (await browser.runtime.sendMessage({
-            type: 'collection-observe',
-            capture,
-          })) as { ok?: boolean; value?: unknown }
-          if (result?.ok && result.value) previous = fingerprint
+          const result = await collectionMessage({ type: 'collection-observe', capture })
+          if (result) previous = fingerprint
           delay = 30_000
         } else delay = Math.min(delay * 2, 300_000)
       } catch (error) {
-        await browser.runtime
-          .sendMessage({
-            type: 'collection-observation-error',
-            error: error instanceof Error ? error.message : String(error),
-          })
-          .catch(() => undefined)
+        await collectionMessage({
+          type: 'collection-observation-error',
+          error: error instanceof Error ? error.message : String(error),
+        }).catch(() => undefined)
       } finally {
         running = false
         if (!final && document.visibilityState === 'visible') schedule(delay)

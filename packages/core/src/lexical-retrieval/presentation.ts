@@ -14,7 +14,7 @@ export async function presentLexicalMatches(
   const targets = await Promise.all(
     matches.map(async (match) => {
       try {
-        const resolver = await ResolverCache.getResolver(match.block)
+        const resolver = await ResolverCache.borrow(match.block)
         return await resolver.getRecallTarget(match)
       } catch (error) {
         if (error instanceof UnknownResolverError) return null
