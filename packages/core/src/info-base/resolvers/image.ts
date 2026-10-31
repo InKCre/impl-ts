@@ -30,5 +30,6 @@ export class ImageResolver extends Resolver<Uint8Array, ImageSolvedContent> {
 
   async dispose(): Promise<void> {
     this.actualContent.dispose()
+    await super.dispose()
   }
 }

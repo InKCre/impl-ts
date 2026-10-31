@@ -119,6 +119,7 @@ jobs:
           scripts/tests/independent-extension-release.test.mjs
           scripts/tests/release-checkout.test.mjs
           scripts/tests/core-sdk-compatibility.test.mjs
+          scripts/tests/resolver-lifecycle.test.mjs
           scripts/tests/pages-preview.test.mjs
 
   peer-database:

@@ -7,9 +7,12 @@ export interface ByteSolvedContent {
 
 export class ActualContentHandle {
   private objectUrl: string | null = null
+  private disposed = false
 
   replace(content: Uint8Array, mediaType?: string): ByteSolvedContent {
-    this.dispose()
+    // Hydration can finish after its view or cache entry has been disposed.
+    if (this.disposed) throw new Error('Resolver content handle is disposed.')
+    this.release()
     const blob = new Blob([content as BlobPart], mediaType ? { type: mediaType } : undefined)
     this.objectUrl = URL.createObjectURL(blob)
     return {
@@ -21,6 +24,11 @@ export class ActualContentHandle {
   }
 
   dispose(): void {
+    this.disposed = true
+    this.release()
+  }
+
+  private release(): void {
     if (this.objectUrl) {
       URL.revokeObjectURL(this.objectUrl)
       this.objectUrl = null

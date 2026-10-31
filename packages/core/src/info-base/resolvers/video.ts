@@ -34,5 +34,6 @@ export class VideoResolver extends Resolver<Uint8Array, VideoSolvedContent> {
 
   async dispose(): Promise<void> {
     this.actualContent.dispose()
+    await super.dispose()
   }
 }

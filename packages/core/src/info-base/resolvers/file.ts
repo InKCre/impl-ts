@@ -18,5 +18,6 @@ export class FileResolver extends Resolver<Uint8Array, FileSolvedContent> {
 
   async dispose(): Promise<void> {
     this.actualContent.dispose()
+    await super.dispose()
   }
 }

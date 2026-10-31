@@ -79,6 +79,18 @@ Byte-oriented Resolvers may expose Blob or Object URL handles for image, audio, 
 ZIP, and file content. Handles are private runtime state, never persisted solved-graph authority.
 They are revoked on Resolver refresh, disposal, cache replacement, and eviction.
 
+Resolver 统一协调并发读取：相邻且选项相同的待决请求共享结果，不同选项的请求按顺序执行，
+不会把普通读取升级为允许创建派生内容的操作，也不会吞掉显式刷新。已有缓存且没有待决请求时，
+仍由 `refresh` 决定是否重新读取；`materializeMissing` 本身只授予创建许可。
+`dispose()` 是实例的终态，重复调用安全；扩展覆盖它时必须调用 `super.dispose()`。
+释放后，新的及排队的 `getSolvedContent()` 请求会失败，尚未结束的读取不能发布 solved content 或创建新的字节句柄。
+这不取消底层 I/O，也不撤销已经开始的派生操作。Core 的私有 `ActualContentHandle` 集中拥有字节句柄，
+替换只撤销旧 URL，释放则永久关闭 handle，因此 hydration 晚到不会泄漏 URL。
+
+`scripts/tests/resolver-lifecycle.test.mjs` 从构建后的 SDK 入口验证缓存共享、刷新权限和释放顺序。
+字节生命周期使用本机 HTTP 服务与实际 Object URL，并以响应屏障控制时序；这类运行态竞态不能由类型或构建证明。
+运行 `pnpm --filter @inkcre/core build` 后执行 `node --test scripts/tests/resolver-lifecycle.test.mjs`。
+
 HTML 与 Markdown 完整阅读使用 UI 包的 `InkContentReader`，净化后置于禁止来源脚本及自动资源加载的 iframe，不直接交给 `v-html`。文字预览仍有界；只有 HTML 投影去标签，plain text 与 Markdown 保持字面内容。Markdown 的 solved／getText 均返回源文；HTML getText 保留段落、代码空白、表格单元及链接目标。 A parser-derived field may remain `null` when no proportionate browser parser
 exists while open/render/download remains supported.
 

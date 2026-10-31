@@ -38,5 +38,6 @@ export class EpubResolver extends Resolver<Uint8Array, EpubSolvedContent> {
 
   async dispose(): Promise<void> {
     this.actualContent.dispose()
+    await super.dispose()
   }
 }

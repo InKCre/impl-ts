@@ -165,6 +165,11 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
   })
   declare protected _solvedContent: SolvedContentT
   private _hasSolvedContent = false
+  private disposed = false
+  private pendingContent: {
+    options: Required<ProjectionOptions>
+    promise: Promise<SolvedContentT>
+  } | null = null
 
   /**
    * Create a resolver instance for a block.
@@ -178,7 +183,7 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
 
   /**
    * Get relations for this block (lazy-loaded from database).
-   * @param options.force - Force reload relations from database
+   * @param options.refresh - Reload relations from database
    * @param options.includeIn - Include relations where block is to_ (incoming relations)
    * @param options.includeOut - Include relations where block is from_ (outgoing relations)
    */
@@ -216,28 +221,61 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
   }
 
   /**
-   * Get solved content (lazy-loading).
-   * Manages content state transitions.
+   * Read the local solved snapshot. Matching concurrent requests share a load;
+   * different options run in order without widening materialization permission.
+   * A disposed resolver cannot be read again.
    */
   async getSolvedContent(options: ProjectionOptions = {}): Promise<SolvedContentT> {
-    if (this._hasSolvedContent && !options.refresh) {
+    this.ensureNotDisposed()
+    const requested = {
+      context: options.context ?? 'default',
+      refresh: options.refresh ?? false,
+      materializeMissing: options.materializeMissing ?? false,
+    }
+    const pending = this.pendingContent
+    if (
+      pending &&
+      pending.options.context === requested.context &&
+      pending.options.refresh === requested.refresh &&
+      pending.options.materializeMissing === requested.materializeMissing
+    ) {
+      return pending.promise
+    }
+    if (!pending && this._hasSolvedContent && !requested.refresh) {
       return this._solvedContent
     }
-    if (this.solvedContentState.value.status === 'loading') {
-      // Prevent concurrent loads
-      throw new Error('Content is already loading')
+
+    const promise = this.loadSolvedContent(requested, pending?.promise).finally(() => {
+      if (this.pendingContent?.promise === promise) this.pendingContent = null
+    })
+    this.pendingContent = { options: requested, promise }
+    return promise
+  }
+
+  private async loadSolvedContent(
+    options: ProjectionOptions,
+    previous?: Promise<SolvedContentT>
+  ): Promise<SolvedContentT> {
+    if (previous) {
+      // A failed read must not cancel a separately requested refresh or derivation.
+      await previous.catch(() => undefined)
     }
+    this.ensureNotDisposed()
     try {
       this.solvedContentState.value.status = 'loading'
       this.solvedContentState.value.error = null
-      this._solvedContent = await this._getSolvedContent(options)
+      const content = await this._getSolvedContent(options)
+      this.ensureNotDisposed()
+      this._solvedContent = content
       this._hasSolvedContent = true
       this.solvedContentState.value.status = 'success'
       return this._solvedContent
     } catch (error) {
-      this.solvedContentState.value.status = 'error'
-      this.solvedContentState.value.error =
-        error instanceof Error ? error : new Error(String(error))
+      if (!this.disposed) {
+        this.solvedContentState.value.status = 'error'
+        this.solvedContentState.value.error =
+          error instanceof Error ? error : new Error(String(error))
+      }
       throw error
     }
   }
@@ -258,10 +296,16 @@ export abstract class Resolver<RawContentT = unknown, SolvedContentT = RawConten
   }
 
   /**
-   * Cleanup when resolver is no longer needed.
-   * Override in subclasses if cleanup is required.
+   * Permanently release this instance. Pending I/O may finish, but cannot publish
+   * a solved snapshot. Overrides must also call super.dispose().
    */
   async dispose(): Promise<void> {
-    // Override in subclasses if needed
+    this.disposed = true
+    this._hasSolvedContent = false
+    this.solvedContentState.value = { status: 'idle', error: null }
+  }
+
+  private ensureNotDisposed(): void {
+    if (this.disposed) throw new Error('Resolver is disposed.')
   }
 }

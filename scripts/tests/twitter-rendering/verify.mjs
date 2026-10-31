@@ -219,7 +219,7 @@ try {
   await page.getByRole('button', { name: 'Close', exact: true }).click()
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.locator('#view').selectOption('graph')
-  await page.getByRole('button', { name: 'Explore Block #105', exact: true }).focus()
+  await page.getByRole('button', { name: 'Explore entry #105', exact: true }).focus()
   await page.keyboard.press('Enter')
   await expect(page.locator('output')).toHaveText('Focused Block #105')
   await check(
@@ -227,7 +227,7 @@ try {
     'Graph nodes stay bounded'
   )
   await shot('after-graph-dark')
-  await page.getByRole('button', { name: 'Inspect Block #105', exact: true }).click()
+  await page.getByRole('button', { name: 'Inspect entry #105', exact: true }).click()
   await expect(page.locator('.solved-content-popup')).toContainText('全文结束标记')
   expect(
     reads.filter((url) => url.includes('example.invalid')),

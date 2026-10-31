@@ -3,6 +3,7 @@ import { createI18n } from 'vue-i18n'
 import '@inkcre/ui-web/styles'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
+import en from '../../../apps/client-web/src/locales/messages/en.json'
 import App from './specimens.vue'
 
 createApp(App)
@@ -10,12 +11,7 @@ createApp(App)
     createI18n({
       legacy: false,
       locale: 'en',
-      messages: {
-        en: {
-          common: { refresh: 'Refresh', close: 'Close' },
-          infoBase: { solvedContent: { title: 'Post', missing: 'Post not found' } },
-        },
-      },
+      messages: { en },
     })
   )
   .mount('#app')

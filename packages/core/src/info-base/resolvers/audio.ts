@@ -34,5 +34,6 @@ export class AudioResolver extends Resolver<Uint8Array, AudioSolvedContent> {
 
   async dispose(): Promise<void> {
     this.actualContent.dispose()
+    await super.dispose()
   }
 }

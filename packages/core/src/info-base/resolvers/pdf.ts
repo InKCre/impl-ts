@@ -32,5 +32,6 @@ export class PdfResolver extends Resolver<Uint8Array, PdfSolvedContent> {
 
   async dispose(): Promise<void> {
     this.actualContent.dispose()
+    await super.dispose()
   }
 }

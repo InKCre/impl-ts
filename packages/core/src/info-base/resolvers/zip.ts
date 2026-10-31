@@ -32,5 +32,6 @@ export class ZipResolver extends Resolver<Uint8Array, ZipSolvedContent> {
 
   async dispose(): Promise<void> {
     this.actualContent.dispose()
+    await super.dispose()
   }
 }
