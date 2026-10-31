@@ -71,11 +71,39 @@ copy so the preview can load a mutually compatible Host and MF when a change rai
 Host SDK. This produces temporary derived versions for preview only. It neither consumes the pending
 changesets in the PR nor replaces the normal Version PR and protected-main release lifecycle.
 
-The Workspace contract check applies the same preparation after `pnpm check` has validated the
-original checkout. It builds the isolated candidate Host and MF before inspecting the native
-snapshot, and records the exact checked-out commit SHA in the job summary. For pull requests that
-SHA can be GitHub's synthetic merge commit; it identifies the source actually exported by
-`git archive`, while static, typed, and package checks still run on the original checkout first.
+The controller must explicitly invoke `pnpm exec node scripts/prepare-sdk-candidate.mjs --in-place`
+in its disposable checkout before building. This command uses the normal Changesets version plan,
+including extension-only intent, but temporarily disables candidate changelogs so a shallow checkout
+needs no Git-history fetch or repository credentials. It restores the original configuration bytes
+even on failure; no pending release is a no-op. Formal `release:version` remains unchanged.
+
+`pull_request_target` executes the trusted main-branch controller: a PR's workflow edit does not
+change the controller used for that same PR. Until that controller contains the explicit preparation
+step, the observed `GITHUB_EVENT_NAME=pull_request_target`, `GITHUB_WORKFLOW=Pages preview`,
+`GITHUB_JOB=deploy` context cannot use the source-only pending-SDK allowance. `check:package`
+rejects an incompatible unprepared Host/MF with a controller-action diagnostic. This narrow environment
+coupling is a read-only deployment guard, not an implicit version change in `pnpm build`.
+Once explicit preparation has produced a compatible Host, the guard naturally does not apply.
+
+Pending intent is read through Changesets' public release-plan API. It does not depend on a local
+`main` ref, history depth, or the CLI status command's changed-package comparison.
+
+`pnpm verify:sdk` applies the same preparation in an isolated checkout, builds the candidate Host
+and MF distributions, then checks each producer against its declared minimum SDK. Published minima
+come from the exact GitHub Release archive and SHA-256 receipt; an unreleased minimum must match the
+Changesets-derived Core candidate and is explicitly reported as unpublished. The original checkout
+keeps its package versions and pending intent. `pnpm check:package` permits an explicit pending Core
+plan for source/build checks; this does not replace `verify:sdk` or claim that version is published.
+Candidate preparation copies tracked and untracked current source, including pending edits and deletions;
+it does not use only `git archive HEAD`. By default it includes `svc.json` too. For an explicitly
+unrelated local SVC edit, `INKCRE_CANDIDATE_COMMITTED_SVC=1` uses only that file from HEAD in
+the disposable candidate; the original checkout remains untouched. This override is not used in CI.
+CI runs `pnpm check` and `pnpm verify:sdk`, the same maintained entrypoints available locally.
+
+Minimum checks type-check the actual producer sources against the minimum SDK declaration artifact,
+and exercise the new Core lifecycle/client through its public SDK. They do not claim a browser/MF
+behavior matrix for every historical Host patch or every producer feature. Existing browser journeys
+remain necessary for renderer and Host interaction changes.
 
 A plugin owns compatibility of its shared configuration, state, Source/Job parameters and stored
 information. Changesets record MF changes even when no Python change is necessary. Published native

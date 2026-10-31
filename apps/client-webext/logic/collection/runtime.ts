@@ -1,3 +1,9 @@
+import {
+  collectionCommands,
+  isCollectionCommand,
+  type CommandHandlers,
+  type CollectionStatus,
+} from './commands'
 import { z } from 'zod'
 import { MetaConfigSchema, readConnectionSettings } from '@inkcre/core'
 import { browser, type Browser } from 'wxt/browser'
@@ -25,26 +31,6 @@ import {
 } from './store'
 
 type Sender = Browser.runtime.MessageSender
-const contentTypes = new Set([
-  'collection-observe',
-  'collection-auto-allowed',
-  'collection-observation-error',
-])
-const pageTypes = new Set([
-  'collection-status',
-  'collection-wake',
-  'collection-connect',
-  'collection-check-connection',
-  'collection-settings',
-  'collection-enable-origin',
-  'collection-save',
-  'collection-read',
-  'collection-retry',
-  'collection-folders',
-  'collection-preview-import',
-  'collection-control-import',
-  'collection-save-draft',
-])
 const tabErrors = new Map<number, string>()
 let migrationWarning = ''
 let work: Promise<void> | undefined
@@ -198,7 +184,7 @@ export async function initializeCollection() {
   await syncAutomaticScripts()
   await browser.alarms.create('inkcre-collection', { periodInMinutes: 1 })
 }
-export async function collectionStatus() {
+export async function collectionStatus(): Promise<CollectionStatus> {
   const config = await settings()
   const targets = (await connections()).map(({ secret: _secret, ...target }) => target)
   const items = (await outbox())
@@ -250,49 +236,30 @@ export async function collectionStatus() {
     tabErrors: Object.fromEntries(tabErrors),
   }
 }
-export type CollectionStatus = Awaited<ReturnType<typeof collectionStatus>>
-export function handlesCollectionMessage(message: unknown) {
-  const type = (message as { type?: unknown })?.type
-  return typeof type === 'string' && (contentTypes.has(type) || pageTypes.has(type))
-}
-export async function handleCollectionMessage(
-  message: Record<string, unknown>,
-  sender: Sender
-): Promise<unknown> {
-  const type = String(message.type)
-  if (contentTypes.has(type)) {
-    const tab = await sourceTab(sender)
-    if (type === 'collection-auto-allowed') return { allowed: await automaticAllowed(tab) }
-    if (type === 'collection-observation-error') {
-      tabErrors.set(tab.id, z.string().max(1000).parse(message.error))
-      return
-    }
-    if (type === 'collection-observe') {
-      if (!(await automaticAllowed(tab))) return false
-      const capture = PageCaptureSchema.parse(message.capture)
-      if (capture.material.url !== tab.url) throw new Error('材料与实际网页不符。')
-      if (typeof capture.material.http_status === 'number' && capture.material.http_status >= 400)
-        throw new Error('HTTP 错误页未自动保存。')
-      const result = await coordinate(() => enqueueCapture(capture, true))
-      void wakeWork()
-      return result
-    }
-    return
-  }
-  if (sender.id !== browser.runtime.id || !sender.url?.startsWith(browser.runtime.getURL('/')))
-    throw new Error('只接受扩展自身页面的操作。')
-  if (type === 'collection-wake') {
+type VerifiedTab = Awaited<ReturnType<typeof sourceTab>>
+const handlers: CommandHandlers<VerifiedTab | null> = {
+  'collection-auto-allowed': async (_message, tab) => ({ allowed: await automaticAllowed(tab!) }),
+  'collection-observation-error': async (message, tab) => {
+    tabErrors.set(tab!.id, message.error)
+  },
+  'collection-observe': async ({ capture }, source) => {
+    const tab = source!
+    if (!(await automaticAllowed(tab))) return false
+    if (capture.material.url !== tab.url) throw new Error('材料与实际网页不符。')
+    if (typeof capture.material.http_status === 'number' && capture.material.http_status >= 400)
+      throw new Error('HTTP 错误页未自动保存。')
+    const queued = await coordinate(() => enqueueCapture(capture, true))
     void wakeWork()
-    return
-  }
-  if (type === 'collection-status') {
-    return collectionStatus()
-  }
-  if (type === 'collection-connect') {
-    const connectionId = z.uuid().optional().parse(message.connectionId)
-    const existing = connectionId ? await connection(connectionId) : undefined
+    return queued
+  },
+  'collection-wake': async () => {
+    void wakeWork()
+  },
+  'collection-status': async () => collectionStatus(),
+  'collection-connect': async (message) => {
+    const existing = message.connectionId ? await connection(message.connectionId) : undefined
     const target = ConnectionSchema.parse({
-      ...z.record(z.string(), z.unknown()).parse(message.connection),
+      ...message.connection,
       id: existing?.id ?? crypto.randomUUID(),
       peerId: existing?.peerId ?? crypto.randomUUID(),
     })
@@ -302,18 +269,16 @@ export async function handleCollectionMessage(
       void refreshPeer(target)
     void wakeWork()
     return target.id
-  }
-  if (type === 'collection-check-connection') {
-    await refreshPeer(await connection(z.uuid().parse(message.connectionId)))
-    return
-  }
-  if (type === 'collection-settings') {
-    await coordinate(() => setSettings(SettingsSchema.parse(message.settings)))
+  },
+  'collection-check-connection': async (message) => {
+    await refreshPeer(await connection(message.connectionId))
+  },
+  'collection-settings': async (message) => {
+    await coordinate(() => setSettings(message.settings))
     await syncAutomaticScripts()
     void wakeWork()
-    return
-  }
-  if (type === 'collection-enable-origin') {
+  },
+  'collection-enable-origin': async (message) => {
     const origin = new URL(httpURL(message.origin)).origin
     if (!(await browser.permissions.contains({ origins: [siteMatchPattern(origin)] })))
       throw new Error('尚未取得站点权限。')
@@ -328,13 +293,10 @@ export async function handleCollectionMessage(
         await browser.scripting
           .executeScript({ target: { tabId: tab.id }, files: ['/content-scripts/collection.js'] })
           .catch(() => undefined)
-    return
-  }
-  if (type === 'collection-read')
-    return materialClient(await connection(z.uuid().parse(message.connectionId))).read(
-      z.number().int().parse(message.blockId)
-    )
-  if (type === 'collection-retry') {
+  },
+  'collection-read': async (message) =>
+    materialClient(await connection(message.connectionId)).read(message.blockId),
+  'collection-retry': async (message) => {
     const item = (await outbox()).find((entry) => entry.id === message.id)
     if (!item || item.state === 'confirmed') return
     if (item.importId) await changeImport(item.importId, 'resume')
@@ -345,48 +307,15 @@ export async function handleCollectionMessage(
           await updateOutbox({ ...latest, state: 'pending', error: undefined })
       })
     void wakeWork()
-    return
-  }
-  if (type === 'collection-folders') return bookmarkFolders()
-  if (type === 'collection-preview-import')
-    return previewImport(
-      z
-        .object({
-          kind: z.enum(['bookmarks', 'history']),
-          folder: z.string(),
-          since: z.number().nonnegative(),
-          until: z.number(),
-          site: z.string(),
-          minVisits: z.number().nonnegative(),
-          fetchContent: z.boolean(),
-        })
-        .parse(message.options)
-    )
-  if (type === 'collection-control-import') {
-    await changeImport(
-      z.uuid().parse(message.id),
-      z.enum(['start', 'pause', 'resume', 'retry']).parse(message.action)
-    )
+  },
+  'collection-folders': async () => bookmarkFolders(),
+  'collection-preview-import': async (message) => previewImport(message.options),
+  'collection-control-import': async (message) => {
+    await changeImport(message.id, message.action)
     void wakeWork()
-    return
-  }
-  const config = await settings()
-  if (!config.activeConnectionId) throw new Error('请先加入信息库。')
-  const target = await connection(config.activeConnectionId)
-  const note = z
-    .string()
-    .max(1_048_576)
-    .parse(message.note ?? '')
-  if (type === 'collection-save-draft') {
-    const draft = z
-      .object({
-        text: z.string().min(1),
-        url: z.string(),
-        title: z.string(),
-        captured_at: z.string(),
-        method: z.enum(['selected-text', 'legacy-note-recovery']).optional(),
-      })
-      .parse(message.draft)
+  },
+  'collection-save-draft': async ({ draft, note }) => {
+    const target = await selectedConnection()
     httpURL(draft.url)
     const id = await coordinate(() =>
       queueSubmission(target.id, {
@@ -411,41 +340,70 @@ export async function handleCollectionMessage(
     )
     void wakeWork()
     return id
-  }
-  const tab = await activeTab(message.tabId, message.expectedURL)
-  const kind = z.enum(['page', 'selection', 'pdf', 'link']).parse(message.kind)
-  let command: SubmitMaterial
-  if (kind === 'link')
-    command = {
-      request_id: crypto.randomUUID(),
-      mode: 'record',
-      source: {
-        scope: `browser-link:${target.peerId}`,
-        key: crypto.randomUUID(),
-        metadata: { url: tab.url, title: tab.title, saved_at: new Date().toISOString() },
-      },
-      note,
+  },
+  'collection-save': async (message) => {
+    const target = await selectedConnection()
+    const tab = await activeTab(message.tabId, message.expectedURL)
+    const { kind, note } = message
+    let command: SubmitMaterial
+    if (kind === 'link')
+      command = {
+        request_id: crypto.randomUUID(),
+        mode: 'record',
+        source: {
+          scope: `browser-link:${target.peerId}`,
+          key: crypto.randomUUID(),
+          metadata: { url: tab.url, title: tab.title, saved_at: new Date().toISOString() },
+        },
+        note,
+      }
+    else {
+      const captured =
+        kind === 'pdf'
+          ? await fetchMaterial(tab.url, true)
+          : await getCapture(tab.id, kind === 'selection')
+      command = {
+        request_id: crypto.randomUUID(),
+        mode: 'fixed',
+        storage_id: target.storageId,
+        source: {
+          scope: `browser-save:${target.peerId}`,
+          key: crypto.randomUUID(),
+          metadata: { url: tab.url, title: tab.title },
+        },
+        material: captured.material,
+        parts: captured.parts,
+        note,
+      }
     }
-  else {
-    const captured =
-      kind === 'pdf'
-        ? await fetchMaterial(tab.url, true)
-        : await getCapture(tab.id, kind === 'selection')
-    command = {
-      request_id: crypto.randomUUID(),
-      mode: 'fixed',
-      storage_id: target.storageId,
-      source: {
-        scope: `browser-save:${target.peerId}`,
-        key: crypto.randomUUID(),
-        metadata: { url: tab.url, title: tab.title },
-      },
-      material: captured.material,
-      parts: captured.parts,
-      note,
-    }
-  }
-  const id = await coordinate(() => queueSubmission(target.id, command))
-  void wakeWork()
-  return id
+    const id = await coordinate(() => queueSubmission(target.id, command))
+    void wakeWork()
+    return id
+  },
+}
+
+async function selectedConnection() {
+  const config = await settings()
+  if (!config.activeConnectionId) throw new Error('请先加入信息库。')
+  return connection(config.activeConnectionId)
+}
+
+export const handlesCollectionMessage = isCollectionCommand
+export async function handleCollectionMessage(message: unknown, sender: Sender): Promise<unknown> {
+  if (!isCollectionCommand(message)) throw new Error('未知采集命令。')
+  const command = collectionCommands[message.type]
+  if (
+    command.sender === 'page' &&
+    (sender.id !== browser.runtime.id || !sender.url?.startsWith(browser.runtime.getURL('/')))
+  )
+    throw new Error('只接受扩展自身页面的操作。')
+  const tab = command.sender === 'content' ? await sourceTab(sender) : null
+  const input = command.request.parse(message)
+  // The key selects both schema and handler. Each handler is checked against that
+  // command's parsed input and result; the union is narrowed here after validation.
+  const handler = handlers[message.type] as (
+    payload: typeof input,
+    tab: VerifiedTab | null
+  ) => Promise<unknown>
+  return handler(input, tab)
 }

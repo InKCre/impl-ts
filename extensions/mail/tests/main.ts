@@ -211,7 +211,7 @@ watch(
   async (route) => {
     if (route.name !== 'solved-content') return
     const target = blocks.get(route.block)!
-    const resolver = await ResolverCache.getResolver(target)
+    const resolver = await ResolverCache.borrow(target)
     const solvedContent = await resolver.getSolvedContent({ materializeMissing: false })
     const renderer = (
       resolver.constructor as {
@@ -224,7 +224,7 @@ watch(
 )
 if (new URLSearchParams(location.search).has('projection')) {
   void (async () => {
-    const resolver = await ResolverCache.getResolver(blocks.get(11)!)
+    const resolver = await ResolverCache.borrow(blocks.get(11)!)
     const projection = {
       lexical: await resolver.getText({ context: 'lexical' }),
       default: await resolver.getText(),

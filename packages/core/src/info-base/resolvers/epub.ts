@@ -1,4 +1,4 @@
-import { ActualContentHandle, type ByteSolvedContent } from './actual-content'
+import { type ByteSolvedContent } from './actual-content'
 import { Resolver } from './base'
 import { type ProjectionOptions, UnsupportedResolverCapability } from './contracts'
 
@@ -15,12 +15,14 @@ export interface EpubSolvedContent extends ByteSolvedContent {
 
 export class EpubResolver extends Resolver<Uint8Array, EpubSolvedContent> {
   static readonly type = 'core.epub.v1'
-  private readonly actualContent = new ActualContentHandle()
+  private readonly actualContent = this.createByteContent(async (_source: undefined, options) => ({
+    content: await this.getRawContent(options),
+    mediaType: 'application/epub+zip',
+  }))
 
   protected async _getSolvedContent(options: ProjectionOptions): Promise<EpubSolvedContent> {
-    const rawContent = await this.getRawContent(options)
     return {
-      ...this.actualContent.replace(rawContent, 'application/epub+zip'),
+      ...(await this.actualContent.load(undefined, options)),
       epub_version: null,
       title: null,
       creators: null,
@@ -34,9 +36,5 @@ export class EpubResolver extends Resolver<Uint8Array, EpubSolvedContent> {
 
   async getText(_options: ProjectionOptions = {}): Promise<never> {
     throw new UnsupportedResolverCapability(EpubResolver.type, 'text')
-  }
-
-  async dispose(): Promise<void> {
-    this.actualContent.dispose()
   }
 }

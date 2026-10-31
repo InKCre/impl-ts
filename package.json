@@ -38,11 +38,14 @@
     "verify:twitter": "playwright test --config scripts/tests/twitter-acceptance.config.ts",
     "verify:core-release": "node --test scripts/tests/core-release.test.mjs",
     "build": "pnpm check:workspace && pnpm -r run build && pnpm check:package",
-    "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm build",
-    "ci": "pnpm check && pnpm test:e2e"
+    "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm build && pnpm check:behavior",
+    "ci": "pnpm check && pnpm verify:sdk && pnpm test:e2e",
+    "check:behavior": "pnpm --filter @inkcre/core build && node --test scripts/tests/sdk-candidate.test.mjs scripts/tests/core-sdk-compatibility.test.mjs scripts/tests/resolver-lifecycle.test.mjs scripts/tests/extension-peer-management.test.mjs scripts/tests/saved-connections.test.mjs scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs scripts/tests/independent-extension-release.test.mjs scripts/tests/release-checkout.test.mjs scripts/tests/pages-preview.test.mjs scripts/tests/extension-selection.test.mjs && tsc --project scripts/tests/tsconfig.contracts.json",
+    "verify:sdk": "pnpm --filter @inkcre/core build && node scripts/verify-sdk-minimum.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.0",
+    "@changesets/get-release-plan": "5.0.2",
     "@playwright/test": "1.61.1",
     "@tanstack/intent": "0.3.6",
     "@types/semver": "7.5.8",

@@ -35,7 +35,7 @@
     "nickname": "Memos",
     "module_federation": {
       "host_sdk": "@inkcre/core",
-      "host_sdk_version": ">=0.4.2 <0.5.0"
+      "host_sdk_version": ">=0.4.4 <0.5.0"
     }
   },
   "intent": {

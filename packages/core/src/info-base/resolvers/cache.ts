@@ -12,7 +12,7 @@
 
 import type { Block } from '../block'
 import type { Relation } from '../relation'
-import { Resolver } from './base'
+import { Resolver, type ResolverReader } from './base'
 
 interface CacheEntry {
   resolver: Resolver
@@ -32,9 +32,13 @@ export class ResolverCache {
    * Creates new resolver if cache miss or block has been updated.
    *
    * @param block - The block to resolve
-   * @param relations - Optional pre-loaded relations
-   * @returns Resolver instance
+   * @returns A reader whose lifecycle belongs to this cache
    */
+  static async borrow<T extends Resolver = Resolver>(block: Block): Promise<ResolverReader<T>> {
+    return this.getResolver<T>(block)
+  }
+
+  /** @deprecated Use borrow() for cache-owned instances; create a Resolver for an owned reader. */
   static async getResolver<T extends Resolver = Resolver>(
     block: Block,
     relations?: Relation[]

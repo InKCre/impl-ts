@@ -2,12 +2,16 @@ import { execFileSync } from 'node:child_process'
 import { access, readFile, readdir, realpath } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { inspectBrowserArtifact } from './browser-runtime-contract.mjs'
+import { pendingCoreVersion } from './sdk-compatibility.mjs'
+import { satisfies } from 'semver'
 import { inspectNativeModuleFederation } from './verify-native-extension-distribution.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const jsonOutput = process.argv.includes('--json')
 const coreRoot = `${repoRoot}/packages/core`
 const errors = []
+const coreMetadata = JSON.parse(await readFile(`${coreRoot}/package.json`, 'utf8'))
+let plannedCoreVersion
 
 try {
   execFileSync(process.execPath, ['scripts/check-local-runtime-contract.mjs'], {
@@ -59,7 +63,26 @@ for (const entry of await readdir(`${repoRoot}/extensions`, { withFileTypes: tru
   }
   if (!metadata.inkcre?.module_federation) continue
   try {
+    const range = metadata.inkcre.module_federation.host_sdk_version
+    const candidateCoreVersion = satisfies(coreMetadata.version, range)
+      ? undefined
+      : (plannedCoreVersion ??= await pendingCoreVersion(repoRoot))
+    if (
+      candidateCoreVersion &&
+      process.env.GITHUB_EVENT_NAME === 'pull_request_target' &&
+      process.env.GITHUB_WORKFLOW === 'Pages preview' &&
+      process.env.GITHUB_JOB === 'deploy'
+    ) {
+      throw new Error(
+        `Pages preview Host ${coreMetadata.version} does not satisfy ${range}. The trusted main controller must explicitly run candidate version preparation before building; PR workflow edits do not update pull_request_target's controller. No source versions were changed by this check.`
+      )
+    }
+    if (candidateCoreVersion)
+      console.log(
+        `[PENDING SDK] ${metadata.name} requires candidate Core ${candidateCoreVersion}; run pnpm verify:sdk for minimum-consumer evidence.`
+      )
     await inspectNativeModuleFederation({
+      candidateCoreVersion,
       packagePath: `${directory}/package.json`,
       corePackagePath: `${coreRoot}/package.json`,
       artifactDirectory: `${directory}/dist/client-web`,

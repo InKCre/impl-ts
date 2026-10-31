@@ -38,7 +38,7 @@
     "nickname": "Mail",
     "module_federation": {
       "host_sdk": "@inkcre/core",
-      "host_sdk_version": ">=0.4.0 <0.6.0"
+      "host_sdk_version": ">=0.4.4 <0.6.0"
     }
   },
   "intent": {

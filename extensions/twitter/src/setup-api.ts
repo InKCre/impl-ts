@@ -1,18 +1,16 @@
-import corePackage from '../../../packages/core/package.json'
+import { manageExtensionOnPeer, readExtensionPeerStatus } from '@inkcre/core'
 import {
-  RegistryReleaseReader,
-  sortPublishedReleases,
-  manageExtensionOnPeer,
-  readExtensionPeerStatus,
-} from '@inkcre/extension-runtime-client-web'
+  ensureExtensionSelection,
+  runtimeFailed,
+  waitingForRuntime,
+} from '@inkcre/ext-dev-utils/selection'
+
 import {
   ExtensionParticipationModel,
-  ExtensionRegistryOriginResolver,
   Cron,
   CronForm,
   ExtensionModel,
   Peer,
-  PeerConfigSchema,
   PeerManager,
   PeerProtocolRequestSchema,
   PeerProtocolResponseSchema,
@@ -134,26 +132,8 @@ export class TwitterSetupAPI {
   constructor(readonly peer: Peer) {}
 
   async enableCore(signal?: AbortSignal): Promise<ExtensionRuntimeStatus> {
-    const existing = await ExtensionParticipationModel.get(this.peer.id, EXTENSION_NAME)
-    if (!existing) {
-      const peerConfig = PeerConfigSchema.parse(this.peer.config)
-      const origin = await new ExtensionRegistryOriginResolver(
-        () => peerConfig.extension_registry_url
-      ).resolve()
-      const reader = new RegistryReleaseReader({
-        registryOrigin: origin,
-        hostSdk: { name: '@inkcre/core', version: corePackage.version },
-      })
-      const catalog = await reader.getExtension(EXTENSION_NAME, 'python')
-      const release = sortPublishedReleases(catalog.releases ?? [])[0]
-      if (!release) throw new Error('Twitter has no published Python distribution.')
-      await manageExtensionOnPeer(this.peer.id, {
-        action: 'select',
-        extension: EXTENSION_NAME,
-        distribution: 'python',
-        version: release.version,
-      })
-    }
+    const status = await ensureExtensionSelection(this.peer, EXTENSION_NAME, 'python')
+    if (runtimeFailed(status) || waitingForRuntime(status)) return status
     signal?.throwIfAborted()
     return manageExtensionOnPeer(this.peer.id, { action: 'enable', extension: EXTENSION_NAME })
   }

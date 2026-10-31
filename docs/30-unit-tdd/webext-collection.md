@@ -53,3 +53,8 @@ SPA 路由使用 WXT 的 location-change 能力，不另建后台导航转发；
 [Hister](https://github.com/asciimoo/hister) 的来源结构处理与取得后客户端提取提供了参考，核对修订 `2e017c05cf544b812b8fd509ff3fc07c5c7e464e`。本实现独立编写，复用已有 Mozilla Readability 与普通格式库；未复制、改写或运行其 AGPL-3.0-or-later 源码。致谢属于项目说明，不进入用户正文，也不表示上游背书。
 
 Chromium 当前最低版本为 116，不能直接使用更高版本的 offscreen 检查接口而只靠类型检查宣布支持。Firefox 构建与运行分别验证。运行代码随扩展打包，不加载 client-web 的远程 Module Federation 模块。
+
+前后台消息由 `logic/collection/commands.ts` 统一声明 payload schema、结果类型与 sender 类别。
+发送端按命令推导参数/返回类型，后台的穷尽 handler map 受同一合同约束；运行时仍先核实
+实际 sender 和顶层 tab，再解析 payload。新增命令不再维护第二份白名单，类型检查不能替代
+浏览器身份与权限检查。完整 outbox/receipt 与状态的持久合同仍由各自业务 schema 拥有。

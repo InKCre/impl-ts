@@ -1,3 +1,5 @@
+export { CORE_SDK_VERSION } from './version'
+
 /**
  * @inkcre/core
  *
@@ -37,6 +39,15 @@ export {
   type ExtensionModelInstallInput,
   ExtensionRegistryOriginResolver,
   DEFAULT_EXTENSION_REGISTRY_ORIGIN,
+  EXTENSION_MANAGEMENT_CAPABILITY,
+  ExtensionManagementCommandSchema,
+  ExtensionPeerStatusSchema,
+  ExtensionManagementError,
+  listAdvertisedExtensionManagementPeers,
+  readExtensionPeerStatus,
+  manageExtensionOnPeer,
+  type ExtensionManagementCommand,
+  type ExtensionPeerStatus,
 } from './extension'
 
 // Peer discovery and delegation
@@ -164,6 +175,8 @@ export {
   makeRelationRefProp,
   // Resolver protocols
   type ResolverContentState,
+  type ResolverReader,
+  type CompleteResolverRelations,
   type RecallTarget,
   type SolvedContentRendererProps,
   type InfoBaseRoute,
@@ -196,6 +209,9 @@ export {
   registerCoreResolvers,
   type AudioSolvedContent,
   type ByteSolvedContent,
+  type ByteContentSource,
+  type ByteContentOptions,
+  type ByteContentResource,
   type EpubSolvedContent,
   type FileSolvedContent,
   type HtmlRawContent,

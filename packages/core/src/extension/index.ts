@@ -25,3 +25,15 @@ export {
   EXTENSION_REGISTRY_CONFIG_SCHEMA,
   ExtensionRegistryOriginResolver,
 } from './registry-origin'
+
+export {
+  EXTENSION_MANAGEMENT_CAPABILITY,
+  ExtensionManagementCommandSchema,
+  ExtensionPeerStatusSchema,
+  ExtensionManagementError,
+  listAdvertisedExtensionManagementPeers,
+  readExtensionPeerStatus,
+  manageExtensionOnPeer,
+  type ExtensionManagementCommand,
+  type ExtensionPeerStatus,
+} from './peer-management'

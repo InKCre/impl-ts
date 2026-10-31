@@ -1,4 +1,4 @@
-import { ActualContentHandle, type ByteSolvedContent } from './actual-content'
+import { type ByteSolvedContent } from './actual-content'
 import { Resolver } from './base'
 import { type ProjectionOptions, UnsupportedResolverCapability } from './contracts'
 
@@ -13,12 +13,13 @@ export interface VideoSolvedContent extends ByteSolvedContent {
 
 export class VideoResolver extends Resolver<Uint8Array, VideoSolvedContent> {
   static readonly type = 'core.video.v1'
-  private readonly actualContent = new ActualContentHandle()
+  private readonly actualContent = this.createByteContent(async (_source: undefined, options) => ({
+    content: await this.getRawContent(options),
+  }))
 
   protected async _getSolvedContent(options: ProjectionOptions): Promise<VideoSolvedContent> {
-    const rawContent = await this.getRawContent(options)
     return {
-      ...this.actualContent.replace(rawContent),
+      ...(await this.actualContent.load(undefined, options)),
       container: null,
       video_codec: null,
       duration_ms: null,
@@ -30,9 +31,5 @@ export class VideoResolver extends Resolver<Uint8Array, VideoSolvedContent> {
 
   async getText(_options: ProjectionOptions = {}): Promise<never> {
     throw new UnsupportedResolverCapability(VideoResolver.type, 'text')
-  }
-
-  async dispose(): Promise<void> {
-    this.actualContent.dispose()
   }
 }

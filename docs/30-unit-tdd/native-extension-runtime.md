@@ -81,6 +81,8 @@ configuration, authorization state, Sources or info-base content. Another Peer's
 
 ## Documentation and Connection Setup
 
+`@inkcre/ext-dev-utils/selection` 共用 Memos、Twitter、CalDAV 的首次选择政策：先读目标状态，保留已观察到的固定版本，仅在缺失时查询目标 Registry 并发出一次精确选择；不启用、不重试未知结果。各 setup 继续拥有自己的 PAT、密码、OAuth 和连接验证步骤。这里的“保留”不是跨 Peer 的比较交换：并发客户端可能在读状态与选择之间写入，目标协议尚无 expected-absence 条件。
+
 `inkcre/caldav` 的 Web setup contribution 按选定 Python Peer 的实际运行状态准备连接。
 没有选择时才从该 Peer 自己的 Registry 选择发行版；安装返回重启状态后停止后续写入，
 要求刷新观察原目标。已有密码保持不变，缺失时才使用浏览器密码学随机数生成专用密码。
@@ -181,3 +183,9 @@ of periodic background lease, Job scans and telemetry. Turning background partic
 changing only its interval preserves this Host; changing connection authority or Peer identity
 and explicit shutdown dispose it. Initial restore still consumes exact enabled intent without
 rewriting it.
+
+## Peer 管理 wire 客户端
+
+Core 的 `ExtensionManagementCommandSchema`、`ExtensionPeerStatusSchema` 与公共管理函数共同拥有 `core.extension.management.v2` 的 TS 合同。`readExtensionPeerStatus` 和 `manageExtensionOnPeer` 只向明确目标委派、验证整个状态及每行 Peer 身份，并返回实际运行事实；不选择 Registry、不选最新版、不安装本机模块、不重试结果未知的请求。畸形响应只产生不含远端 body 的 `ExtensionManagementError`，Peer transport 的错误分类原样保留。
+
+该 API 是 0.4.4 patch 的待发布增补；使用它的独立 MF producer 应声明对应最低 Host SDK 并通过候选制品验证。Registry Runtime 的旧入口在正式 Core 资产发布前仍维持其 0.4.2 兼容实现；后续以薄错误适配委托 Core，保留既有 `WebExtensionRuntimeError`。首次缺失 selection 的复合政策与各扩展业务准备步骤不是这个 wire client 的职责。

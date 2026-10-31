@@ -1,9 +1,9 @@
 import { MarkerType, type Edge, type Node } from '@vue-flow/core'
-import type { Block, Relation, Resolver } from '@inkcre/core'
+import type { Block, Relation, ResolverReader } from '@inkcre/core'
 
 export interface BlockNodeData {
   block: Block
-  resolver: Resolver | null
+  resolver: ResolverReader | null
   solvedContent: unknown
   previewStatus: 'loading' | 'success' | 'error'
   focal: boolean

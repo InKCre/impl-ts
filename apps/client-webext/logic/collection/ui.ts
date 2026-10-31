@@ -1,6 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { collectionMessage } from './messages'
-import type { CollectionStatus } from './runtime'
+import type { CollectionStatus } from './commands'
 import type { CollectionSettings } from './store'
 
 export function useCollectionStatus() {
@@ -10,7 +10,7 @@ export function useCollectionStatus() {
   const busy = ref(false)
   let timer: ReturnType<typeof setInterval> | undefined
   async function refresh() {
-    status.value = await collectionMessage<CollectionStatus>({ type: 'collection-status' })
+    status.value = await collectionMessage({ type: 'collection-status' })
   }
   async function action(work: () => Promise<unknown>, result = '') {
     if (busy.value) return

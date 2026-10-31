@@ -144,45 +144,28 @@ export class TweetResolver extends Resolver<string, Tweet> {
       return tweet
     }
 
-    // Resolve attachment content
-    try {
-      const attachments: string[] = []
-
-      for (const relation of filteredRelations) {
-        try {
-          // Get the attachment block from relation
-          const { Block } = await import('@inkcre/core')
-          const attachmentBlock = await Block.get(relation.to_)
-
-          // Use ResolverCache to get resolver for attachment block
-          const attachmentResolver = await ResolverCache.getResolver(attachmentBlock)
-          const attachmentContent = await attachmentResolver.getSolvedContent(options)
-
-          if (
-            typeof attachmentContent === 'object' &&
-            attachmentContent !== null &&
-            'objectUrl' in attachmentContent &&
-            typeof attachmentContent.objectUrl === 'string'
-          ) {
-            attachments.push(attachmentContent.objectUrl)
-          }
-        } catch (error) {
-          // Log error but continue with other attachments
-          console.warn(
-            `[TweetResolver] Failed to resolve attachment relation ${relation.id}:`,
-            error
-          )
+    const attachments: string[] = []
+    for (const relation of filteredRelations) {
+      try {
+        const attachmentBlock = await Block.get(relation.to_)
+        // A Tweet cannot yield a media handle. Following it would also wait on
+        // this same pending resolver when invalid attachment edges form a cycle.
+        if (attachmentBlock.resolver === TweetResolver.type) continue
+        const attachmentResolver = await ResolverCache.borrow(attachmentBlock)
+        const attachmentContent = await attachmentResolver.getSolvedContent(options)
+        if (
+          typeof attachmentContent === 'object' &&
+          attachmentContent !== null &&
+          'objectUrl' in attachmentContent &&
+          typeof attachmentContent.objectUrl === 'string'
+        ) {
+          attachments.push(attachmentContent.objectUrl)
         }
+      } catch (error) {
+        console.warn(`[TweetResolver] Failed to resolve attachment relation ${relation.id}:`, error)
       }
-
-      // Populate attachments array
-      if (attachments.length > 0) {
-        tweet.attachments = attachments
-      }
-    } catch (error) {
-      // Log error but return tweet without attachments
-      console.warn('[TweetResolver] Failed to fetch attachments:', error)
     }
+    if (attachments.length > 0) tweet.attachments = attachments
 
     return tweet
   }
@@ -267,7 +250,19 @@ export class ArchiveMediaResolver extends Resolver<string, MediaRecord> {
   static readonly type = 'extensions.twitter.media.v1'
   static readonly previewRenderer = markRaw(ArchiveMediaPreview)
   static readonly solvedContentRenderer = markRaw(ArchiveMediaContent)
-  private objectUrl: string | null = null
+  private readonly actualContent = this.createByteContent(async (media: Media) => {
+    const source = media.type === 'photo' ? media.url : bestVideoUrl(media)
+    if (!source) throw new Error('Media has no content URL.')
+    const content = await new HttpStorage({ type: 'http', config: {} }).getRawContent({
+      id: this.block.id,
+      storage: null,
+      content: source,
+    })
+    return {
+      content,
+      mediaType: media.type === 'photo' ? imageMediaType(new URL(source)) : 'video/mp4',
+    }
+  })
 
   protected async _getSolvedContent(options: ProjectionOptions): Promise<MediaRecord> {
     return MediaRecordSchema.parse(parseJson(await this.getRawContent(options)))
@@ -287,20 +282,7 @@ export class ArchiveMediaResolver extends Resolver<string, MediaRecord> {
     const source = media.type === 'photo' ? media.url : bestVideoUrl(media)
     if (!source) return { media, content: null }
 
-    const bytes = await new HttpStorage({ type: 'http', config: {} }).getRawContent({
-      id: this.block.id,
-      storage: null,
-      content: source,
-    })
-    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
-    const mediaType = media.type === 'photo' ? imageMediaType(new URL(source)) : 'video/mp4'
-    this.objectUrl = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mediaType }))
-    const byteContent = {
-      content: bytes,
-      byte_size: bytes.byteLength,
-      detected_media_type: null,
-      objectUrl: this.objectUrl,
-    }
+    const byteContent = await this.actualContent.load(media, _options)
     return media.type === 'photo'
       ? {
           media,
@@ -324,11 +306,6 @@ export class ArchiveMediaResolver extends Resolver<string, MediaRecord> {
             frame_rate: null,
           } satisfies VideoSolvedContent,
         }
-  }
-
-  async dispose(): Promise<void> {
-    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
-    this.objectUrl = null
   }
 }
 

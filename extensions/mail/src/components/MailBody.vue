@@ -54,7 +54,7 @@ async function toggleOriginal(): Promise<void> {
   error.value = ''
   const blockId = props.block.id
   try {
-    const resolver = await ResolverCache.getResolver(props.block)
+    const resolver = await ResolverCache.borrow(props.block)
     const raw = await resolver.getRawContent()
     if (typeof raw !== 'string') throw new TypeError('邮件正文不是文本')
     if (props.block.id === blockId) {

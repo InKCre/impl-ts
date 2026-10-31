@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "paths": {
+      "@inkcre/core": ["../../packages/core/dist/index.d.ts"]
+    }
+  },
+  "files": ["public-contracts.type-test.ts", "../../apps/client-webext/.wxt/wxt.d.ts"]
+}
