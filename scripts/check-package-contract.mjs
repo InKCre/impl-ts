@@ -67,6 +67,16 @@ for (const entry of await readdir(`${repoRoot}/extensions`, { withFileTypes: tru
     const candidateCoreVersion = satisfies(coreMetadata.version, range)
       ? undefined
       : (plannedCoreVersion ??= await pendingCoreVersion(repoRoot))
+    if (
+      candidateCoreVersion &&
+      process.env.GITHUB_EVENT_NAME === 'pull_request_target' &&
+      process.env.GITHUB_WORKFLOW === 'Pages preview' &&
+      process.env.GITHUB_JOB === 'deploy'
+    ) {
+      throw new Error(
+        `Pages preview Host ${coreMetadata.version} does not satisfy ${range}. The trusted main controller must explicitly run candidate version preparation before building; PR workflow edits do not update pull_request_target's controller. No source versions were changed by this check.`
+      )
+    }
     if (candidateCoreVersion)
       console.log(
         `[PENDING SDK] ${metadata.name} requires candidate Core ${candidateCoreVersion}; run pnpm verify:sdk for minimum-consumer evidence.`

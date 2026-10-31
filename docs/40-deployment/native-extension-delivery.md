@@ -71,6 +71,23 @@ copy so the preview can load a mutually compatible Host and MF when a change rai
 Host SDK. This produces temporary derived versions for preview only. It neither consumes the pending
 changesets in the PR nor replaces the normal Version PR and protected-main release lifecycle.
 
+The controller must explicitly invoke `pnpm exec node scripts/prepare-sdk-candidate.mjs --in-place`
+in its disposable checkout before building. This command uses the normal Changesets version plan,
+including extension-only intent, but temporarily disables candidate changelogs so a shallow checkout
+needs no Git-history fetch or repository credentials. It restores the original configuration bytes
+even on failure; no pending release is a no-op. Formal `release:version` remains unchanged.
+
+`pull_request_target` executes the trusted main-branch controller: a PR's workflow edit does not
+change the controller used for that same PR. Until that controller contains the explicit preparation
+step, the observed `GITHUB_EVENT_NAME=pull_request_target`, `GITHUB_WORKFLOW=Pages preview`,
+`GITHUB_JOB=deploy` context cannot use the source-only pending-SDK allowance. `check:package`
+rejects an incompatible unprepared Host/MF with a controller-action diagnostic. This narrow environment
+coupling is a read-only deployment guard, not an implicit version change in `pnpm build`.
+Once explicit preparation has produced a compatible Host, the guard naturally does not apply.
+
+Pending intent is read through Changesets' public release-plan API. It does not depend on a local
+`main` ref, history depth, or the CLI status command's changed-package comparison.
+
 `pnpm verify:sdk` applies the same preparation in an isolated checkout, builds the candidate Host
 and MF distributions, then checks each producer against its declared minimum SDK. Published minima
 come from the exact GitHub Release archive and SHA-256 receipt; an unreleased minimum must match the

@@ -104,9 +104,7 @@ jobs:
 
       - name: Derive unpublished compatible SDK and producer versions
         working-directory: candidate
-        run: |
-          git update-ref refs/heads/main HEAD
-          pnpm release:version
+        run: pnpm exec node scripts/prepare-sdk-candidate.mjs --in-place
 
       - name: Build the exact-head SPA and Module Federation snapshots
         working-directory: candidate
