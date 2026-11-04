@@ -30,6 +30,6 @@ if (error) throw error
 
 缺少 `inkcre.observability.backend` selector 时使用内置 PostgreSQL；selector 为 Loki 时通过已公告 `core.observability.v1` 的 Peer 读写。首次使用或显式调用 `prepare()` 后，实例固定所选后端；修改 selector 后须创建新实例。外部凭据仅属于执行 Peer，不进入浏览器、公共配置或调用参数。外部故障和未知配置明确失败，不悄悄改查 PostgreSQL。切换后只查询当前后端，历史保留在原处，不自动合并或迁移。
 
-`emit(record)` 等待存储结果并报告失败。应用兼容入口的 operation/Job 记录队列有界，失败不改变业务结果，使用捕获的连接和 Peer 身份；默认记录不依赖 OTEL 开关。OTEL 继续作为额外出口。severity 沿用 OTEL 1–24：DEBUG 5、INFO 9、WARN 13、ERROR 17、FATAL 21。
+`emit(record)` 等待后端接收结果并报告失败；外部 Peer 接受进入队列不等于已经持久化。应用兼容入口的 operation/Job 记录队列有界，失败不改变业务结果，使用捕获的连接和 Peer 身份；默认记录不依赖 OTEL 开关。OTEL 继续作为额外出口。severity 沿用 OTEL 1–24：DEBUG 5、INFO 9、WARN 13、ERROR 17、FATAL 21。
 
 旧 `Log` 是 deprecated 的 PostgreSQL 物理行/数字游标兼容 API，可能用于读取旧 PG 历史，不能代表当前选定后端。所有新的普通消费和第一方观测界面使用 `ObservabilityClient`。本次提供事件、日志和操作摘要，不声称具备完整分布式 trace 存储或指标后端。
