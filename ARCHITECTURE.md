@@ -68,3 +68,7 @@ delivery. Validation checks upload no deployable SPA, MF, or Registry handoff ar
 
 Executable configuration, scripts, tests, and workflows remain authoritative for exact commands
 and wire values.
+
+## Core 与 App 消费边界
+
+`@inkcre/core/sdk` 是不加载 UI 的独立消费入口，接受显式连接，提供类型化数据库操作、字节存储、认证和协议合同。根入口是既有 Vue/MF 应用的兼容入口，保留配置选择、导航和视图状态；其 DBAPIClient 与 PostgreSQLBinaryStorage 复用独立 SDK 的实现。详细支持范围与资源所有权见 [Core 包说明](packages/core/README.md)。两入口的运行代码和声明分别构建，独立消费者无需安装 Vue/Pinia，也不继承 App 的默认连接。

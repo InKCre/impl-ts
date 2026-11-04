@@ -1,13 +1,13 @@
 import { z } from 'zod'
-import { signDatabaseToken } from '../auth'
-import { APIError, DBAPIClient } from '../base'
+import { signDatabaseToken } from '../auth/sign'
+import { APIError, DatabaseClient } from '../base/client'
 import { MetaConfigSchema, PeerConfigSchema, type MetaConfig } from '../config/schema'
 import { Peer } from './peer'
 
 export const WEB_PEER_LEASE_TTL_SECONDS = 90
 export const WEB_PEER_LEASE_RENEW_INTERVAL_MS = 30_000
 
-type PeerDatabase = DBAPIClient<'peers', Peer>
+type PeerDatabase = DatabaseClient<'peers', Peer>
 
 export interface WebPeerIdentity {
   applicationVersion: string
@@ -117,13 +117,10 @@ export class WebPeerRuntime {
 
   static forConnection(meta: MetaConfig, identity: WebPeerIdentity): WebPeerRuntime {
     const exactMeta = MetaConfigSchema.parse(meta)
-    const database = new DBAPIClient<'peers', Peer>(
-      'peers',
-      Peer,
-      'inkcre',
-      exactMeta.INKCRE_PGREST_URL,
-      () => signDatabaseToken(exactMeta.INKCRE_JWT_SECRET)
-    )
+    const database = new DatabaseClient<'peers', Peer>('peers', Peer, {
+      baseUrl: exactMeta.INKCRE_PGREST_URL,
+      tokenProvider: () => signDatabaseToken(exactMeta.INKCRE_JWT_SECRET),
+    })
     return new WebPeerRuntime(
       exactMeta.INKCRE_PEER_ID,
       identity,

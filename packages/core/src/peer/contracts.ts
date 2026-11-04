@@ -1,4 +1,4 @@
-import type { Context } from '../obsrv/telemetry'
+import type { Context } from '@opentelemetry/api'
 import { z } from 'zod'
 
 export type JsonValue =
