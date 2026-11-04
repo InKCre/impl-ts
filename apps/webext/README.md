@@ -1,6 +1,6 @@
 # InKCre WebExt
 
-浏览器扩展本身是一个 Peer。它连接共享 PostgREST 协议，采集浏览中的材料，保存选区、附注和在线 PDF，预览并导入当前浏览器的书签与历史。核心路径不要求 client-web 页面、登录态或代理，也不需要网页专用数据库 RPC。
+浏览器扩展本身是一个 Peer。它连接共享 PostgREST 协议，采集浏览中的材料，保存选区、附注和在线 PDF，预览并导入当前浏览器的书签与历史。核心路径不要求 web 页面、登录态或代理，也不需要网页专用数据库 RPC。
 
 ## 使用
 
@@ -34,7 +34,7 @@ Explain、Writing Assist、旧选区浮栏、图编辑侧栏和模型设置已�
 
 设置页沿用 WebExt 原有的灰底方角卡片、白底字段、紧凑排版与 teal 主动作。公开 `ui-web` 组件承载控件，宿主通过原有 palette 适配系统 token；Switch 使用 `xs`，显示 ON/OFF，保留可访问名称、状态与键盘操作。宽屏、390px 窄屏和深色截图与尺寸检查属于 UI 回归。自动测试默认后台运行，不连接日常浏览器会话。
 
-WebExt 固定使用正式发布的 `@inkcre/ui-web` 2.6.0，通过内置密码显隐能力、公开 `INK_I18N_KEY` 和中文词典提供按钮名称，不另写密码组件。2.5.0 和 2.6.0 的普通可编辑输入框都会额外渲染只读值和重复 ID，因此仓库分别维护版本限定的 pnpm patch，各修正一个渲染条件；升级到上游修复版后移除对应补丁。这次仅 WebExt 升级，client-web、twitter 和 ext-dev-utils 继续使用原 2.5.0 及其补丁，不改变组件 API、样式或仍使用 2.3.0 的扩展。
+WebExt 固定使用正式发布的 `@inkcre/ui-web` 2.6.0，通过内置密码显隐能力、公开 `INK_I18N_KEY` 和中文词典提供按钮名称，不另写密码组件。2.5.0 和 2.6.0 的普通可编辑输入框都会额外渲染只读值和重复 ID，因此仓库分别维护版本限定的 pnpm patch，各修正一个渲染条件；升级到上游修复版后移除对应补丁。这次仅 WebExt 升级，web、twitter 和 ext-dev-utils 继续使用原 2.5.0 及其补丁，不改变组件 API、样式或仍使用 2.3.0 的扩展。
 
 根目录 `pnpm test:e2e:webext` 真正加载扩展。指定 `INKCRE_CHROMIUM_BINARY=/Applications/Helium.app/Contents/MacOS/Helium` 使用 Helium 的隔离测试 profile，测试结束清理，不连接日常会话。真实数据旅程还需要可销毁数据库/PostgREST 的 `INKCRE_E2E_WEBEXT_PGREST` 与 `INKCRE_E2E_WEBEXT_JWT_SECRET`。测试副本只对合成 localhost 资料预授予权限；原生权限 UI 另行验证，生产 manifest 保持 optional 权限。
 

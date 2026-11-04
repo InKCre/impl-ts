@@ -4,7 +4,7 @@
 
 The Info-Base unit spans the core models and mechanics, extension-provided semantics, and browser
 rendering surfaces. It executes admitted reads/writes, hydration, interpretation, and rendering
-locally; being a browser application does not make Client-Web a thin proxy to core-py.
+locally; being a browser application does not make Web App a thin proxy to core-py.
 
 ```text
 PostgreSQL/PostgREST --> Block + Relation --> hydrate --> exact Resolver

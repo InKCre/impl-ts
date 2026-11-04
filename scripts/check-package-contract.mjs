@@ -32,18 +32,18 @@ await Promise.all(
     'packages/core/dist/index.js.map',
     'packages/core/dist/index.d.ts',
     'packages/core/dist/index.d.ts.map',
-    'apps/client-web/dist/index.html',
-    'apps/client-webext/.output/chrome-mv3/manifest.json',
-    'apps/client-webext/.output/chrome-mv3/content-scripts/collection.js',
-    'apps/client-webext/.output/chrome-mv3/options.html',
-    'apps/client-webext/.output/chrome-mv3/popup.html',
-    'extensions/github/dist/client-web/remoteEntry.js',
-    'extensions/caldav/dist/client-web/remoteEntry.js',
-    'extensions/capture/dist/client-web/remoteEntry.js',
-    'extensions/local-files/dist/client-web/remoteEntry.js',
-    'extensions/mail/dist/client-web/remoteEntry.js',
-    'extensions/memos/dist/client-web/remoteEntry.js',
-    'extensions/twitter/dist/client-web/remoteEntry.js',
+    'apps/web/dist/index.html',
+    'apps/webext/.output/chrome-mv3/manifest.json',
+    'apps/webext/.output/chrome-mv3/content-scripts/collection.js',
+    'apps/webext/.output/chrome-mv3/options.html',
+    'apps/webext/.output/chrome-mv3/popup.html',
+    'extensions/github/dist/web/remoteEntry.js',
+    'extensions/caldav/dist/web/remoteEntry.js',
+    'extensions/capture/dist/web/remoteEntry.js',
+    'extensions/local-files/dist/web/remoteEntry.js',
+    'extensions/mail/dist/web/remoteEntry.js',
+    'extensions/memos/dist/web/remoteEntry.js',
+    'extensions/twitter/dist/web/remoteEntry.js',
   ].map((path) => requireFile(`${repoRoot}/${path}`))
 )
 
@@ -62,12 +62,10 @@ for (const entry of await readdir(`${repoRoot}/extensions`, { withFileTypes: tru
     await inspectNativeModuleFederation({
       packagePath: `${directory}/package.json`,
       corePackagePath: `${coreRoot}/package.json`,
-      artifactDirectory: `${directory}/dist/client-web`,
+      artifactDirectory: `${directory}/dist/web`,
     })
     if (entry.name === 'twitter') {
-      const manifest = JSON.parse(
-        await readFile(`${directory}/dist/client-web/mf-manifest.json`, 'utf8')
-      )
+      const manifest = JSON.parse(await readFile(`${directory}/dist/web/mf-manifest.json`, 'utf8'))
       if (!manifest.shared?.some((shared) => shared.name === '@inkcre/ui-web')) {
         errors.push('Twitter UI components must share @inkcre/ui-web with the Host')
       }
@@ -77,11 +75,11 @@ for (const entry of await readdir(`${repoRoot}/extensions`, { withFileTypes: tru
   }
 }
 
-const twitterRemoteEntry = `${repoRoot}/extensions/twitter/dist/client-web/remoteEntry.js`
+const twitterRemoteEntry = `${repoRoot}/extensions/twitter/dist/web/remoteEntry.js`
 try {
   const content = await readFile(twitterRemoteEntry, 'utf8')
-  if (content.includes('/twitter/client-web/')) {
-    errors.push('Twitter remote entry retains an absolute /twitter/client-web/ artifact base')
+  if (/\/twitter\/(?:client-web|web)\//.test(content)) {
+    errors.push('Twitter remote entry retains an absolute application artifact base')
   }
   if (!content.includes('./assets/')) {
     errors.push(
@@ -115,11 +113,11 @@ async function builtFiles(directory) {
   return files
 }
 
-const webDist = `${repoRoot}/apps/client-web/dist`
-const webextDist = `${repoRoot}/apps/client-webext/.output/chrome-mv3`
+const webDist = `${repoRoot}/apps/web/dist`
+const webextDist = `${repoRoot}/apps/webext/.output/chrome-mv3`
 try {
   await access(`${webDist}/_worker.js`)
-  errors.push('unexpected Worker output: apps/client-web/dist/_worker.js')
+  errors.push('unexpected Worker output: apps/web/dist/_worker.js')
 } catch {
   // The web application is a static Pages artifact.
 }
@@ -159,7 +157,7 @@ if (
   errors.push('packages/core/package.json does not match the ESM-only dist contract')
 }
 
-const consumerPackage = `${repoRoot}/apps/client-web/node_modules/@inkcre/core`
+const consumerPackage = `${repoRoot}/apps/web/node_modules/@inkcre/core`
 try {
   const resolvedPackage = await realpath(consumerPackage)
   const expectedPackage = await realpath(coreRoot)
@@ -175,7 +173,7 @@ try {
     process.execPath,
     ['--input-type=module', '--eval', "await import('@inkcre/core')"],
     {
-      cwd: `${repoRoot}/apps/client-web`,
+      cwd: `${repoRoot}/apps/web`,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 10000,
     }

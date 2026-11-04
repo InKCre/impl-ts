@@ -57,10 +57,11 @@ async function runDeclaredTarget() {
     }
   }
 
+  // Browser settings belong to this origin; a source/package rename must not strand them.
   const routePrefix =
     target === 'web-ui' ? 'client-web-ui' : target === 'web' ? 'client-web' : 'webext'
   const name = `${routePrefix}-${instance}`
-  const cwd = `${repoRoot}/${isWebTarget ? 'apps/client-web' : 'apps/client-webext'}`
+  const cwd = `${repoRoot}/${isWebTarget ? 'apps/web' : 'apps/webext'}`
   const command = isWebTarget ? ['pnpm', 'exec', 'vite'] : ['node', '../../scripts/dev-wxt.mjs']
 
   return run('pnpm', ['exec', 'portless', name, ...command], {

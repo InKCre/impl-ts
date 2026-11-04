@@ -116,7 +116,7 @@ void test('database probe distinguishes stale provenance from transport failure 
           },
         }
       ),
-      /owned by impl-py; client-web cannot stop it/
+      /owned by impl-py; web cannot stop it/
     )
     assert.ok(requests.every((method) => method === 'GET'))
     assert.deepEqual(JSON.parse(await readFile(descriptorPath, 'utf8')), descriptor)

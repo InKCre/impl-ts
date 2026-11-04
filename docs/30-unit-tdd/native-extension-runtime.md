@@ -1,5 +1,7 @@
 # Native Extension Runtime Unit
 
+Runtime 的新导入名、精确旧包来源与已发布 ABI 兼容边界见 [App 命名与兼容身份](../40-deployment/web-delivery.md#app-命名与兼容身份)。
+
 ## Boundary
 
 The native Extension Runtime spans the browser Web Extension Host, its SDK-owned durable models, and
@@ -13,7 +15,7 @@ artifact delivery belong to
 [First-party Extension Delivery](../40-deployment/native-extension-delivery.md).
 
 The browser supports the Module Federation native distribution. Registry v2 resolves an exact
-`(name, module_federation, version)` release; other Peers independently select their native distributions. `@inkcre/extension-runtime-client-web`, maintained in
+`(name, module_federation, version)` release; other Peers independently select their native distributions. `@inkcre/extension-runtime-web`, maintained in
 ext-reg, owns the Web Host and Registry consumers. `@inkcre/core` owns the shared models, Peer
 transport, and browser configuration. There is no generic target matcher or cross-format artifact
 manifest.
@@ -40,7 +42,7 @@ Host 与 Web 扩展通过现有 Module Federation 配置共享 `@inkcre/ui-web` 
 The producer emits the native `mf-manifest.json`, Remote entry, and referenced shared/exposed asset
 closure with relative asset semantics. The Registry Release records an immutable manifest
 association and typed Host SDK association. These are runtime inputs to the Host, not a second
-manifest invented by the client.
+manifest invented by the App.
 
 Before fetching executable bytes, the Host reads the exact Release, requires an associated Module
 Federation distribution, requires `host_sdk === '@inkcre/core'`, and verifies that its strict local
@@ -143,7 +145,7 @@ lifecycle work. Initial restore consumes enabled intent without rewriting it. Th
 local lifecycle work per Extension and rechecks the selected coordinate and enabled intent before
 and after executable loading, initialization and activation. A superseded candidate is disposed
 without entering the running projection. Local serialization does not make direct writes by other
-admitted clients atomic; fresh persistent observations remain necessary.
+admitted Apps atomic; fresh persistent observations remain necessary.
 
 An operation can persist intent and still fail during activation or shutdown. The Extension card
 therefore reads both participation and actual runtime after success or failure and retains the
@@ -158,7 +160,7 @@ when all formats supported by that Peer are known to lack published releases. A 
 catalog can explain why the browser has no compatible choice without guessing from application
 names. An explicit card refresh discards those catalog observations and allows another read.
 
-The Client Web shell opens database views before native Extension restore finishes. A cold deep link can therefore encounter an unregistered Extension resolver. The content popup and graph preview retry only that early lookup failure once after the Host completes restore, while preserving other read failures. Graph pending additions and restore completion both check the retry condition; scene generation, connection and Host ownership reject stale callbacks. A missing resolver after that attempt stays visibly unavailable. Extension cards wait for the same restore before observing current-Peer runtime status; a persisted enabled intent alone does not establish that the module is running.
+The Web App shell opens database views before native Extension restore finishes. A cold deep link can therefore encounter an unregistered Extension resolver. The content popup and graph preview retry only that early lookup failure once after the Host completes restore, while preserving other read failures. Graph pending additions and restore completion both check the retry condition; scene generation, connection and Host ownership reject stale callbacks. A missing resolver after that attempt stays visibly unavailable. Extension cards wait for the same restore before observing current-Peer runtime status; a persisted enabled intent alone does not establish that the module is running.
 
 A restore attempt isolates module failures. Completing the attempt, including an aggregate failure, allows registered resolvers to serve content and exposes each module’s actual status; an unknown resolver after that attempt remains a visible error.
 

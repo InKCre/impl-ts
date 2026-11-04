@@ -12,7 +12,7 @@ import {
   RegistryReleaseError,
   sortPublishedReleases,
   type ReleaseRecord,
-} from '@inkcre/extension-runtime-client-web'
+} from '@inkcre/extension-runtime-web'
 import { getExtensionHost, getExtensionRegistry } from '@/core'
 import { selectExtensionPeerVersion } from '@/extension-peer-control'
 import type { ExtensionCardData, useExtensionPeerRuntime } from './use-extension-peer-runtime'

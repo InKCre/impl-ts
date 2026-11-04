@@ -100,7 +100,7 @@ test.beforeEach(async ({ page }) => {
 test('Mail is used through the generic InfoBase navigation host', async ({ page }) => {
   const graph = await locateAcceptanceGraph()
   const remoteEntry = page.waitForResponse(
-    (response) => response.url().includes('/mail/client-web/remoteEntry.js') && response.ok()
+    (response) => response.url().includes('/mail/web/remoteEntry.js') && response.ok()
   )
   const trackerRequests: string[] = []
   page.on('request', (request) => {

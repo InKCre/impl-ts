@@ -140,7 +140,7 @@ export async function configureTelemetry(
     : undefined
   const { resourceFromAttributes } = await import('@opentelemetry/resources')
   const resource = resourceFromAttributes({
-    'service.name': 'inkcre.client-web',
+    'service.name': 'inkcre.web',
     'service.version': version,
     'service.instance.id': crypto.randomUUID(),
     'inkcre.deployment.id': config.deployment_id,

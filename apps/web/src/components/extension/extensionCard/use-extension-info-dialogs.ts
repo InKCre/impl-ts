@@ -4,7 +4,7 @@ import { ExtensionModel, ExtensionRegistryOriginResolver, configStore } from '@i
 import {
   getExtensionDocumentation,
   type ExtensionDocumentationLink,
-} from '@inkcre/extension-runtime-client-web'
+} from '@inkcre/extension-runtime-web'
 import type { JsonEditorValidation } from '@inkcre/ui-web'
 import type { ExtensionCardData, useExtensionPeerRuntime } from './use-extension-peer-runtime'
 

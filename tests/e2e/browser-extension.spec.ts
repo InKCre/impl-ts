@@ -408,9 +408,7 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
   const pageErrors: string[] = []
   const manifest = JSON.parse(
     await readFile(
-      fileURLToPath(
-        new URL('../../apps/client-webext/.output/chrome-mv3/manifest.json', import.meta.url)
-      ),
+      fileURLToPath(new URL('../../apps/webext/.output/chrome-mv3/manifest.json', import.meta.url)),
       'utf8'
     )
   )
@@ -430,9 +428,7 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
   ])
     await expect(
       access(
-        fileURLToPath(
-          new URL('../../apps/client-webext/.output/chrome-mv3/' + path, import.meta.url)
-        )
+        fileURLToPath(new URL('../../apps/webext/.output/chrome-mv3/' + path, import.meta.url))
       )
     ).rejects.toThrow()
   expect(manifest.action.default_icon).toEqual({

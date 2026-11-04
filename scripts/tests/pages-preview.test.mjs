@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { preparePagesPreview } from '../prepare-pages-preview.mjs'
 
-const requireWeb = createRequire(new URL('../../apps/client-web/package.json', import.meta.url))
+const requireWeb = createRequire(new URL('../../apps/web/package.json', import.meta.url))
 const requireRuntime = createRequire(requireWeb.resolve('@module-federation/runtime'))
 const { generateSnapshotFromManifest } = requireRuntime('@module-federation/sdk')
 

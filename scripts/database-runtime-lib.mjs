@@ -46,10 +46,11 @@ export function runtimeDirectory(instance) {
 }
 
 export function projectName(instance) {
-  return `inkcre-client-web-${validateInstance(instance)}`
+  return `inkcre-web-${validateInstance(instance)}`
 }
 
 function localSecret(instance, purpose) {
+  // Keep existing browser credentials valid when this worktree's disposable database is rebuilt.
   return createHash('sha256').update(`inkcre-client-web/${instance}/${purpose}`).digest('hex')
 }
 
@@ -89,7 +90,7 @@ async function writeRuntimeFiles(state, credentials) {
     },
     peer: {
       id: BROWSER_PEER_ID,
-      name: 'client-web-development',
+      name: 'web-development',
     },
     core: {
       peer_id: CORE_PEER_ID,
@@ -326,9 +327,7 @@ export async function ensureDatabaseRuntime(instance, options = {}) {
 export async function stopDatabaseRuntime(instance, options = {}) {
   const state = await runtimeState(instance)
   if (state.provider.kind === 'external') {
-    throw new Error(
-      `runtime ${state.runtime_instance} is owned by impl-py; client-web cannot stop it`
-    )
+    throw new Error(`runtime ${state.runtime_instance} is owned by impl-py; web cannot stop it`)
   }
   try {
     compose(instance, ['down', '--volumes', '--remove-orphans'], {

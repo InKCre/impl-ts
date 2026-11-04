@@ -1,6 +1,6 @@
 # WebExt 运行时与网页材料
 
-`apps/client-webext` 是 WXT 浏览器 Peer，`packages/web-collection` 拥有网页材料的领域形状与普通图读写。它们共用 core 数据库、Storage 和 Resolver 能力，不依赖 client-web 私有代码，也不把业务编排放进数据库函数。
+`apps/webext` 是 WXT 浏览器 Peer，`packages/web-collection` 拥有网页材料的领域形状与普通图读写。它们共用 core 数据库、Storage 和 Resolver 能力，不依赖 web 私有代码，也不把业务编排放进数据库函数。
 
 设置中的信息库连接代表本 WebExt 加入共享系统：PostgREST 是共享数据库协议的传输，不是一个接收 Peer。连接保存独立的本地标识、共享地址、凭据及本 Peer ID；本地标识用于维持待办归属，不创造数据库上的接收者身份。主人可直接读改完整配置，本机保存只验证输入，不等待网络。修改现有连接保留 connectionId/peerId；主人明确修正同库地址后，既有待办使用新地址。另一个信息库另建连接，不自动猜测两个地址是否属于同一系统。界面以“信息库 / 本 Peer / 加入信息库”呈现，不称“保存目标”。
 
@@ -50,6 +50,6 @@ SPA 路由使用 WXT 的 location-change 能力，不另建后台导航转发；
 
 可编辑草稿排除，`contenteditable="false"` 的只读正文保留。JSON-LD 只作为来源声明数据解析；不解析任意应用启动脚本、不展开隐藏评论、不下载字幕或附件。正文直接使用普通 HTML，保留代码空白、表格单元、引用与链接；不为每帖建 Block，也不增加 Organization 操作。
 
-[Hister](https://github.com/asciimoo/hister) 的来源结构处理与取得后客户端提取提供了参考，核对修订 `2e017c05cf544b812b8fd509ff3fc07c5c7e464e`。本实现独立编写，复用已有 Mozilla Readability 与普通格式库；未复制、改写或运行其 AGPL-3.0-or-later 源码。致谢属于项目说明，不进入用户正文，也不表示上游背书。
+[Hister](https://github.com/asciimoo/hister) 的来源结构处理与取得后浏览器内提取提供了参考，核对修订 `2e017c05cf544b812b8fd509ff3fc07c5c7e464e`。本实现独立编写，复用已有 Mozilla Readability 与普通格式库；未复制、改写或运行其 AGPL-3.0-or-later 源码。致谢属于项目说明，不进入用户正文，也不表示上游背书。
 
-Chromium 当前最低版本为 116，不能直接使用更高版本的 offscreen 检查接口而只靠类型检查宣布支持。Firefox 构建与运行分别验证。运行代码随扩展打包，不加载 client-web 的远程 Module Federation 模块。
+Chromium 当前最低版本为 116，不能直接使用更高版本的 offscreen 检查接口而只靠类型检查宣布支持。Firefox 构建与运行分别验证。运行代码随扩展打包，不加载 web 的远程 Module Federation 模块。

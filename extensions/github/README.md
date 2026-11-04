@@ -10,4 +10,4 @@
 
 模块导入不注册 resolver；initialize 注册三个精确 class，dispose 仅注销自身 class。Host 在部分 initialize 失败时同样调用 dispose，因此停用后新的 resolver 查找失败，重新启用同一 class 允许复用现有缓存；更换 class 后下一次缓存读取释放旧实例并创建新实例。这不保证物理清空缓存。详情打开与刷新重新读取 Block 并创建 Resolver；关系显式刷新读取当前 edges，不依赖 focal Block 时间戳变化。共享 Block、Relation、Extension config/state 不由这些生命周期操作修改。
 
-本地开发入口是 `src/main.ts`，Host 加载入口是 `src/index.ts`。构建遵循同仓原生 MF 规则，输出可重定位 `dist/client-web` 和 `mf-manifest.json`。初次版本由 minor Changeset 与正常 Version PR 从未发布占位 `0.0.0` 生成 `0.1.0`；占位源码有待消费 Changeset，不能作为生产候选发布。正式发布遵循 [独立 MF 交付流程](../../docs/40-deployment/native-extension-delivery.md)。
+本地开发入口是 `src/main.ts`，Host 加载入口是 `src/index.ts`。构建遵循同仓原生 MF 规则，输出可重定位 `dist/web` 和 `mf-manifest.json`。初次版本由 minor Changeset 与正常 Version PR 从未发布占位 `0.0.0` 生成 `0.1.0`；占位源码有待消费 Changeset，不能作为生产候选发布。正式发布遵循 [独立 MF 交付流程](../../docs/40-deployment/native-extension-delivery.md)。

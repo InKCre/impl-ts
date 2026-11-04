@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url)
 void test('UI source type checking accepts an external checkout and rejects its type errors', async (context) => {
   const root = await mkdtemp(join(tmpdir(), 'inkcre-ui-types-'))
   context.after(() => rm(root, { recursive: true, force: true }))
-  const appRoot = join(root, 'impl-ts/apps/client-web')
+  const appRoot = join(root, 'impl-ts/apps/web')
   const uiRoot = join(root, 'ui/packages/web')
   const runtimeRoot = join(root, 'impl-ts/.runtime/ui-source')
   for (const path of [join(appRoot, 'src'), uiRoot, runtimeRoot]) {

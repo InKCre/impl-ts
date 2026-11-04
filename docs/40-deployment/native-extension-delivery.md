@@ -1,6 +1,6 @@
 # First-party Extension Delivery
 
-This document owns the operational Release and Registry delivery contract for first-party client-web
+This document owns the operational Release and Registry delivery contract for first-party web
 Extensions. Extension lifecycle and Host internals belong to
 [Native Extension Runtime](../30-unit-tdd/native-extension-runtime.md). A producer is an
 `extensions/*/package.json` declaring `inkcre.module_federation`; its package version is the
@@ -56,7 +56,7 @@ read-only, with write permissions confined to reconciliation. GitHub may require
 select **Approve workflows to run** on a token-created Version PR before its checks execute; do not
 replace this gate with an empty-check merge or a broader credential.
 
-Client checks, Pages production, and Pages preview are separate application lifecycles. They cannot
+App checks, Pages production, and Pages preview are separate application lifecycles. They cannot
 publish first-party Extensions. Local development and local verification must never publish either.
 
 Python and Module Federation are independent native releases. Each producer owns
@@ -95,7 +95,7 @@ Version outputs are committed; no duplicate pending intent remains for the next 
 This is the one-time delivery boundary for this cutover. Ordinary feature work continues to submit
 Changesets and use the automated Version PR described above.
 
-Client Web consumes the official Runtime SDK 0.4.1 tarball and Toolkit 0.5 wheel through exact GitHub
+The original Peer-participation cutover consumed the official Runtime SDK 0.4.1 tarball and Toolkit 0.5 wheel through exact GitHub
 Release asset URLs and lock-file integrity. Consumers install prebuilt packages without checking
 out Registry SDK source or running its SDK preparation. Runtime SDK 0.4.1 also qualifies its own
 build with the official Core SDK 0.4 prebuilt asset, removing the earlier Git-package bootstrap.
@@ -110,6 +110,9 @@ already-consumed cutover intent. This dependency substitution occurs before thos
 are published or have a saved production candidate; it does not create a second version intent.
 If either a published coordinate or a saved candidate exists, preserve its original bytes instead
 of rebuilding the same version. Subsequent producer changes continue to use ordinary Changesets.
+
+Current package identity and the exact admitted Runtime 0.4.2 asset are recorded in
+[App 命名与兼容身份](web-delivery.md#app-命名与兼容身份); the earlier qualification history above does not select today's dependency.
 
 Required database checks normally resolve the protected Core `stable` artifact. During this cutover,
 `contracts/core-release.json` can admit a `canonical_candidate` with an existing canonical Core
@@ -138,7 +141,7 @@ Registry origin, Extension identity, or snapshot ID. The first-party deployment 
 broad `*.inkcre.dev` DNS/TLS catch-all while Registry admits only
 `registry-docs-{snapshot}.inkcre.dev`; therefore DNS resolution or a successful TLS handshake is
 not documentation availability. A 421 response is a rejected Host, not a URL pattern for the Web
-client to repair or retry under another subdomain.
+App to repair or retry under another subdomain.
 
 ## Failure and Recovery
 
@@ -180,7 +183,7 @@ This is a publisher regression check, not evidence of production R2 latency.
 ## Snapshot and Verification
 
 Each producer retains the relative artifact base `base: './'`, emits
-`dist/client-web/mf-manifest.json`, and declares its Registry association in package metadata. The
+`dist/web/mf-manifest.json`, and declares its Registry association in package metadata. The
 distribution verifier checks the manifest Remote entry and every synchronous or asynchronous
 shared/exposed JavaScript and CSS reference, then compares every file in the uploaded snapshot,
 including transitive chunks and generated metadata. The uploaded snapshot is self-contained and
@@ -203,5 +206,5 @@ pnpm --filter './extensions/*' build
 node scripts/verify-native-extension-distribution.mjs inspect-local \
   --package extensions/<extension>/package.json \
   --core-package packages/core/package.json \
-  --artifact-directory extensions/<extension>/dist/client-web
+  --artifact-directory extensions/<extension>/dist/web
 ```

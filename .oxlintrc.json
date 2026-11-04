@@ -10,7 +10,7 @@
   },
   "ignorePatterns": [
     "docs/_shared/**",
-    "apps/client-webext/components.d.ts",
+    "apps/webext/components.d.ts",
     ".agents/skills/**",
     "tasks/**"
   ],

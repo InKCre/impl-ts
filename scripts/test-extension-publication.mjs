@@ -30,7 +30,7 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-publication-test-'))
   let registryUrl = 'https://registry.example.test'
   const prefix = '/extensions/test/source/1.0.0/module-federation/'
-  const build = path.join(workspace, 'extensions/source/dist/client-web')
+  const build = path.join(workspace, 'extensions/source/dist/web')
   const uploaded = path.join(workspace, 'uploaded')
   let prepared
   let published = false

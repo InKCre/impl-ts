@@ -1,7 +1,7 @@
 /**
- * Core Package Integration for client-web
+ * Core Package Integration for web
  *
- * This file initializes @inkcre/core with client-web specific configuration.
+ * This file initializes @inkcre/core with web specific configuration.
  * Initialize from App.vue before mounting business views.
  */
 
@@ -39,7 +39,7 @@ import {
   ExtensionManager,
   RegistryReleaseReader,
   type WebExtensionModule,
-} from '@inkcre/extension-runtime-client-web'
+} from '@inkcre/extension-runtime-web'
 import * as InKCreCore from '@inkcre/core'
 import * as InKCreUi from '@inkcre/ui-web'
 import * as Zod from 'zod'
@@ -146,10 +146,10 @@ export function setupResolvers(): void {
 // Configuration
 // ============================================================================
 
-type ClientExtensionModule = WebExtensionModule & ExtensionModule
-type ClientExtensionManager = ExtensionManager<ClientExtensionModule>
+type AppExtensionModule = WebExtensionModule & ExtensionModule
+type AppExtensionManager = ExtensionManager<AppExtensionModule>
 
-let extensionHost: ClientExtensionManager | null = null
+let extensionHost: AppExtensionManager | null = null
 let extensionHostStartup: Promise<void> | null = null
 let extensionHostConnection: MetaConfig | null = null
 export const extensionHostConnectionReady = Vue.ref(false)
@@ -165,7 +165,7 @@ export const webPeerConnectionState = Vue.ref<
   'idle' | 'connecting' | 'ready' | 'disabled' | 'failed'
 >('idle')
 
-export function initializeExtensionHost(): ClientExtensionManager {
+export function initializeExtensionHost(): AppExtensionManager {
   extensionHostStartup = null
   extensionHostRestoreState.value = 'idle'
   extensionHostConnection = { ...configStore.metaConfig }
@@ -177,7 +177,7 @@ export function initializeExtensionHost(): ClientExtensionManager {
     registryOrigin: getExtensionRegistryOrigin,
     hostSdk: { name: '@inkcre/core', version: corePackageJson.version },
   })
-  extensionHost = new ExtensionManager<ClientExtensionModule>({
+  extensionHost = new ExtensionManager<AppExtensionModule>({
     peerId: configStore.metaConfig.INKCRE_PEER_ID,
     releases: extensionRegistry,
     moduleFederation,
@@ -213,7 +213,7 @@ export function startExtensionHost(): Promise<void> {
   return restore
 }
 
-export function getExtensionHost(): ClientExtensionManager {
+export function getExtensionHost(): AppExtensionManager {
   if (!extensionHost) {
     throw new Error('Web Extension Host state port has not been initialized.')
   }
@@ -237,7 +237,7 @@ export function getExtensionRegistryOrigin(): Promise<string> {
   return extensionRegistryOrigin.resolve()
 }
 
-/** Project the running native module into the Client-owned setup popup contract. */
+/** Project the running native module into the App-owned setup popup contract. */
 export function getExtensionSetupContribution(name: string): ExtensionSetupContribution | null {
   return getExtensionHost().getModule(name)?.setup ?? null
 }

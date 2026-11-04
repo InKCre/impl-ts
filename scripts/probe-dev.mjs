@@ -9,6 +9,7 @@ const instance = process.argv[3]
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const portlessBin = `${repoRoot}/node_modules/.bin/portless`
 const names = {
+  // Keep the browser origin stable so existing local settings remain readable.
   web: 'client-web',
   'web-ui': 'client-web-ui',
   webext: 'webext',

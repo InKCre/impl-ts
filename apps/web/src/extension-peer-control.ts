@@ -12,7 +12,7 @@ import {
   readExtensionPeerStatus,
   type ExtensionManager,
   type RegistryReleaseReader,
-} from '@inkcre/extension-runtime-client-web'
+} from '@inkcre/extension-runtime-web'
 
 export { EXTENSION_MANAGEMENT_CAPABILITY }
 export type ExtensionPeerControlMode = 'current-runtime' | 'remote-host' | 'desired-state'

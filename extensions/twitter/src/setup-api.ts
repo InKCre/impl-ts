@@ -4,7 +4,7 @@ import {
   sortPublishedReleases,
   manageExtensionOnPeer,
   readExtensionPeerStatus,
-} from '@inkcre/extension-runtime-client-web'
+} from '@inkcre/extension-runtime-web'
 import {
   ExtensionParticipationModel,
   ExtensionRegistryOriginResolver,

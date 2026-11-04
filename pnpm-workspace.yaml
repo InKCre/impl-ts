@@ -17,6 +17,8 @@ allowBuilds:
   workerd: false
 
 overrides:
+  # GHSA-mrhx-c7xc-m3w5: keep the admitted tarball; remove after adopting a fixed Runtime release.
+  '@inkcre/extension-runtime-client-web@0.4.2>zod': 4.6.7
   '@inkcre/ui-web@2.3.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
   '@inkcre/ui-web@2.5.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
   '@inkcre/ui-web@2.7.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.7.0/inkcre-ui-web-2.7.0.tgz

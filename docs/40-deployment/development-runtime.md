@@ -73,7 +73,7 @@ Web、mail、twitter 和 ext-dev-utils 锁定同一正式 UI 版本；生产构�
 维护 UI 消费代码前，从对应 workspace 的 `node_modules/@inkcre/ui-web/DESIGN.md`
 读取同版本的设计决策，再按随包 `skills/ui-web/SKILL.md` 选择组件与组合指南。
 各消费者的 `intent.skills` 已显式声明该包，可在相应 workspace 运行
-`pnpm exec intent load @inkcre/ui-web#ui-web`（例如先 `cd apps/client-web`）。
+`pnpm exec intent load @inkcre/ui-web#ui-web`（例如先 `cd apps/web`）。
 仓库根目录只安装 Intent CLI，不另建一份 UI 依赖或复制 DESIGN.md；更新依赖时同步核对指南。
 
 ## Browser Runtime Configuration
@@ -112,12 +112,12 @@ owns provider parsing and transport safety.
   Compose project, Docker daemon, contract revision, migration head, source fingerprint, descriptor,
   and live readiness agree.
 
-For a client-owned `local` or `ssh` runtime, the database provisioner resolves impl-py's admitted
+For a App-owned `local` or `ssh` runtime, the database provisioner resolves impl-py's admitted
 `stable` channel once to an immutable digest. The selected image supplies the raw schema and role
 artifact; fresh pgvector PostgreSQL is restored before that exact core service reconciles runtime
 credentials and development data, with PostgREST serving the resulting database. The PostgreSQL
 health check uses TCP so the temporary socket-only initialization server cannot release the restore
-step before the final server is listening. Client-web owns no
+step before the final server is listening. Web App owns no
 migration SQL, role definitions, seed ordering, or startup sleeps. Those semantics remain an impl-py
 capability boundary. [`runtime/database.compose.yml`](../../runtime/database.compose.yml),
 [`contracts/core-release.json`](../../contracts/core-release.json), and
@@ -125,9 +125,9 @@ capability boundary. [`runtime/database.compose.yml`](../../runtime/database.com
 owners.
 
 `pnpm db:ready` emits machine-readable readiness. `pnpm db:reset` requires explicit confirmation,
-accepts only a ready development runtime, and resets only this worktree's client-owned database.
-`pnpm dev:stop` removes only this worktree's Portless routes and client-owned database/tunnel
-resources. Client-web refuses to reset or stop an external core-py runtime; recovery and cleanup
+accepts only a ready development runtime, and resets only this worktree's App-owned database.
+`pnpm dev:stop` removes only this worktree's Portless routes and App-owned database/tunnel
+resources. Web App refuses to reset or stop an external core-py runtime; recovery and cleanup
 must go through core-py. Browser E2E always creates and removes its own isolated database runtime.
 
 `svc dev status database --repo . --json` 的 probe 输出区分 descriptor、contract 和 transport 阶段。
@@ -141,10 +141,10 @@ owner 已保存的 readiness 一致；当前 Python 工作树是否已收敛，�
 doctor 的 provider 检查不代表服务已就绪；业务验收前仍需检查上述 runtime probe。
 
 The checked database projection records the contract revision intentionally adopted by this
-consumer. Update it with `pnpm contract:sync` when client work adopts a newer compatible revision;
+consumer. Update it with `pnpm contract:sync` when App work adopts a newer compatible revision;
 an unrelated pull request does not chase a moving `stable` channel. CI still resolves `stable` once
 to an immutable image and runs that real core service through the isolated browser/database chain,
-which proves the checked client remains compatible with current delivery. A breaking contract
+which proves the checked App remains compatible with current delivery. A breaking contract
 revision requires the coordinated producer-first migration defined by the shared contract.
 Pull-request evidence does not establish source-branch or migration equality between repositories.
 

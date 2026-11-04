@@ -26,10 +26,10 @@ export default defineConfig({
       shared: mfShared,
     }),
   ],
-  base: "/{extension_id}/client-web/",
+  base: "/{extension_id}/web/",
   build: {
     target: "esnext",
-    outDir: "dist/client-web",
+    outDir: "dist/web",
     sourcemap: true
   },
   css: {

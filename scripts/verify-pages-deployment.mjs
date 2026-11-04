@@ -1,6 +1,7 @@
 const deploymentId = process.env.CLOUDFLARE_PAGES_DEPLOYMENT_ID
 const deploymentUrl = process.env.CLOUDFLARE_PAGES_DEPLOYMENT_URL
-const productionUrl = process.env.INKCRE_CLIENT_WEB_ORIGIN
+// Retain the old deployment variable for externally owned invocation scripts.
+const productionUrl = process.env.INKCRE_WEB_ORIGIN ?? process.env.INKCRE_CLIENT_WEB_ORIGIN
 const expectedPagesOrigin = process.env.INKCRE_EXPECTED_PAGES_ORIGIN
 const previewProducer = process.env.INKCRE_PREVIEW_PRODUCER
 
@@ -38,7 +39,7 @@ async function readStaticPage(targetOrigin, path, attempts = 5) {
         throw new Error(`Pages smoke ${path} did not return HTML`)
       }
       if (!body.includes('<div id="app"></div>')) {
-        throw new Error(`Pages smoke ${path} did not return the client-web shell`)
+        throw new Error(`Pages smoke ${path} did not return the web shell`)
       }
       return
     } catch (error) {

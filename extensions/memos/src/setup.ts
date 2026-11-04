@@ -16,7 +16,7 @@ import {
   manageExtensionOnPeer,
   readExtensionPeerStatus,
   listAdvertisedExtensionManagementPeers,
-} from '@inkcre/extension-runtime-client-web'
+} from '@inkcre/extension-runtime-web'
 
 export const extensionName = 'inkcre/memos'
 export const tokenPattern = /^memos_pat_[0-9A-Za-z]{32}$/

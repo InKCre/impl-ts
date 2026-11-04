@@ -40,14 +40,14 @@ development or production info-base.
 
 ## Monorepo boundaries and change names
 
-- `apps/client-web/` and `apps/client-webext/` are independently delivered applications.
+- `apps/web/` and `apps/webext/` are independently delivered applications.
 - `packages/core/` and `packages/ext-dev-utils/` are shared packages.
 - Each `extensions/<id>/` is an independently versioned Module Federation distribution.
 
-Use the primary area as the `type(scope): summary` scope: `client-web`, `client-webext`, `core`,
+Use the primary area as the `type(scope): summary` scope: `web`, `webext`, `core`,
 `ext-dev-utils`, or an Extension ID such as `twitter`. Use `extensions` for one coherent change
 spanning several Extensions and `release` for release tooling. The title does not select versions;
-list every affected release project in the pull-request body. Examples: `fix(client-web): retain peer
+list every affected release project in the pull-request body. Examples: `fix(web): retain peer
 selection`, `feat(twitter): show archived media`, and `ref(extensions): share host bootstrap`.
 
 For user-visible behavior or another delivered contract, run `pnpm changeset` and select the exact

@@ -1,5 +1,5 @@
 {
-  "name": "@inkcre/client-webext",
+  "name": "@inkcre/webext",
   "version": "0.2.0",
   "private": true,
   "description": "InKCre's Web extension",

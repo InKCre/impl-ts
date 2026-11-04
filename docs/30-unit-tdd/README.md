@@ -1,4 +1,4 @@
-# Client-Web Unit TDD
+# Web App Unit TDD
 
 This directory owns stable internal design for the logical units implemented by this repository.
 The units cross package and application directory boundaries; paths are implementation locations,
@@ -6,7 +6,7 @@ not architectural boundaries.
 
 ## Owners
 
-- [Client Runtime and Delegation](client-runtime-and-delegation.md) owns the static browser Peer,
+- [App Runtime and Delegation](app-runtime-and-delegation.md) owns the static browser Peer,
   bootstrap configuration, authentication, exact capability delegation, and application navigation
   hosts.
 - [Info-Base](info-base.md) owns peer-local graph models, hydration, byte storage, exact Resolvers,

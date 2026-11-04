@@ -1,5 +1,5 @@
 {
-  "name": "@inkcre/client-web",
+  "name": "@inkcre/web",
   "version": "0.2.1",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
   "dependencies": {
     "@dagrejs/dagre": "^3.1.2",
     "@inkcre/core": "workspace:*",
-    "@inkcre/extension-runtime-client-web": "https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz",
+    "@inkcre/extension-runtime-web": "https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz",
     "@inkcre/ui-web": "2.7.0",
     "@module-federation/runtime": "^0.21.4",
     "@supabase/postgrest-js": "^2.118.0",

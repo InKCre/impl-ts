@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { inspectBrowserArtifact } from './browser-runtime-contract.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
-const distRoot = `${repoRoot}/apps/client-web/dist`
+const distRoot = `${repoRoot}/apps/web/dist`
 const errors = []
 
 try {
@@ -36,16 +36,16 @@ for (const relativePath of ['index.html']) {
   try {
     await access(`${distRoot}/${relativePath}`)
   } catch {
-    errors.push(`missing web release output: apps/client-web/dist/${relativePath}`)
+    errors.push(`missing web release output: apps/web/dist/${relativePath}`)
   }
 }
 
 for (const relativePath of ['_worker.js']) {
   try {
     await access(`${distRoot}/${relativePath}`)
-    errors.push(`unexpected runtime output: apps/client-web/dist/${relativePath}`)
+    errors.push(`unexpected runtime output: apps/web/dist/${relativePath}`)
   } catch {
-    // The client release is a static Pages artifact.
+    // The Web App release is a static Pages artifact.
   }
 }
 
@@ -71,5 +71,5 @@ if (errors.length > 0) {
   }
   process.exitCode = 1
 } else {
-  console.log('[OK] client-web release is a static, environment-neutral Pages artifact')
+  console.log('[OK] web release is a static, environment-neutral Pages artifact')
 }

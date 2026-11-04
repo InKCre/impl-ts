@@ -13,7 +13,7 @@ import {
   type ExtensionParticipation,
   type InstalledExtension,
 } from '@inkcre/core'
-import type { ReleaseRecord } from '@inkcre/extension-runtime-client-web'
+import type { ReleaseRecord } from '@inkcre/extension-runtime-web'
 import { observeExtensionPeer, selectExtensionPeerVersion } from '@/extension-peer-control'
 import extensionCard from '@/components/extension/extensionCard/extensionCard.vue'
 import {
@@ -167,6 +167,8 @@ async function loadBrowseUrl(): Promise<void> {
   browseError.value = null
   try {
     const url = new URL(await getExtensionRegistryOrigin())
+    url.searchParams.set('app_origin', window.location.origin)
+    // Existing Registry deployments still read this alias; both identify the same App.
     url.searchParams.set('client_origin', window.location.origin)
     browseUrl.value = url.href
   } catch (error) {

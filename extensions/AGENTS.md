@@ -12,7 +12,7 @@ Host/producer runtime contracts belong to
   `package.json#inkcre.name`, version, nickname, and `module_federation` association are Registry
   identity and compatibility inputs, not playground metadata.
 - Keep production remotes relocatable: `vite.config.ts` must retain `base: './'`, emit the native
-  `mf-manifest.json`, and write `dist/client-web`.
+  `mf-manifest.json`, and write `dist/web`.
 - Export host-consumed capabilities from `src/index.ts`; keep `src/main.ts` limited to the local
   playground. Do not make the Host depend on playground bootstrap behavior.
 - Changes to a native producer must preserve asset-closure validation. Record its native release intent

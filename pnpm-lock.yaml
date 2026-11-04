@@ -14,6 +14,7 @@ catalogs:
       version: 3.3.8
 
 overrides:
+  '@inkcre/extension-runtime-client-web@0.4.2>zod': 4.6.7
   '@inkcre/ui-web@2.3.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
   '@inkcre/ui-web@2.5.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
   '@inkcre/ui-web@2.7.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.7.0/inkcre-ui-web-2.7.0.tgz
@@ -94,7 +95,7 @@ importers:
         specifier: 4.114.0
         version: 4.114.0
 
-  apps/client-web:
+  apps/web:
     dependencies:
       '@dagrejs/dagre':
         specifier: ^3.1.2
@@ -102,9 +103,9 @@ importers:
       '@inkcre/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@inkcre/extension-runtime-client-web':
+      '@inkcre/extension-runtime-web':
         specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz
-        version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.21.6)
+        version: '@inkcre/extension-runtime-client-web@https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.21.6)'
       '@inkcre/ui-web':
         specifier: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.7.0/inkcre-ui-web-2.7.0.tgz
         version: https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.7.0/inkcre-ui-web-2.7.0.tgz(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.44(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
@@ -212,7 +213,7 @@ importers:
         specifier: 'catalog:'
         version: 3.3.8(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2)
 
-  apps/client-webext:
+  apps/webext:
     dependencies:
       '@inkcre/core':
         specifier: workspace:*
@@ -257,9 +258,9 @@ importers:
       '@inkcre/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@inkcre/extension-runtime-client-web':
+      '@inkcre/extension-runtime-web':
         specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz
-        version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)
+        version: '@inkcre/extension-runtime-client-web@https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)'
       '@vueuse/core':
         specifier: ^14.0.0
         version: 14.4.0(vue@3.5.44(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
@@ -505,9 +506,9 @@ importers:
       '@inkcre/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@inkcre/extension-runtime-client-web':
+      '@inkcre/extension-runtime-web':
         specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz
-        version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)
+        version: '@inkcre/extension-runtime-client-web@https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)'
       '@vueuse/core':
         specifier: ^14.0.0
         version: 14.3.0(vue@3.5.44(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
@@ -554,9 +555,9 @@ importers:
       '@inkcre/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@inkcre/extension-runtime-client-web':
+      '@inkcre/extension-runtime-web':
         specifier: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz
-        version: https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)
+        version: '@inkcre/extension-runtime-client-web@https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)'
       '@vueuse/core':
         specifier: ^14.0.0
         version: 14.3.0(vue@3.5.44(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))
@@ -6069,9 +6070,6 @@ packages:
       yaml:
         optional: true
 
-  zod@4.1.12:
-    resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
-
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
@@ -6943,14 +6941,14 @@ snapshots:
       '@inkcre/core': link:packages/core
       '@module-federation/runtime': 0.21.6
       semver: 7.8.5
-      zod: 4.1.12
+      zod: 4.6.7
 
   '@inkcre/extension-runtime-client-web@https://github.com/InKCre/ext-reg/releases/download/runtime-client-web-v0.4.2/inkcre-extension-runtime-client-web-0.4.2.tgz(@inkcre/core@packages+core)(@module-federation/runtime@0.22.1)':
     dependencies:
       '@inkcre/core': link:packages/core
       '@module-federation/runtime': 0.22.1
       semver: 7.8.5
-      zod: 4.1.12
+      zod: 4.6.7
 
   '@inkcre/ui-web@https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz(unocss@66.7.5(vite@7.3.6(@types/node@22.17.2)(jiti@2.7.0)(lightningcss@1.33.0)(sass-embedded@1.90.0)(sass@1.101.6)(yaml@2.9.0)))(vue@3.5.44(typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2))':
     dependencies:
@@ -11230,8 +11228,6 @@ snapshots:
       dotenv: 17.4.2
       json5: 2.2.3
       yaml: 2.9.0
-
-  zod@4.1.12: {}
 
   zod@4.4.3: {}
 

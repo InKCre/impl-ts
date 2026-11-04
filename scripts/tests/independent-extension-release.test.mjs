@@ -72,7 +72,7 @@ void test('a prepared Mail release does not publish another producer with pendin
         },
       })
     }
-    const build = 'extensions/mail/dist/client-web'
+    const build = 'extensions/mail/dist/web'
     await mkdir(path.join(workspace, build), { recursive: true })
     await json(`${build}/mf-manifest.json`, {
       metaData: { publicPath: './', remoteEntry: { name: 'remoteEntry.js' } },

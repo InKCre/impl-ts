@@ -10,7 +10,7 @@ import {
   preparedVersion,
 } from '../webext-release.mjs'
 
-const require = createRequire(new URL('../../apps/client-webext/package.json', import.meta.url))
+const require = createRequire(new URL('../../apps/webext/package.json', import.meta.url))
 
 void test('only a prepared numeric WebExt version is selected, independently of other units', () => {
   assert.equal(preparedVersion('0.2.0', '# WebExt\n\n## 0.2.0\nNews', false), true)
@@ -50,7 +50,7 @@ void test('a new draft uses its creation response before release inventory catch
 })
 
 void test('browser artifacts preserve identity, numeric version and readable toolbar variants', async () => {
-  const root = new URL('../../apps/client-webext/', import.meta.url)
+  const root = new URL('../../apps/webext/', import.meta.url)
   const metadata = JSON.parse(await readFile(new URL('package.json', root), 'utf8'))
   const { key } = JSON.parse(await readFile(new URL('chromium-key.json', root), 'utf8'))
   assert.match(extensionId(key), /^[a-p]{32}$/)

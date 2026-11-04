@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { readJson, stableJson } from './core-release-lib.mjs'
 
 const directory = '.webext-delivery'
-const app = 'apps/client-webext'
+const app = 'apps/webext'
 const repository = 'InKCre/impl-ts'
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const run = (command, args) => execFileSync(command, args, { stdio: 'inherit' })
@@ -113,7 +113,7 @@ export async function createDraftRelease({ tag, source, version, news }) {
 
 async function verifyCandidate() {
   const receipt = await readJson(`${directory}/source.json`)
-  assert.equal(receipt.name, '@inkcre/client-webext')
+  assert.equal(receipt.name, '@inkcre/webext')
   assert.match(receipt.version, /^\d+\.\d+\.\d+$/)
   assert.match(receipt.source_revision, /^[0-9a-f]{40}$/)
   assert.deepEqual(receipt.assets.map((asset) => asset.name).sort(), [
@@ -144,7 +144,7 @@ async function versionPrepared(version) {
   run('pnpm', ['exec', 'changeset', 'status', '--output', `${directory}/changesets.json`])
   const status = await readJson(`${directory}/changesets.json`)
   const pending = status.changesets.some((item) =>
-    item.releases.some((release) => release.name === '@inkcre/client-webext')
+    item.releases.some((release) => release.name === '@inkcre/webext')
   )
   let changelog = ''
   try {
@@ -179,11 +179,7 @@ export async function main(command) {
     await mkdir(directory, { recursive: true })
     const names = []
     for (const browser of ['chrome', 'firefox']) {
-      run('pnpm', [
-        '--filter',
-        '@inkcre/client-webext',
-        browser === 'chrome' ? 'zip' : 'zip:firefox',
-      ])
+      run('pnpm', ['--filter', '@inkcre/webext', browser === 'chrome' ? 'zip' : 'zip:firefox'])
       const name = `inkcre-webext-${version}-${browser}.zip`
       await copyFile(
         `${app}/.output/inkcre-webext-${version}-${browser}-production.zip`,
@@ -195,7 +191,7 @@ export async function main(command) {
     run('git', ['archive', '--format=tar.gz', `--output=${directory}/${sourceName}`, source])
     names.push(sourceName)
     const receipt = {
-      name: '@inkcre/client-webext',
+      name: '@inkcre/webext',
       version,
       source_revision: source,
       chromium_id: extensionId(key),

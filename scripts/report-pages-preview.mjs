@@ -22,7 +22,7 @@ if (!/^[a-f0-9]{40}$/.test(revision ?? '')) throw new Error('Missing or invalid 
 if (!process.env.GITHUB_STEP_SUMMARY) throw new Error('Missing GitHub job summary path')
 
 const summary = [
-  '## Client-Web 预览',
+  '## Web App 预览',
   '',
   `- [打开 PR 预览](${previewUrl})`,
   `- [本次部署快照](${deploymentUrl})`,

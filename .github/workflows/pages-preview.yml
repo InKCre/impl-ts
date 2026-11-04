@@ -115,8 +115,8 @@ jobs:
             --inventory .github/preview/extensions.json \
             --public-origin "$PREVIEW_ORIGIN" \
             --output .preview-registry
-          cp -R .preview-registry/. apps/client-web/dist/
-          cp -R apps/client-web/dist "$GITHUB_WORKSPACE/.pages-preview"
+          cp -R .preview-registry/. apps/web/dist/
+          cp -R apps/web/dist "$GITHUB_WORKSPACE/.pages-preview"
 
       - name: Bind Module Federation assets to the selected snapshot
         env:
