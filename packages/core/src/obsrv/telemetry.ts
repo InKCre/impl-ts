@@ -17,6 +17,13 @@ import type { MetaConfig } from '../config/schema'
 import type { LoggerProvider } from '@opentelemetry/sdk-logs'
 import type { MeterProvider } from '@opentelemetry/sdk-metrics'
 import type { WebTracerProvider } from '@opentelemetry/sdk-trace-web'
+import {
+  captureObservationRecorder,
+  recordObservation,
+  flushObservations,
+  resetObservationRecorder,
+  type ObservationRecorder,
+} from './recording'
 
 // Shared config is public to admitted browsers; never accept credential-bearing URLs.
 const PublicUrl = z.url().refine((value) => {
@@ -57,6 +64,7 @@ let logger: ReturnType<LoggerProvider['getLogger']> | undefined
 let duration: ReturnType<ReturnType<MeterProvider['getMeter']>['createHistogram']> | undefined
 let droppedCarrier: ReturnType<ReturnType<MeterProvider['getMeter']>['createCounter']> | undefined
 const operationLoggerKey = createContextKey('inkcre.operation.logger')
+const observationRecorderKey = createContextKey('inkcre.operation.recorder')
 let initialization = Promise.resolve()
 
 /** Serialized connection cutover; disabled peers do not even read shared telemetry configuration. */
@@ -227,10 +235,13 @@ async function bounded(operation: Promise<unknown>): Promise<void> {
   }
 }
 export async function flushTelemetry(): Promise<void> {
+  await bounded(flushObservations())
   if (providers.length)
     await bounded(Promise.allSettled(providers.map((provider) => provider.forceFlush())))
 }
 export async function shutdownTelemetry(): Promise<void> {
+  await bounded(flushObservations())
+  resetObservationRecorder()
   const closing = providers
   providers = []
   tracer = undefined
@@ -252,20 +263,46 @@ export async function observeOperation<T>(
   parent: Context = context.active()
 ): Promise<T> {
   const result: OperationResult = { outcome: 'success' }
-  if (!tracer) return operation(parent, undefined, result)
-  const span = tracer.startSpan(name, options, parent)
+  const recorder =
+    (parent.getValue(observationRecorderKey) as ObservationRecorder | undefined) ??
+    captureObservationRecorder()
+  const span = tracer?.startSpan(name, options, parent)
   const operationDuration = duration
   const operationLogger = logger
-  const active = trace.setSpan(parent, span).setValue(operationLoggerKey, operationLogger)
+  const active = (span ? trace.setSpan(parent, span) : parent)
+    .setValue(operationLoggerKey, operationLogger)
+    .setValue(observationRecorderKey, recorder)
   const started = performance.now()
   try {
     return await operation(active, span, result)
   } catch (error) {
     result.outcome = 'error'
-    span.setStatus({ code: SpanStatusCode.ERROR })
+    span?.setStatus({ code: SpanStatusCode.ERROR })
     throw error
   } finally {
-    span.end()
+    span?.end()
+    const durationMs = performance.now() - started
+    const traceContext = trace.getSpanContext(active)
+    const failed = result.outcome === 'error' || result.outcome === 'timeout'
+    recordObservation(recorder, {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      kind: 'span',
+      event_name: 'inkcre.operation.completed',
+      severity_number: failed ? 17 : 9,
+      severity_text: failed ? 'ERROR' : 'INFO',
+      body: 'inkcre.operation.completed',
+      trace_id: traceContext?.traceId ?? null,
+      span_id: traceContext?.spanId ?? null,
+      attributes: {
+        'inkcre.operation': name,
+        duration_ms: durationMs,
+        outcome: result.outcome,
+        ...(typeof options.attributes?.['inkcre.job.id'] === 'number'
+          ? { 'inkcre.job.id': options.attributes['inkcre.job.id'] }
+          : {}),
+      },
+    })
     const attributes = { 'inkcre.operation': name, 'inkcre.outcome': result.outcome }
     operationDuration?.record((performance.now() - started) / 1000, {
       operation: name,
@@ -319,6 +356,19 @@ export function emitJobEvent(
   parent: Context,
   status?: string
 ): void {
+  const traceContext = trace.getSpanContext(parent)
+  recordObservation(parent.getValue(observationRecorderKey) as ObservationRecorder | undefined, {
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    kind: 'event',
+    event_name: name,
+    severity_number: status === 'failed' || status === 'timed_out' ? 17 : 9,
+    severity_text: status === 'failed' || status === 'timed_out' ? 'ERROR' : 'INFO',
+    body: name,
+    trace_id: traceContext?.traceId ?? `job.${jobId}`,
+    span_id: traceContext?.spanId ?? null,
+    attributes: { 'inkcre.job.id': jobId, ...(status ? { 'inkcre.job.status': status } : {}) },
+  })
   const operationLogger = parent.getValue(operationLoggerKey) as typeof logger
   operationLogger?.emit({
     context: parent,

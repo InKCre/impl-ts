@@ -90,6 +90,12 @@ const router = createRouter({
       meta: { titleKey: 'sidePanel.peers' },
     },
     {
+      path: '/observability',
+      name: 'Observability',
+      component: () => import('@/views/observability/observability.vue'),
+      meta: { titleKey: 'sidePanel.observability' },
+    },
+    {
       path: '/settings',
       name: 'Settings',
       component: () => import('@/views/settings/settings.vue'),

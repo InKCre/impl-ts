@@ -6,8 +6,9 @@ export type LogRef = number
 export const LogRefZ = z.number()
 
 /**
- * Log model for observability logs.
- * Used for tracking events, errors, and structured logging.
+ * @deprecated Physical PostgreSQL row compatibility API, including historical rows.
+ * Use ObservabilityClient for the selected backend. Numeric IDs/cursors cannot
+ * represent external observations and this legacy API intentionally does not.
  */
 export class Log extends Z.class({
   id: LogRefZ,

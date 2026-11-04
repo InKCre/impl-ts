@@ -218,11 +218,12 @@ watch(
 
       <!-- Right Section: Logs -->
       <section class="job-view__logs">
-        <h2 class="job-view__logs__title">{{ t('logs.title') }}</h2>
+        <h2 class="job-view__logs__title">{{ t('observability.records') }}</h2>
         <LogsViewer
           v-if="job"
           class="flex-1 w-full"
-          :trace-id="`job.${job.id}`"
+          :job-id="job.id"
+          :since="job.created_at.toISOString()"
           :enable-polling="enableLogsPolling"
           :polling-interval="pollingInterval"
         />
