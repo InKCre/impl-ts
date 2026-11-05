@@ -5,7 +5,7 @@ configuration and automation remain authoritative when implementation details ch
 
 - [Development runtime](development-runtime.md): worktree capabilities, database providers,
   ownership, readiness, reset, and cleanup boundaries.
-- [Web delivery](web-delivery.md): the environment-neutral client artifact and Cloudflare Pages
+- [Web delivery](web-delivery.md): the environment-neutral Web App artifact and Cloudflare Pages
   preview and production responsibilities.
 - [First-party Extension delivery](native-extension-delivery.md): release intent, Version PRs,
   self-built Registry publication, and local no-publish guardrails.

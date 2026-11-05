@@ -37,7 +37,7 @@ async function sourceFiles(relativeDirectory) {
 }
 
 const rootPackage = await readJson('package.json')
-const webPackage = await readJson('apps/client-web/package.json')
+const webPackage = await readJson('apps/web/package.json')
 const svcConfig = await readJson('svc.json')
 
 const nodeRuntime = rootPackage.devEngines?.runtime
@@ -89,15 +89,15 @@ if (rootPackage.scripts?.['dev:stop'] !== 'node scripts/dev-stop.mjs') {
 
 for (const dependency of ['@cloudflare/workers-types', 'hono', 'wrangler']) {
   if (webPackage.dependencies?.[dependency] || webPackage.devDependencies?.[dependency]) {
-    errors.push(`static client must not depend on legacy runtime tool "${dependency}"`)
+    errors.push(`static Web App must not depend on legacy runtime tool "${dependency}"`)
   }
 }
 
 for (const path of [
-  'apps/client-web/.env.cloudflare',
-  'apps/client-web/.env.example',
-  'apps/client-web/server/index.ts',
-  'apps/client-web/wrangler.jsonc',
+  'apps/web/.env.cloudflare',
+  'apps/web/.env.example',
+  'apps/web/server/index.ts',
+  'apps/web/wrangler.jsonc',
   'deploy/profiles/legacy-endpoints.json',
   'deploy/profiles/production.json',
   'packages/core/src/database/production-profile.ts',
@@ -111,10 +111,10 @@ for (const path of [
 const runtimeSources = [
   ...(await sourceFiles('packages/core/src')),
   ...(await sourceFiles('packages/ext-dev-utils/src')),
-  ...(await sourceFiles('apps/client-web/src')),
-  ...(await sourceFiles('apps/client-webext/components')),
-  ...(await sourceFiles('apps/client-webext/entrypoints')),
-  ...(await sourceFiles('apps/client-webext/logic')),
+  ...(await sourceFiles('apps/web/src')),
+  ...(await sourceFiles('apps/webext/components')),
+  ...(await sourceFiles('apps/webext/entrypoints')),
+  ...(await sourceFiles('apps/webext/logic')),
   ...(
     await Promise.all(
       (
@@ -270,7 +270,7 @@ for (const required of [
   }
 }
 
-for (const path of ['apps/client-web/vite.config.ts', 'extensions/twitter/vite.config.ts']) {
+for (const path of ['apps/web/vite.config.ts', 'extensions/twitter/vite.config.ts']) {
   const config = await readFile(`${repoRoot}/${path}`, 'utf8')
   for (const required of [
     'createUiSourceAliases',
@@ -287,7 +287,7 @@ for (const path of ['apps/client-web/vite.config.ts', 'extensions/twitter/vite.c
   }
 }
 
-const wxtConfig = await readFile(`${repoRoot}/apps/client-webext/wxt.config.ts`, 'utf8')
+const wxtConfig = await readFile(`${repoRoot}/apps/webext/wxt.config.ts`, 'utf8')
 if (wxtConfig.includes('--remote-debugging-port=9222')) {
   errors.push('WXT development must not reuse the fixed Chromium debugging port 9222')
 }

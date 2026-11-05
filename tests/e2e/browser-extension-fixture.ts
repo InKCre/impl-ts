@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const extensionPath = fileURLToPath(
-  new URL('../../apps/client-webext/.output/chrome-mv3', import.meta.url)
+  new URL('../../apps/webext/.output/chrome-mv3', import.meta.url)
 )
 
 export const test = base.extend<{

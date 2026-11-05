@@ -5,7 +5,7 @@ Shared models, Peer protocols, storage/resolver mechanics, and native Extension 
 ## Owners
 
 - Package role and cross-package flows: `../../ARCHITECTURE.md`.
-- Client runtime and delegation: `../../docs/30-unit-tdd/client-runtime-and-delegation.md`.
+- App runtime and delegation: `../../docs/30-unit-tdd/app-runtime-and-delegation.md`.
 - Info-Base hydration, storage, Resolver outcomes, and browser handles: `../../docs/30-unit-tdd/info-base.md`.
 - Native Extension Host and lifecycle: `../../docs/30-unit-tdd/native-extension-runtime.md`.
 - Shared cross-unit contracts: `../../docs/_shared/20-product-tdd/`.

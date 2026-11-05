@@ -134,7 +134,7 @@ export async function captureCandidates({
       )
       continue
     }
-    const artifactDirectory = path.join(path.dirname(packagePath), 'dist/client-web')
+    const artifactDirectory = path.join(path.dirname(packagePath), 'dist/web')
     const local = await inspectNativeModuleFederation({
       packagePath,
       corePackagePath: path.join(workspace, 'packages/core/package.json'),
@@ -350,7 +350,7 @@ async function main() {
     provenance: {
       source_repository: repository,
       source_revision: revision,
-      build_id: `client-web-extension-release-${runId}`,
+      build_id: `web-extension-release-${runId}`,
     },
   }
   if (command === 'capture') {

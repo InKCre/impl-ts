@@ -7,8 +7,8 @@ The TypeScript peer of InKCre — the web application, the browser extension, an
 ## Repository shape
 
 - `packages/core/` — `@inkcre/core` shared SDK (info-base model, storage, resolvers, retrieval, extension host)
-- `apps/client-web/` — Vue 3 web application (static Vite artifact)
-- `apps/client-webext/` — WXT browser extension
+- `apps/web/` — Vue 3 web application (static Vite artifact)
+- `apps/webext/` — WXT browser extension
 - `extensions/` — independently built native Module Federation producers (`ext-github`, `ext-mail`, `ext-twitter`, `ext-memos`)
 
 ## Quickstart

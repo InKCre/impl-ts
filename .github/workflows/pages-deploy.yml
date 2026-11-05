@@ -97,7 +97,7 @@ jobs:
           wranglerVersion: 4.114.0
           workingDirectory: release
           command: >-
-            pages deploy apps/client-web/dist
+            pages deploy apps/web/dist
             --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }}
             --branch=main
             --commit-hash=${{ needs.identity.outputs.source_sha }}
@@ -108,4 +108,4 @@ jobs:
         env:
           CLOUDFLARE_PAGES_DEPLOYMENT_ID: ${{ steps.pages.outputs.pages-deployment-id }}
           CLOUDFLARE_PAGES_DEPLOYMENT_URL: ${{ steps.pages.outputs.deployment-url }}
-          INKCRE_CLIENT_WEB_ORIGIN: https://app.inkcre.dev
+          INKCRE_WEB_ORIGIN: https://app.inkcre.dev

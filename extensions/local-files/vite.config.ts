@@ -36,5 +36,5 @@ export default defineConfig({
     }),
   ],
   base: './',
-  build: { target: 'es2022', outDir: 'dist/client-web', sourcemap: true },
+  build: { target: 'es2022', outDir: 'dist/web', sourcemap: true },
 })

@@ -96,7 +96,7 @@ export async function useExtensionDevServer(options: ExtensionDevOptions) {
     .filter((e) => e.mode === 'dev')
     .forEach((e) => {
       // 这里的路径规则根据你的实际需求调整
-      proxyConfig[`^/${e.id}/client-web`] = {
+      proxyConfig[`^/${e.id}/web`] = {
         target: `http://localhost:${e.port}`,
         changeOrigin: true,
       }
@@ -133,7 +133,7 @@ export async function useExtensionDevServer(options: ExtensionDevOptions) {
         }
 
         for (const ext of staticExts) {
-          const outDir = path.join(ext.dir, 'dist/client-web')
+          const outDir = path.join(ext.dir, 'dist/web')
           const entryFile = path.join(outDir, 'index.html')
 
           // 1. 如果没有构建产物，自动执行构建
@@ -151,15 +151,15 @@ export async function useExtensionDevServer(options: ExtensionDevOptions) {
           }
 
           // 2. 注册静态文件中间件 (使用 sirv)
-          // 拦截路径: /extension-id/client-web/...
-          const routePrefix = `/${ext.id}/client-web`
+          // 拦截路径: /extension-id/web/...
+          const routePrefix = `/${ext.id}/web`
 
           // sirv 实例 (dev 模式下开启 etag 等)
           const serve = sirv(outDir, { dev: true, single: true })
 
           server.middlewares.use((req, res, next) => {
             if (req.url?.startsWith(routePrefix)) {
-              // URL Rewrite: 把 /extension-a/client-web/assets/app.js 变成 /assets/app.js
+              // URL Rewrite: 把 /extension-a/web/assets/app.js 变成 /assets/app.js
               const originalUrl = req.url
               req.url = req.url.slice(routePrefix.length)
               if (req.url === '') req.url = '/' // 处理根路径

@@ -3,7 +3,7 @@
 - [Repository architecture](../ARCHITECTURE.md)
 - [Filesystem map](../FILESYSTEM.md)
 - [Unit TDD](30-unit-tdd/README.md)
-  - [Client Runtime and Delegation](30-unit-tdd/client-runtime-and-delegation.md)
+  - [App Runtime and Delegation](30-unit-tdd/app-runtime-and-delegation.md)
   - [Info-Base](30-unit-tdd/info-base.md)
   - [Native Extension Runtime](30-unit-tdd/native-extension-runtime.md)
 - [Deployment and Runtime](40-deployment/README.md)

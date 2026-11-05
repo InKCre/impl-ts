@@ -7,7 +7,7 @@
     "jsxImportSource": "vue",
     "skipLibCheck": true,
     "paths": {
-      "@/*": ["../../apps/client-web/src/*"],
+      "@/*": ["../../apps/web/src/*"],
       "@inkcre/core": ["../../packages/core/src/index.ts"],
       "@inkcre/core/*": ["../../packages/core/src/*"]
     }

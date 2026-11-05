@@ -20,7 +20,7 @@ export const twitterArtifactBase = './'
 export const twitterBuildTarget = 'es2022'
 export const twitterBuildOptions = {
   target: twitterBuildTarget,
-  outDir: 'dist/client-web',
+  outDir: 'dist/web',
   sourcemap: true,
 }
 export const twitterFederationOptions = {

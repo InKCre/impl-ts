@@ -1,8 +1,8 @@
-# Client Runtime and Delegation
+# App Runtime and Delegation
 
 ## Boundary
 
-Client-Web is an environment-neutral static Vue application and an equal database-protocol Peer.
+Web App is an environment-neutral static Vue application and an equal database-protocol Peer.
 It reads and writes admitted PostgreSQL facts through PostgREST and delegates business capabilities
 through exact Peer advertisements. These are separate paths: there is no generic Core API client,
 generic capability endpoint, or delegation job table.
@@ -118,7 +118,7 @@ browser signer's 24-hour default lifetime, independently of database admission p
 regenerates the token when the secret changes and clears it when the secret is removed. PostgREST JSON access,
 raw byte access, and Peer HTTP delegation reuse this single authentication authority.
 
-Web Peer registration publishes the client-web application version and a best-effort browser/version/system
+Web Peer registration publishes the web application version and a best-effort browser/version/system
 default name only when creating a new identity. Later registration refreshes runtime-owned version and schema
 without replacing the Human-owned name or Peer config.
 
@@ -187,7 +187,7 @@ success. `PeerOutcomeUnknown` remains visible and does not trigger reload or aut
 
 ## Invariants
 
-- InKCre runtime nodes are **Peers** in technical contracts and product UI; “client” remains only for actual application or protocol client roles.
+- InKCre runtime nodes are **Peers** in technical contracts and product UI; “client” remains only for actual protocol client roles.
 - Database facts and capability commands remain distinct paths.
 - Exact-target routing never degrades to best-effort routing.
 - Ambiguous dispatch is never retried automatically.

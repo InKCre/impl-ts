@@ -2,10 +2,10 @@
 import { computed, markRaw, ref } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import { setInfoBaseRouter, type InfoBaseRoute } from '@inkcre/core'
-import SolvedContentRenderer from '../../../apps/client-web/src/components/info-base/SolvedContentRenderer/SolvedContentRenderer.vue'
-import PreviewRenderer from '../../../apps/client-web/src/components/info-base/PreviewRenderer/PreviewRenderer.vue'
-import BlockNode from '../../../apps/client-web/src/components/info-base/BlockNode/BlockNode.vue'
-import SolvedContentPopup from '../../../apps/client-web/src/components/info-base/SolvedContentPopup/SolvedContentPopup.vue'
+import SolvedContentRenderer from '../../../apps/web/src/components/info-base/SolvedContentRenderer/SolvedContentRenderer.vue'
+import PreviewRenderer from '../../../apps/web/src/components/info-base/PreviewRenderer/PreviewRenderer.vue'
+import BlockNode from '../../../apps/web/src/components/info-base/BlockNode/BlockNode.vue'
+import SolvedContentPopup from '../../../apps/web/src/components/info-base/SolvedContentPopup/SolvedContentPopup.vue'
 import { specimens, blocks, resolverFor, solvedFor } from './fixtures'
 
 const selected = ref(100)

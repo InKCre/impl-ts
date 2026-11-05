@@ -2,20 +2,38 @@
 
 ## Artifact Contract
 
-`apps/client-web` 构建静态且与部署环境无关的 Vite 产物。部署实例的连接地址、Peer 身份与 JWT 凭据
+`apps/web` 构建静态且与部署环境无关的 Vite 产物。部署实例的连接地址、Peer 身份与 JWT 凭据
 由运行时持有，不能编入生产或预览产物；公共业务链接和产品 Registry 默认地址不选择部署实例。
 Pages 只提供静态托管，本仓库没有应用 Worker 或运行时配置接口。
-[`scripts/verify-client-web-release.mjs`](../../scripts/verify-client-web-release.mjs) 和
+[`scripts/verify-web-release.mjs`](../../scripts/verify-web-release.mjs) 和
 [`scripts/check-package-contract.mjs`](../../scripts/check-package-contract.mjs) 共同执行此边界。
 两个入口都先执行源码配置检查，再检查构建输出，独立 release 验证与 workspace CI 使用相同的部署配置规则。
 
-The **Client checks** workflow in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
+The **App checks** workflow in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 validates the candidate but uploads no deployable SPA, Module Federation, or Registry handoff
 artifact. Preview and production each build at their own authority boundary and cannot publish
 first-party Extensions.
 
 The browser-side authority behind this invariant belongs to
-[Client Runtime and Delegation](../30-unit-tdd/client-runtime-and-delegation.md).
+[App Runtime and Delegation](../30-unit-tdd/app-runtime-and-delegation.md).
+
+## App 命名与兼容身份
+
+源码与工作区包使用 `apps/web` / `@inkcre/web` 和 `apps/webext` / `@inkcre/webext`。App 是应用交付，Peer 是运行参与者；数据库、HTTP、OAuth 的 client 仍表示具体协议角色。两个应用保持现有版本线与历史 changelog，待消费 Changeset 使用新包名，不重新发布旧版本。
+
+部署保持生产 origin `app.inkcre.dev`、Pages 项目、`preview/client-web/pr-<number>` 分支与对应预览别名；这些名字已关联外部资源及浏览器同源存储。本地 Portless 的 `client-web-<instance>` / `client-web-ui-<instance>` origin 也保留，以读取已有设置。需要改域时必须另行提供同源数据转移，不能把目录改名当作数据迁移。
+
+GitHub 的 `client-web E2E` / `client-webext E2E` check 名仍与已有分支保护绑定；工作流显示名改为 App checks。后续若调整 check 名，应先同步远端 required-check 绑定并取得新检查证据。本次不变更保护规则。部署调用使用 `INKCRE_WEB_ORIGIN`，验证脚本仍接受旧 `INKCRE_CLIENT_WEB_ORIGIN` 入站别名；旧部署调用方迁移后才移除别名。
+
+浏览器配置键 `inkcre_app_config`、Peer ID 和旧 `client_id` / `INKCRE_CLIENT_ID` 迁移输入不变。WebExt 的 Chromium 公钥、Gecko ID、IndexedDB `inkcre-webext-collection`、导出格式、`webext-v<version>` 标签和下载文件名也不变；继续按原安装目录覆盖更新，不卸载现有实例。新建的开发数据库使用 `inkcre-web-<instance>` 命名，已有 runtime state 中的项目名、凭据和数据继续沿用。开发凭据派生继续使用旧 `inkcre-client-web` 命名空间，避免重建一次性数据库后浏览器中已保存的凭据失效；修改它属于凭据轮换，需要单独迁移。
+
+应用以 `@inkcre/extension-runtime-web` 导入 Runtime SDK；当前依赖仍固定到 ext-reg 已发布的 `runtime-client-web-v0.4.2` 精确 tarball。安装别名不表示新名称的包已发布，正式新包发布后再更新 artifact URL、完整性与版本准入。现有 `@inkcre/core` Host ABI、`module_federation` distribution ID 和已发布 Release/manifest URL 不改写，新源码构建输出采用 `dist/web`。
+
+该旧 tarball 的 Zod 4.1.12 受 [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) 影响；工作区只对 Runtime 0.4.2 的这条依赖覆写为已有的 4.6.7，保留 tarball 原始字节和身份。采用直接依赖已修复版本的新 Runtime 后移除该覆写，不关闭依赖安全检查。
+
+访问 Registry 时发送 `app_origin`，同时携带同值的旧 `client_origin`，兼容已部署 Registry 的安装返回地址。新 Registry 接受同值别名并拒绝冲突输入；待旧版本退出准入后才能移除旧参数。
+
+OTEL 新记录的 `service.name` 为 `inkcre.web`。旧 `inkcre.client-web` 历史保持原值，跨切换窗口的外部诊断需包含两者；业务 Peer/Job 身份没有变化。
 
 `public/_headers` gives Vite's content-hashed `/assets/` files a one-year immutable browser
 cache. HTML keeps Pages' revalidation policy so a new visit discovers the current asset names.
@@ -53,15 +71,15 @@ Restore automatic delivery only after the cutover has been verified.
 ### Breaking database protocol upgrades
 
 Pages delivery changes the HTML and assets served to new visits; it does not replace JavaScript
-already running in an open tab. Client Web 0.1.2 and Core SDK 0.3 use the global Extension
+already running in an open tab. Web App 0.1.2 and Core SDK 0.3 use the global Extension
 `version`, `enabled` and `config_schema` columns. The Peer-participation migration removes those
 columns, so an old tab can fail Extension reads and writes even while unrelated information remains
-readable. Reloading before the matching App is deployed still loads an incompatible client.
+readable. Reloading before the matching App is deployed still loads an incompatible App.
 
 The deployment owner coordinates a maintenance window across the affected Core/PostgREST deployment
-and Client Web. Pause browser writes and close old connected tabs before the database cutover. Keep
+and Web App. Pause browser writes and close old connected tabs before the database cutover. Keep
 the browser's connection settings and Peer ID. Resume use only after the deployment's
-`extension-peer-participation-v2` database and management endpoint are ready and Client Web 0.1.3
+`extension-peer-participation-v2` database and management endpoint are ready and Web App 0.1.3
 has been deployed, then fully reload each connected tab. A startup error's Retry button performs
 that full reload; it cannot repair an incompatible database or update a tab while it remains open.
 The Core deployment documentation owns backup, migration and service recovery commands.
@@ -153,7 +171,7 @@ explicit positive PR number and applies the same closed internal-PR identity che
 
 浏览器出口必须是部署 owner 已验证的公开受限写入入口，或受控按请求转发入口；
 不得把 Grafana/其他 SaaS 的服务端 ingest token 放入浏览器配置、URL、静态环境变量
-或前端代码。URL 校验拒绝 userinfo、query 和 fragment，不接受任意自定义认证 headers。
+或 Web 源码。URL 校验拒绝 userinfo、query 和 fragment，不接受任意自定义认证 headers。
 如使用 core-py 的受控中转，在浏览器连接设置显式填写 `telemetry_peer_relay_url`，例如
 `https://peer.example/telemetry`。SDK 追加 `/v1/{traces,logs,metrics}`，每批请求用现有
 签名 authority 产生此连接的短期 Peer JWT；私密 SaaS headers 仍只在服务器。
@@ -162,7 +180,7 @@ core 中转只接受此格式，Trace/Span ID 与 Links 由标准 protobuf 消�
 JSON 字节转换。该地址需属于可信部署 Peer；填写地址不会启用遥测，失败也不会切回公开出口。
 留空时沿用共享公开出口且不附加 Peer JWT。
 负责入口的部署 owner 须验证 CORS、写入权限、部署归属、配额和失效行为。浏览器自报的
-部署 ID 只是关联属性，不能作为授权依据。客户端不提供常驻 Collector，也不代表某个
+部署 ID 只是关联属性，不能作为授权依据。Web App 不提供常驻 Collector，也不代表某个
 SaaS 的真实账号、免费额度或入口已经验收。
 
 Peer HTTP 入口需要在原有认证和 CORS 配置下允许 `traceparent`、`tracestate`；CORS

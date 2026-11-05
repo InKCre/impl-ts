@@ -3,7 +3,7 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/ext-dev-utils" },
-    { "path": "./apps/client-web" },
+    { "path": "./apps/web" },
     { "path": "./extensions/twitter" }
   ]
 }

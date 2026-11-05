@@ -75,7 +75,7 @@ export function registerGitHubNativeTests(): void {
         await remoteEntryGate
       }
       const file = fileURLToPath(
-        new URL(`../../extensions/github/dist/client-web/${relative}`, import.meta.url)
+        new URL(`../../extensions/github/dist/web/${relative}`, import.meta.url)
       )
       let body = await readFile(file)
       if (relative === 'mf-manifest.json') {
@@ -343,7 +343,7 @@ export function registerGitHubNativeTests(): void {
         content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
       ).toBeVisible()
       // Background participation does not own the local reader Host.
-      // Client-side navigation keeps the document (and the MF host instance) alive.
+      // Browser navigation keeps the document (and the MF host instance) alive.
       async function openSettings(): Promise<void> {
         // The unified entity UI renders object views as modal popups; close any
         // open one so the header controls are clickable.

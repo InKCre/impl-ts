@@ -20,7 +20,7 @@ export const githubArtifactBase = './'
 export const githubBuildTarget = 'es2022'
 export const githubBuildOptions = {
   target: githubBuildTarget,
-  outDir: 'dist/client-web',
+  outDir: 'dist/web',
   sourcemap: true,
 }
 export const githubFederationOptions = {

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import vue from '@vitejs/plugin-vue'
 
 const root = fileURLToPath(new URL('../../..', import.meta.url))
-const app = resolve(root, 'apps/client-web')
+const app = resolve(root, 'apps/web')
 const require = createRequire(resolve(app, 'package.json'))
 
 export default {

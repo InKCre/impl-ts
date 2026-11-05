@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 import { createUiSourceTsconfig, readUiSourceInput, resolveUiSourcePackage } from './ui-source.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
-const appRoot = resolve(repoRoot, 'apps/client-web')
+const appRoot = resolve(repoRoot, 'apps/web')
 const runtimeRoot = resolve(repoRoot, '.runtime/ui-source')
 const configPath = resolve(runtimeRoot, 'tsconfig.json')
 

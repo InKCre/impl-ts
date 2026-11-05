@@ -21,7 +21,7 @@ export const mailArtifactBase = './'
 export const mailBuildTarget = 'es2022'
 export const mailBuildOptions = {
   target: mailBuildTarget,
-  outDir: 'dist/client-web',
+  outDir: 'dist/web',
   sourcemap: true,
 }
 export const mailFederationOptions = {

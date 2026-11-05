@@ -1,6 +1,6 @@
 # Repository Architecture
 
-This monorepo implements three logical client-side units across shared packages, applications, and
+This monorepo implements three logical browser units across shared packages, applications, and
 independently built Extension producers.
 
 ```text
@@ -12,7 +12,7 @@ Module Federation producers ---+         |               |
 
 ## Logical Units
 
-- [Client Runtime and Delegation](docs/30-unit-tdd/client-runtime-and-delegation.md) owns the
+- [App Runtime and Delegation](docs/30-unit-tdd/app-runtime-and-delegation.md) owns the
   environment-neutral browser Peer, bootstrap/authentication authority, exact capability
   delegation, and navigation hosts.
 - [Info-Base](docs/30-unit-tdd/info-base.md) owns graph models, hydration, byte storage, exact
@@ -40,8 +40,8 @@ locations, not Unit boundaries.
 
 - `packages/core/` - shared models, database access, Peer protocols, storage/Resolver mechanics,
   configuration/authentication, and Extension Host.
-- `apps/client-web/` - Vue SPA, graph/list surfaces, settings, and static Vite artifact.
-- `apps/client-webext/` - WXT browser surfaces and content scripts.
+- `apps/web/` - Vue SPA, graph/list surfaces, settings, and static Vite artifact.
+- `apps/webext/` - WXT browser surfaces and content scripts.
 - `extensions/` - independently built native Module Federation producers.
 - `packages/ext-dev-utils/` - producer development support consumed by applications.
 

@@ -16,7 +16,7 @@ import {
 import { useExtensionDevServer } from './vite-plugins/joint-dev-extension'
 
 const appRoot = fileURLToPath(new URL('.', import.meta.url))
-const clientScssRoots = ['components', 'views', 'extensions'].map((directory) =>
+const appScssRoots = ['components', 'views', 'extensions'].map((directory) =>
   fileURLToPath(new URL(`./src/${directory}`, import.meta.url))
 )
 
@@ -96,7 +96,7 @@ export default defineConfig(async ({ command, mode }) => {
       ...(uiSource ? { dedupe: uiSourceDedupe } : {}),
     },
     optimizeDeps: {
-      exclude: ['@inkcre/extension-runtime-client-web', ...(uiSource ? ['@inkcre/ui-web'] : [])],
+      exclude: ['@inkcre/extension-runtime-web', ...(uiSource ? ['@inkcre/ui-web'] : [])],
     },
     server: {
       host: '127.0.0.1',
@@ -124,7 +124,7 @@ export default defineConfig(async ({ command, mode }) => {
       preprocessorOptions: {
         scss: {
           additionalData: (source: string, file: string) => {
-            if (clientScssRoots.some((root) => isPathInside(root, file))) {
+            if (appScssRoots.some((root) => isPathInside(root, file))) {
               return `@use "@inkcre/ui-web/styles/mixins" as *;@use "@inkcre/ui-web/styles/functions" as *;@use "@/styles/index.scss" as *;${source}`
             }
             if (uiSourceComponents && isPathInside(uiSourceComponents, file)) {

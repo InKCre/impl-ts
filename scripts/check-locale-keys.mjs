@@ -2,7 +2,7 @@
 /**
  * Locale key coverage check.
  *
- * Every literal `t('a.b.c')` call in the client source must resolve in BOTH
+ * Every literal `t('a.b.c')` call in the Web App source must resolve in BOTH
  * locale catalogs (en and zh-CN). The overhaul batch that reorganized the
  * locale files dropped a few keys whose usages survived (sidePanel.managing,
  * sidePanel.infoBase, source.saveFailed), which rendered raw i18n keys in
@@ -16,7 +16,7 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(fileURLToPath(import.meta.url), '..', '..')
-const srcDir = join(root, 'apps/client-web/src')
+const srcDir = join(root, 'apps/web/src')
 const catalogs = ['en', 'zh-CN'].map((name) => ({
   name,
   messages: JSON.parse(readFileSync(join(srcDir, 'locales/messages', `${name}.json`), 'utf8')),

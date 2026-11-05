@@ -102,7 +102,7 @@ export function validateRuntimeContract(contract, manifest) {
 /**
  * Project the image-owned runtime document into the compatibility facts consumed
  * by browser peers. Image provenance remains execution evidence, not a checked-in
- * client interface.
+ * database-consumer interface.
  */
 export function projectDatabaseCompatibilityContract(contract) {
   const compatibility = {
@@ -142,7 +142,7 @@ export function validateDatabaseCompatibilityContract(contract) {
   const hasExpectedFields = hasExactKeys(contract, ['format', 'revision', 'protocol', 'jwt'])
   const hasExpectedProtocol = hasExactKeys(contract.protocol, ['format', 'schema'])
   if (!hasExpectedFields || !hasExpectedProtocol) {
-    throw new Error('database compatibility contract contains non-client fields')
+    throw new Error('database compatibility contract contains non-consumer fields')
   }
   return compatibility
 }

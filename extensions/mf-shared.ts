@@ -1,6 +1,6 @@
 // Shared dependencies for Module Federation remote (extensions).
 
-import packageJson from '../apps/client-web/package.json'
+import packageJson from '../apps/web/package.json'
 export default function mfShared(hostSdkVersion: string, uiVersion: string) {
   return {
     '@inkcre/ui-web': {

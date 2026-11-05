@@ -1,6 +1,6 @@
 # WebExt 版本与分发
 
-WebExt 是独立交付的浏览器 Peer，不属于 Module Federation Extension。Chromium 和 Firefox 共享 `apps/client-webext/package.json` 的版本，构建不同浏览器产物；不随 client-web、Core 或 MF Registry 的版本发布。
+WebExt 是独立交付的浏览器 Peer，不属于 Module Federation Extension。Chromium 和 Firefox 共享 `apps/webext/package.json` 的版本，构建不同浏览器产物；不随 web、Core 或 MF Registry 的版本发布。
 
 ## 安装和手动更新
 
@@ -14,7 +14,7 @@ Firefox ZIP **未签名，仅供 `about:debugging` 临时加载**，不能作为
 
 固定公钥写入 manifest 后，解压目录变化不再改变 Chromium 扩展 ID。早期没有公钥的安装按路径生成另一 ID，浏览器不会把它的存储自动交给新身份。先完成一次数据转移，此后的固定身份版本按普通更新处理。
 
-1. 从相同源码执行 `pnpm --filter @inkcre/client-webext zip:migration`。这是不带固定公钥的过渡构建，只用于早期安装的数据导出，不是正式发布包。保留旧目录副本后，将过渡构建放到原安装的**完全相同路径**，重新加载；确认信息库与待办仍在。不要把带固定公钥的正常构建直接覆盖到这个路径。
+1. 从相同源码执行 `pnpm --filter @inkcre/webext zip:migration`。这是不带固定公钥的过渡构建，只用于早期安装的数据导出，不是正式发布包。保留旧目录副本后，将过渡构建放到原安装的**完全相同路径**，重新加载；确认信息库与待办仍在。不要把带固定公钥的正常构建直接覆盖到这个路径。
 2. 在设置页暂停自动采集和运行中的导入，等待正在发送的工作结束，关闭其他扩展页面。展开“本机数据迁移”，导出文件；随后停用旧实例，不要卸载。
 3. 在另一个目录加载正常固定身份构建，在空实例中迁入文件。已有连接、待办、导入或封存记录的实例会拒绝迁入，不合并或覆盖。
 4. 核对信息库、待办和导入进度。点击“检查连接”重新授权数据库地址，重新启用需要的网站权限；书签、历史权限也需重新授予。重新加载新扩展后按需恢复采集与导入。不要同时启用承载相同 Peer 身份的旧、新实例。
@@ -25,7 +25,7 @@ Firefox ZIP **未签名，仅供 `about:debugging` 临时加载**，不能作为
 
 ## 准备版本与产物
 
-用户可见变更携带针对 `@inkcre/client-webext` 的 Changeset。复用工作区 Version PR 消费这些文件，更新版本和 changelog；不要手改生成的 manifest。重写首次交付使用 minor 变更意图，由 Version PR 将当前 `0.1.4` 准备为 `0.2.0`，不是仅合并功能 PR 就发布当前版本。
+用户可见变更携带针对 `@inkcre/webext` 的 Changeset。复用工作区 Version PR 消费这些文件，更新版本和 changelog；不要手改生成的 manifest。重写首次交付使用 minor 变更意图，由 Version PR 将当前 `0.1.4` 准备为 `0.2.0`，不是仅合并功能 PR 就发布当前版本。
 
 版本使用三段纯数字 SemVer，每段不超过 65535。不要以 `-beta` 后缀区分浏览器包：WXT 会把后缀从 manifest 版本中去掉，两个候选可能因此成为同一个浏览器版本。测试候选用来源提交区分，不冒充正式新版本。
 

@@ -5,8 +5,8 @@
 - `.agents/` - Consumer-owned Agent prompts and shared-doc workflow bridge.
 - `.github/` - CI, release, deployment, contextual coding instructions, and explicit preview
   inventories under `.github/preview/`.
-- `apps/client-web/` - Static Vue application.
-- `apps/client-webext/` - WXT browser extension.
+- `apps/web/` - Static Vue application.
+- `apps/webext/` - WXT browser extension.
 - `contracts/` - Checked upstream release and compatibility inputs.
 - `docs/` - Local durable technical owners; `_shared/` is the read-only Hub reference.
 - `extensions/` - Independently versioned native Module Federation producers.
@@ -18,10 +18,10 @@
 
 ## Primary Entrypoints
 
-- `apps/client-web/src/main.ts` - Web bootstrap.
-- `apps/client-web/src/core.ts` - Core registration and initialization.
-- `apps/client-web/src/router.ts` - Web route authority.
-- `apps/client-webext/entrypoints/` - WXT-discovered extension surfaces.
+- `apps/web/src/main.ts` - Web bootstrap.
+- `apps/web/src/core.ts` - Core registration and initialization.
+- `apps/web/src/router.ts` - Web route authority.
+- `apps/webext/entrypoints/` - WXT-discovered extension surfaces.
 - `packages/core/src/sdk.ts` - Independent SDK exports with explicit connections.
 - `packages/core/src/index.ts` - Published Vue/MF compatibility exports.
 - `extensions/*/src/index.ts` - Host-consumed Extension exports.

@@ -6,8 +6,8 @@ import { registerGitHubNativeTests } from './github-native'
 const postgrestUrl = process.env.INKCRE_E2E_POSTGREST_URL!
 const jwtSecret = process.env.INKCRE_E2E_JWT_SECRET!
 const coreUrl = process.env.INKCRE_E2E_CORE_URL!
-const clientVersion = JSON.parse(
-  readFileSync(new URL('../../apps/client-web/package.json', import.meta.url), 'utf8')
+const appVersion = JSON.parse(
+  readFileSync(new URL('../../apps/web/package.json', import.meta.url), 'utf8')
 ).version
 
 /** Navigate to Settings without replacing the document, so in-page runtimes and
@@ -468,7 +468,7 @@ test('a new browser identity waits for insertion before opening business pages',
     inserting = true
     const inserted = route.request().postDataJSON()
     expect(inserted.id).toBe(peerId)
-    expect(inserted.application_version).toBe(clientVersion)
+    expect(inserted.application_version).toBe(appVersion)
     expect(inserted.capabilities).toEqual([])
     await gate
     await route.fulfill({
@@ -1176,9 +1176,7 @@ test('failed remote enablement reads back persisted intent without claiming a ru
 })
 
 test('wrong and absent credentials are rejected', async ({ page }) => {
-  const wrongAuthorization = `Bearer ${await token(
-    'wrong-client-web-jwt-secret-at-least-32-bytes'
-  )}`
+  const wrongAuthorization = `Bearer ${await token('wrong-web-jwt-secret-at-least-32-bytes')}`
   const statuses = await page.evaluate(
     async ({ postgrestUrl, wrongAuthorization }) => {
       const wrong = await fetch(`${postgrestUrl}peers?select=id`, {
@@ -1224,7 +1222,7 @@ test('Web Peer publishes its app identity and preserves a user name', async ({ p
       })
       .toEqual({
         name: expect.stringMatching(/^Chrome \d+ · (Linux|macOS|Windows)$/),
-        application_version: clientVersion,
+        application_version: appVersion,
       })
 
     const renamed = await fetch(endpoint, {
@@ -1241,7 +1239,7 @@ test('Web Peer publishes its app identity and preserves a user name', async ({ p
         })
         return response.ok ? (await response.json())[0] : null
       })
-      .toEqual({ name: 'My browser Peer', application_version: clientVersion })
+      .toEqual({ name: 'My browser Peer', application_version: appVersion })
     await page.goto('/')
     await expect(page).toHaveTitle(/My browser Peer/)
   } finally {

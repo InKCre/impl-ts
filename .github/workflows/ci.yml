@@ -1,4 +1,4 @@
-name: Client checks
+name: App checks
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: >-
-    client-checks-${{
+    app-checks-${{
       github.event.pull_request.number ||
       github.ref
     }}
@@ -122,6 +122,7 @@ jobs:
           scripts/tests/pages-preview.test.mjs
 
   peer-database:
+    # Existing branch protection binds this exact check name.
     name: client-web E2E
     needs: core-release
     runs-on: ubuntu-latest
@@ -171,6 +172,7 @@ jobs:
           retention-days: 7
 
   browser-extension:
+    # Existing branch protection binds this exact check name.
     name: client-webext E2E
     runs-on: ubuntu-latest
     steps:
@@ -198,7 +200,7 @@ jobs:
         run: pnpm test:e2e:webext
 
       - name: Build the Firefox extension
-        run: pnpm --filter @inkcre/client-webext build:firefox
+        run: pnpm --filter @inkcre/webext build:firefox
 
       - name: Verify WebExt delivery rules
         run: node --test scripts/tests/webext-release.test.mjs

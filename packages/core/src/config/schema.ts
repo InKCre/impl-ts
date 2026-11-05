@@ -22,7 +22,7 @@ export const LLMProviderConfigSchema = z.object({
 export type LLMProviderConfig = z.infer<typeof LLMProviderConfigSchema>
 
 /**
- * AI configuration schema (from client-webext)
+ * AI configuration schema (from webext)
  */
 export const AIConfigSchema = z.object({
   llmProviders: z.array(LLMProviderConfigSchema).default([]).meta({ title: 'AI providers' }),

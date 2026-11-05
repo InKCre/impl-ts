@@ -30,8 +30,8 @@ Before choosing a design, identify shared state, business contracts, and each pa
 
 ## Repository Map
 
-- `apps/client-web/`: static Vue SPA (the web peer)
-- `apps/client-webext/`: WXT browser extension (the browser-extension peer)
+- `apps/web/`: static Vue SPA (the web peer)
+- `apps/webext/`: WXT browser extension (the browser-extension peer)
 - `packages/core/`: shared models, protocols, storage/resolver mechanics, Extension Host
 - `packages/ext-dev-utils/`: extension development utilities
 - `extensions/`: independently versioned native Module Federation producers (mail, memos, twitter)
@@ -48,7 +48,7 @@ For UI work, read the installed `@inkcre/ui-web` package's `DESIGN.md` and `skil
 - Runtime: Node.js 22.22.3; package manager: pnpm 11.11.0. Exact commands live in `package.json` and `docs/40-deployment/`.
 - `.env` files are dotenv data, not shell scripts. Load them through the application because values may contain shell metacharacters.
 - Generated contracts under `contracts/` are checked-in projections. Change their source and regenerate; do not edit them directly.
-- The `apps/client-webext/` WXT extension and the `apps/client-web/` Vue SPA share `@inkcre/core` but run in different security contexts. Changes that cross the seam must be validated against both runtimes.
+- The `apps/webext/` WXT extension and the `apps/web/` Vue SPA share `@inkcre/core` but run in different security contexts. Changes that cross the seam must be validated against both runtimes.
 - Follow `.agents/prompts/code-for-human.md` for source changes.
 
 ## Governance And Workflow

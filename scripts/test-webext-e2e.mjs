@@ -12,5 +12,5 @@ function run(command, args) {
 }
 
 run('pnpm', ['--filter', '@inkcre/core', 'build'])
-run('pnpm', ['--filter', '@inkcre/client-webext', 'build'])
+run('pnpm', ['--filter', '@inkcre/webext', 'build'])
 run('pnpm', ['exec', 'playwright', 'test', '--project', 'browser-extension'])

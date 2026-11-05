@@ -20,7 +20,7 @@ const profileDir = `${repoRoot}/.runtime/dev/${instance}/chromium-profile`
 await mkdir(profileDir, { recursive: true })
 
 const child = spawn('pnpm', ['exec', 'wxt'], {
-  cwd: `${repoRoot}/apps/client-webext`,
+  cwd: `${repoRoot}/apps/webext`,
   env: {
     ...process.env,
     INKCRE_WXT_PROFILE_DIR: profileDir,
