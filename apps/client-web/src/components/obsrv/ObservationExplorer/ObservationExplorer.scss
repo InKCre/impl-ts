@@ -1,0 +1,159 @@
+.observation-explorer {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: sys-var(space, lg);
+  color: sys-var(color, text, base);
+  @include apply-font(body-md);
+
+  h1 {
+    @include apply-font(title-lg);
+    margin: 0;
+  }
+  p {
+    margin: 0;
+  }
+  summary {
+    cursor: pointer;
+    padding-block: sys-var(space, sm);
+  }
+  button:focus-visible,
+  summary:focus-visible,
+  a:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+  }
+  &__header,
+  &__summary,
+  &__backend,
+  &__detail,
+  &__empty {
+    display: grid;
+    gap: sys-var(space, sm);
+  }
+  &__header p,
+  &__summary p,
+  &__backend p,
+  &__hint {
+    color: sys-var(color, text, subtle);
+    @include apply-font(body-sm);
+  }
+  &__backend,
+  &__summary {
+    border-block: 1px solid sys-var(color, border, subtle);
+    padding-block: sys-var(space, sm);
+  }
+  &__status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: sys-var(space, lg);
+    margin: 0;
+  }
+  &__status div {
+    display: grid;
+    gap: sys-var(space, xs);
+  }
+  dt {
+    color: sys-var(color, text, subtle);
+    @include apply-font(body-sm);
+  }
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  &__filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+    gap: sys-var(space, md);
+  }
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: sys-var(space, sm);
+  }
+  &__records {
+    display: grid;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  &__record {
+    min-width: 0;
+    border-bottom: 1px solid sys-var(color, border, subtle);
+  }
+  &__record-heading {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 170px 60px minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: sys-var(space, sm);
+    padding: sys-var(space, md) sys-var(space, sm);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+  &__record-heading:hover {
+    background: sys-var(color, surface, subtle);
+  }
+  &__record time,
+  &__level {
+    @include apply-font(body-sm);
+  }
+  &__record--error &__level,
+  &__error {
+    color: sys-var(color, feedback, error);
+  }
+  &__detail {
+    padding: sys-var(space, md);
+    background: sys-var(color, surface, subtle);
+  }
+  &__detail dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: sys-var(space, sm);
+  }
+  &__body {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  pre {
+    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin: 0;
+    @include apply-font(body-sm);
+  }
+  &__warning {
+    color: sys-var(color, feedback, warning) !important;
+  }
+  &__error {
+    border-inline-start: 2px solid currentColor;
+    padding: sys-var(space, md);
+    display: grid;
+    gap: sys-var(space, sm);
+  }
+  &__empty {
+    padding: sys-var(space, lg);
+    color: sys-var(color, text, subtle);
+  }
+  &--embedded {
+    padding: sys-var(space, md);
+    box-sizing: border-box;
+    border: 1px solid sys-var(color, border, subtle);
+  }
+  @media (max-width: 700px) {
+    &__record-heading {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    &__record-heading > :nth-child(3) {
+      grid-column: 1 / -1;
+    }
+  }
+}

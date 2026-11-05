@@ -66,6 +66,13 @@ const NAV_ITEMS: NavItem[] = [
     requiresReady: true,
   },
   {
+    name: 'observability',
+    labelKey: 'sidePanel.observability',
+    to: '/observability',
+    matches: ['/observability'],
+    requiresReady: true,
+  },
+  {
     name: 'settings',
     labelKey: 'sidePanel.settings',
     to: '/settings',

@@ -1,9 +1,7 @@
 # LogsViewer
 
-LogsViewer 按 `traceId` 读取并展示日志。首次读取后，以最后一条日志的 ID 作为游标追加新内容；只有收到新日志才滚动到尾部。
+Job 内嵌观测视图，复用 ObservationExplorer 和 Core 的统一查询接口，不直接访问 PostgreSQL 或选择外部供应商。
 
-`enablePolling` 决定是否自动更新，`pollingInterval` 设置更新间隔（默认 5000ms）。尾部 spinner 只在请求期间显示，轮询间隔显示静态更新提示。读取完成但没有内容时显示空态。
+`jobId` 同时关联新结构化事件和历史 job.N 日志；`since` 使用 Job 创建时间，旧任务不因默认最近窗口而被遗漏。也保留独立 `traceId` 查询。
 
-读取失败时保留已显示的日志，暂停自动更新，并在尾部提供错误和重试。重试成功后按 `enablePolling` 恢复轮询。切换 `traceId` 会清空旧日志并重新读取；上一 trace 的未完成请求不能写入新的日志区域。
-
-组件复用 Core 的 Log 模型和读取方法，错误详情可展开查看，单条日志由 LogEntry 渲染。
+查询有界，记录过多时提示缩窄范围；不承诺全量历史。`enablePolling` 与 `pollingInterval` 控制刷新。连接或业务范围变化使在途响应失效；刷新失败保留同范围已有记录并提示重试。

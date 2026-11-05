@@ -140,6 +140,9 @@ export {
 export { Cron, CronForm } from './cron'
 
 // Observability
+export * from './obsrv/contracts'
+export { ObservabilityClient } from './obsrv/client'
+export { createObservabilityClient } from './obsrv/app'
 export {
   Log,
   type LogRef,
