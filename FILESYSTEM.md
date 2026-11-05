@@ -22,7 +22,8 @@
 - `apps/client-web/src/core.ts` - Core registration and initialization.
 - `apps/client-web/src/router.ts` - Web route authority.
 - `apps/client-webext/entrypoints/` - WXT-discovered extension surfaces.
-- `packages/core/src/index.ts` - Shared package exports.
+- `packages/core/src/sdk.ts` - Independent SDK exports with explicit connections.
+- `packages/core/src/index.ts` - Published Vue/MF compatibility exports.
 - `extensions/*/src/index.ts` - Host-consumed Extension exports.
 - `extensions/*/src/main.ts` - Local producer playgrounds.
 - `pyproject.toml` / `pdm.lock` - Frozen repository-level Python preview tooling.

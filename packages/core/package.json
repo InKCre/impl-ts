@@ -12,10 +12,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./sdk": {
+      "types": "./dist/sdk/sdk.d.ts",
+      "import": "./dist/sdk/sdk.js"
     }
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsdown",
     "dev": "tsdown --watch",
     "type-check": "tsc --noEmit"
   },
@@ -50,5 +54,16 @@
     "@vueuse/core": "^14.0.0",
     "pinia": "^3.0.0",
     "vue": "^3.5.0"
+  },
+  "peerDependenciesMeta": {
+    "@vueuse/core": {
+      "optional": true
+    },
+    "pinia": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
   }
 }

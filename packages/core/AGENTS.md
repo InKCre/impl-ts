@@ -27,3 +27,7 @@ Shared models, Peer protocols, storage/resolver mechanics, and native Extension 
 - `pnpm lint:type-aware`
 - `pnpm type-check`
 - `pnpm check`
+
+- `src/sdk.ts` is the independent consumer boundary; neither its runtime nor its declarations may import Vue, Pinia, application stores, or the root compatibility barrel.
+- Keep explicit transport/storage logic in the SDK and reuse it from the published Vue entry. Do not duplicate protocol behavior when preserving compatibility.
+- The packed independent-consumer check is `node --test scripts/tests/core-independent.test.mjs` after building Core.

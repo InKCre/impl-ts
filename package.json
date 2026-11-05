@@ -38,8 +38,9 @@
     "verify:twitter": "playwright test --config scripts/tests/twitter-acceptance.config.ts",
     "verify:core-release": "node --test scripts/tests/core-release.test.mjs",
     "build": "pnpm check:workspace && pnpm -r run build && pnpm check:package",
-    "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm build",
-    "ci": "pnpm check && pnpm test:e2e"
+    "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm build && pnpm check:sdk",
+    "ci": "pnpm check && pnpm test:e2e",
+    "check:sdk": "pnpm --filter @inkcre/core build && node --test scripts/tests/core-independent.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.0",
