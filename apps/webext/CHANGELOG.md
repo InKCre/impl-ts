@@ -1,5 +1,22 @@
 # @inkcre/client-webext
 
+## 0.2.1
+
+### Patch Changes
+
+- 4aaeb6d: 将应用命名统一为 Web / WebExt，明确应用与运行 Peer 的角色；保留浏览器身份、存储、已发布扩展协议与部署兼容入口，构建和开发工具采用新的应用目录与 Runtime 导入名。
+
+  对仍准入的 Runtime 0.4.2 单独更新 Zod 依赖至修复版，保留原发布包身份与完整性。
+
+- ca4cfd7: 在既有 0.4 兼容线新增无 Vue/Pinia 依赖的 `@inkcre/core/sdk` 入口，提供显式连接的数据访问、字节存储、认证与协议合同；现有应用入口保留兼容，并复用相同传输和存储实现。Web/WebExt 随其内嵌 Core 更新，不要求 MF 分发迁移 Host ABI。
+- 16b127d: 统一观测记录的采集与查询，默认使用内置信息库，选定 Loki 时通过具备能力的 Peer 读写；Web 提供全局筛选、关联时间线与明确的后端/历史状态，Job 生命周期记录不再依赖额外 OTEL 出口开关。
+- Updated dependencies [4aaeb6d]
+- Updated dependencies [ca4cfd7]
+- Updated dependencies [a1f34f3]
+- Updated dependencies [16b127d]
+  - @inkcre/core@0.4.4
+  - @inkcre/web-collection@0.1.2
+
 ## 0.2.0
 
 ### Minor Changes
