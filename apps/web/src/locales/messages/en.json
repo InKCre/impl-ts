@@ -284,7 +284,9 @@
     "notAvailable": "N/A",
     "notFound": "Job not found",
     "sourceNotFound": "Source not found",
-    "openDiagnostics": "Open diagnostics (search by Job ID)"
+    "openDiagnostics": "Open diagnostics (search by Job ID)",
+    "submissionSaved": "Submission saved. The status and times below come from the Job record in the info-base.",
+    "currentStatus": "Current status"
   },
   "logs": {
     "loading": "Loading logs…",
@@ -503,22 +505,26 @@
     "errors": "Error records",
     "meanDuration": "Mean observed operation duration",
     "notObserved": "Not observed",
-    "sampleNote": "These summaries describe returned records only, not deployment-wide error rates, totals or complete performance metrics.",
+    "sampleNote": "Counts and mean duration are calculated from the returned records.",
     "truncated": "The result limit was reached. Narrow the time window or add correlation filters. This timeline may be incomplete.",
     "loadFailed": "Observation query failed. Check the filters, connection and backend configuration, then retry. A failed query is not an empty result.",
     "keptResults": "Previously returned records remain below and have not been refreshed.",
     "empty": "No observation records in this window.",
-    "emptyExplanation": "This does not prove that no work ran. Older Jobs, disabled recording or expired data may have no records.",
+    "emptyExplanation": "Adjust the time range or filters. Job details show the submission, status and lifecycle times stored in the info-base.",
     "records": "Observation records",
     "openJob": "Open Job #{id}",
     "sameTrace": "Filter this Trace",
     "samePeer": "Filter this Peer",
     "sameOperation": "Filter this operation",
     "attributes": "Record attributes",
-    "absoluteWindow": "Optional absolute window (local time). Fill both fields to override the time shortcut; clear them to return to the shortcut.",
+    "absoluteWindow": "Query any historical period, up to 31 days per request. Times use your local timezone. Enter both times to override the default range, or clear them to restore it. Record retention follows the selected backend configuration.",
     "since": "From",
     "until": "Until",
-    "invalidWindow": "Enter both dates, with the end after the start.",
-    "configuration": "Configuration"
+    "invalidWindow": "Enter both times, with the end after the start and a range of at most 31 days.",
+    "configuration": "Configuration",
+    "timeRange": "Time range",
+    "jobWindow": "The default range adds one hour before Job creation and after closure. Active Jobs use the refresh time for the end. Choose an absolute range to look earlier or later.",
+    "windowLimited": "The default range covers the 31 days nearest the end. Use Time range to query earlier stages in separate windows.",
+    "partialJobWindow": "This query covers part of the Job lifecycle. Adjust the time range to inspect earlier or later stages."
   }
 }

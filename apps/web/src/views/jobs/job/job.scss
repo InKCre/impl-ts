@@ -56,6 +56,12 @@
 }
 
 .metadata {
+  &__notice {
+    @include apply-font(body-sm);
+    color: sys-var(color, text, subtle);
+    margin: 0;
+  }
+
   &__header {
     display: flex;
     justify-content: space-between;

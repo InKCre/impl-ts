@@ -35,7 +35,7 @@ export function useJobCreator(options: {
   }
 
   function onCloseJob(): void {
-    if (jobSaving.value) return
+    if (!newJobOpen.value || jobSaving.value) return
     if (jobConfig.value !== '{}' && !window.confirm(t('source.discardChanges'))) return
     newJobOpen.value = false
   }
@@ -51,6 +51,7 @@ export function useJobCreator(options: {
         { source: options.sourceId.value, config: JSON.parse(jobConfig.value) }
       )
       options.jobs.value = [created, ...options.jobs.value]
+      jobConfig.value = '{}'
       newJobOpen.value = false
     } catch {
       jobError.value = t('source.runFailed')
