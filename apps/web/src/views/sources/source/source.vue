@@ -474,7 +474,11 @@ async function onDeleteSource() {
       <p v-if="deleteError" role="alert" class="text-feedback-error">{{ deleteError }}</p>
     </InkDialog>
 
-    <InkPopup v-model:open="newJobOpen" :title="t('source.newJobTitle')" @close="onCloseJob">
+    <InkPopup
+      :open="newJobOpen"
+      :title="t('source.newJobTitle')"
+      @update:open="!$event && onCloseJob()"
+    >
       <InkForm @submit="onCreateJob">
         <p class="source-view__popup-description">{{ t('source.newJobDescription') }}</p>
         <InkDropdown

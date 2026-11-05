@@ -11,7 +11,8 @@ defineEmits(logsViewerEmits)
     embedded
     :job-id="props.jobId"
     :trace-id="props.traceId"
-    :since="props.since"
+    :job-created-at="props.createdAt"
+    :job-closed-at="props.closedAt"
     :enable-polling="props.enablePolling"
     :polling-interval="props.pollingInterval"
   />

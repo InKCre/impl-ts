@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const OBSERVABILITY_CAPABILITY = 'core.observability.v1'
+export const OBSERVATION_MAX_WINDOW_MS = 31 * 86400 * 1000
 export const ObservationRecordSchema = z.object({
   id: z.string().min(1).max(128),
   timestamp: z.iso.datetime({ offset: true }),
@@ -31,9 +32,12 @@ export const ObservationQuerySchema = z
   .refine((value) => Date.parse(value.since) < Date.parse(value.until), {
     message: 'Observation time range must end after it starts.',
   })
-  .refine((value) => Date.parse(value.until) - Date.parse(value.since) <= 31 * 86400 * 1000, {
-    message: 'Observation time range must not exceed 31 days.',
-  })
+  .refine(
+    (value) => Date.parse(value.until) - Date.parse(value.since) <= OBSERVATION_MAX_WINDOW_MS,
+    {
+      message: 'Observation time range must not exceed 31 days.',
+    }
+  )
 export type ObservationQuery = z.input<typeof ObservationQuerySchema>
 export const ObservationPageSchema = z.object({
   records: z.array(ObservationRecordSchema),

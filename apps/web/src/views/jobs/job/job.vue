@@ -149,6 +149,8 @@ watch(
           <h1 class="metadata__title">{{ t('navigation.job') }} #{{ job.id }}</h1>
         </div>
 
+        <p class="metadata__notice">{{ t('job.submissionSaved') }}</p>
+
         <InkField :label="t('job.jobId')">
           <span class="metadata__value">{{ job.id }}</span>
         </InkField>
@@ -161,7 +163,7 @@ watch(
           >{{ t('job.openDiagnostics') }}</a
         >
 
-        <InkField :label="t('job.status')">
+        <InkField :label="t('job.currentStatus')">
           <div class="flex items-center gap-2" :aria-busy="jobLoading">
             <span class="metadata__value" :class="statusColor">
               {{ job.status }}
@@ -223,7 +225,8 @@ watch(
           v-if="job"
           class="flex-1 w-full"
           :job-id="job.id"
-          :since="job.created_at.toISOString()"
+          :created-at="job.created_at.toISOString()"
+          :closed-at="job.closed_at?.toISOString()"
           :enable-polling="enableLogsPolling"
           :polling-interval="pollingInterval"
         />

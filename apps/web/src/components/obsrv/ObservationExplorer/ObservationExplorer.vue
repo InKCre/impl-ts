@@ -6,12 +6,13 @@ import { InkButton, InkDropdown, InkForm, InkInput, InkLoading } from '@inkcre/u
 import {
   configStore,
   createObservabilityClient,
+  OBSERVATION_MAX_WINDOW_MS,
   type ObservationPage,
   type ObservationQuery,
   type ObservationRecord,
   type ObservabilityStatus,
 } from '@inkcre/core'
-import type { ObservationExplorerProps } from './ObservationExplorer'
+import { defaultObservationWindow, type ObservationExplorerProps } from './ObservationExplorer'
 
 const props = withDefaults(defineProps<ObservationExplorerProps>(), {
   embedded: false,
@@ -31,6 +32,7 @@ const chronological = ref(false)
 const customSince = ref('')
 const customUntil = ref('')
 const page = ref<ObservationPage | null>(null)
+const windowLimited = ref(false)
 const status = ref<ObservabilityStatus | null>(null)
 const loading = ref(false)
 const error = ref(false)
@@ -67,6 +69,15 @@ const meanDuration = computed(() =>
     : null
 )
 const history = computed(() => status.value?.history)
+const partialJobWindow = computed(() => {
+  if (!page.value || !props.jobCreatedAt) return false
+  const created = Date.parse(props.jobCreatedAt)
+  const end = props.jobClosedAt ? Date.parse(props.jobClosedAt) : Date.now()
+  return (
+    Math.min(created, end) < Date.parse(page.value.since) ||
+    Math.max(created, end) >= Date.parse(page.value.until)
+  )
+})
 const windowOptions = computed(() => [
   { value: 1, label: t('observability.lastHour') },
   { value: 24, label: t('observability.lastDay') },
@@ -109,9 +120,14 @@ async function refresh(): Promise<void> {
     }
   }
   const current = generation
-  const until = appliedUntil ?? new Date().toISOString()
-  const since =
-    appliedSince ?? props.since ?? new Date(Date.now() - appliedHours * 3600000).toISOString()
+  const defaultWindow = defaultObservationWindow(
+    Date.now(),
+    appliedHours,
+    props.jobCreatedAt,
+    props.jobClosedAt
+  )
+  const since = appliedSince ?? defaultWindow.since
+  const until = appliedUntil ?? defaultWindow.until
   loading.value = true
   error.value = false
   statusError.value = false
@@ -123,8 +139,10 @@ async function refresh(): Promise<void> {
   if (current !== generation) return
   loading.value = false
   hasLoaded.value = true
-  if (queryResult.status === 'fulfilled') page.value = queryResult.value
-  else error.value = true
+  if (queryResult.status === 'fulfilled') {
+    page.value = queryResult.value
+    windowLimited.value = appliedSince === null && defaultWindow.limited
+  } else error.value = true
   if (statusResult.status === 'fulfilled') status.value = statusResult.value
   else statusError.value = true
 }
@@ -139,7 +157,10 @@ function apply(): void {
   const end = Date.parse(customUntil.value)
   if (
     (customSince.value || customUntil.value) &&
-    (!Number.isFinite(start) || !Number.isFinite(end) || start >= end)
+    (!Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      start >= end ||
+      end - start > OBSERVATION_MAX_WINDOW_MS)
   ) {
     validationError.value = t('observability.invalidWindow')
     return
@@ -183,6 +204,14 @@ const { pause, resume } = useIntervalFn(
   { immediate: false }
 )
 watch(
+  () => props.jobClosedAt,
+  () => {
+    generation++
+    loading.value = false
+    void refresh()
+  }
+)
+watch(
   () => props.enablePolling,
   (enabled) => (enabled ? resume() : pause()),
   { immediate: true }
@@ -194,7 +223,7 @@ watch(
     configStore.metaConfig.INKCRE_PEER_ID,
     props.jobId,
     props.traceId,
-    props.since,
+    props.jobCreatedAt,
   ],
   () => {
     generation++
@@ -265,7 +294,7 @@ onUnmounted(() => {
     <InkForm layout="col" @submit="apply">
       <div class="observation-explorer__filters">
         <InkDropdown
-          v-if="!since"
+          v-if="!jobCreatedAt"
           v-model="hours"
           :label="t('observability.window')"
           :options="windowOptions"
@@ -279,7 +308,7 @@ onUnmounted(() => {
         <InkInput v-model="text" :label="t('observability.search')" />
       </div>
       <details class="observation-explorer__correlation">
-        <summary>{{ t('observability.correlate') }}</summary>
+        <summary>{{ t(embedded ? 'observability.timeRange' : 'observability.correlate') }}</summary>
         <div v-if="!embedded" class="observation-explorer__filters">
           <InkInput
             v-model="job"
@@ -292,6 +321,9 @@ onUnmounted(() => {
           <InkInput v-model="operation" :label="t('observability.operation')" />
         </div>
         <p class="observation-explorer__hint">{{ t('observability.absoluteWindow') }}</p>
+        <p v-if="jobCreatedAt" class="observation-explorer__hint">
+          {{ t('observability.jobWindow') }}
+        </p>
         <div class="observation-explorer__filters">
           <InkInput
             v-model="customSince"
@@ -346,6 +378,12 @@ onUnmounted(() => {
         </div>
       </dl>
       <p>{{ t('observability.sampleNote') }}</p>
+      <p v-if="windowLimited" class="observation-explorer__warning" role="status">
+        {{ t('observability.windowLimited') }}
+      </p>
+      <p v-else-if="partialJobWindow" class="observation-explorer__warning" role="status">
+        {{ t('observability.partialJobWindow') }}
+      </p>
       <p v-if="page.truncated" class="observation-explorer__warning" role="status">
         {{ t('observability.truncated') }}
       </p>
