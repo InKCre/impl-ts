@@ -110,8 +110,23 @@ jobs:
       - name: Install the frozen workspace
         run: pnpm install --frozen-lockfile
 
-      - name: 校验 TS7、Vue 类型、静态规则及产物合同
-        run: pnpm check
+      - name: 校验源代码格式、静态规则和类型
+        run: pnpm format:check && pnpm lint && pnpm type-check
+
+      - name: 在临时 checkout 中准备兼容构建版本
+        run: |
+          git show-ref --verify --quiet refs/heads/main || git branch main HEAD
+          pnpm release:version
+          pnpm install --lockfile-only --ignore-scripts
+
+      - name: 构建并校验相互兼容的 Host 与 MF 产物
+        run: pnpm build
+
+      - name: Verify independent SDK and Job observations
+        run: pnpm check:sdk && pnpm check:web
+
+      - name: 验证 B 站收藏采集规则
+        run: pnpm --filter @inkcre/ext-bilibili test
 
       - name: Verify independent MF publication
         run: >-
@@ -120,6 +135,9 @@ jobs:
           scripts/tests/release-checkout.test.mjs
           scripts/tests/core-sdk-compatibility.test.mjs
           scripts/tests/pages-preview.test.mjs
+          scripts/tests/browser-automation-transport.test.mjs
+          scripts/tests/job-cancellation.test.mjs
+          scripts/tests/source-anchor.test.mjs
 
   peer-database:
     # Existing branch protection binds this exact check name.

@@ -13,4 +13,11 @@ function run(command, args) {
 
 run('pnpm', ['--filter', '@inkcre/core', 'build'])
 run('pnpm', ['--filter', '@inkcre/webext', 'build'])
+run('node', [
+  '--test',
+  'scripts/tests/browser-automation-transport.test.mjs',
+  'scripts/tests/job-cancellation.test.mjs',
+  'scripts/tests/source-anchor.test.mjs',
+])
+run('node', ['scripts/verify-browser-automation.mjs'])
 run('pnpm', ['exec', 'playwright', 'test', '--project', 'browser-extension'])

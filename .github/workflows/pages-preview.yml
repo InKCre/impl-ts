@@ -72,6 +72,7 @@ jobs:
         with:
           ref: ${{ needs.identity.outputs.head_sha }}
           path: candidate
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install the pinned pnpm release
@@ -101,6 +102,13 @@ jobs:
           pdm install --frozen-lockfile
         env:
           PDM_CHECK_UPDATE: 'false'
+
+      - name: Prepare preview versions in the temporary checkout
+        working-directory: candidate
+        run: |
+          git show-ref --verify --quiet refs/heads/main || git branch main HEAD
+          pnpm release:version
+          pnpm install --lockfile-only --ignore-scripts
 
       - name: Build the exact-head SPA and Module Federation snapshots
         working-directory: candidate

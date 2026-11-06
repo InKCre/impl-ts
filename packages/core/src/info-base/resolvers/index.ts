@@ -47,6 +47,7 @@ import { TextResolver } from './text'
 import { MarkdownResolver } from './markdown'
 import { VideoResolver } from './video'
 import { ZipResolver } from './zip'
+import { SourceResolver } from '../../source/resolver'
 
 export function registerCoreResolvers(): void {
   for (const resolverClass of [
@@ -60,6 +61,7 @@ export function registerCoreResolvers(): void {
     EpubResolver,
     ZipResolver,
     FileResolver,
+    SourceResolver,
   ]) {
     Resolver.register(resolverClass.type, resolverClass)
   }

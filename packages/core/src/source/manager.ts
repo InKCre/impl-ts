@@ -16,6 +16,8 @@ export interface SourceImplementation<
 > {
   collectConfig: CollectConfig
   backfillConfig: BackfillConfig
+  canCollect?(source: Source, config: z.output<CollectConfig>): boolean | Promise<boolean>
+  canBackfill?(source: Source, config: unknown): boolean | Promise<boolean>
   collect(
     source: Source,
     job: Job,
@@ -42,7 +44,8 @@ export class SourceManager {
     this.implementations.set(type, implementation)
   }
 
-  static unregister(type: string): void {
+  static unregister(type: string, implementation?: SourceImplementation): void {
+    if (implementation && this.implementations.get(type) !== implementation) return
     this.implementations.delete(type)
   }
 
@@ -60,7 +63,13 @@ export class SourceManager {
 JobManager.registerHandler(SOURCE_COLLECT_JOB_TYPE, {
   parameters: SourceCommandParameters,
   async canHandle(parameters) {
-    return (await SourceManager.resolve(parameters.source)) !== null
+    const resolved = await SourceManager.resolve(parameters.source)
+    if (!resolved) return false
+    const [source, implementation] = resolved
+    const config = implementation.collectConfig.safeParse(parameters.config)
+    // Invalid commands must be claimed and fail in handle, rather than remain pending forever.
+    if (!config.success) return true
+    return implementation.canCollect ? implementation.canCollect(source, config.data) : true
   },
   async handle(job, parameters, signal) {
     const resolved = await SourceManager.resolve(parameters.source)
@@ -75,7 +84,12 @@ JobManager.registerHandler(SOURCE_BACKFILL_JOB_TYPE, {
   parameters: SourceCommandParameters,
   async canHandle(parameters) {
     const resolved = await SourceManager.resolve(parameters.source)
-    return resolved !== null && resolved[1].backfillConfig !== null && !!resolved[1].backfill
+    if (!resolved) return false
+    const [source, implementation] = resolved
+    if (!implementation.backfillConfig || !implementation.backfill) return false
+    const config = implementation.backfillConfig.safeParse(parameters.config)
+    if (!config.success) return true
+    return implementation.canBackfill ? implementation.canBackfill(source, config.data) : true
   },
   async handle(job, parameters, signal) {
     const resolved = await SourceManager.resolve(parameters.source)

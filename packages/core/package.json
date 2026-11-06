@@ -9,6 +9,10 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./browser-automation/protocol": {
+      "types": "./dist/browser-automation-protocol.d.ts",
+      "import": "./dist/browser-automation-protocol.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
@@ -37,6 +41,7 @@
     "dayjs": "^1.11.23",
     "htmlparser2": "10.1.0",
     "jose": "^5.0.0",
+    "puppeteer-core": "25.16.0",
     "semver": "7.8.5",
     "zod": "^4.6.7",
     "zod-class": "^0.0.18",

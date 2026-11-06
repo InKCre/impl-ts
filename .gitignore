@@ -12,6 +12,8 @@ node_modules
 package-lock.json
 
 # Build output
+.output/
+.wxt/
 dist
 dist-ssr
 coverage

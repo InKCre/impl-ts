@@ -13,6 +13,8 @@ not architectural boundaries.
   browser runtime handles, and rendering boundaries.
 - [Native Extension Runtime](native-extension-runtime.md) owns the Extension Host, producer/Host
   boundary, native Module Federation loading, durable enabled intent, and compensated lifecycle.
+- [Web Source 本机浏览器能力](browser-automation.md) owns origin pairing, exact browser binding,
+  Puppeteer transport, and the lifetime of borrowed or created automation tabs.
 
 Repository/package topology remains in [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md). Observable
 product behavior and cross-unit contracts remain in the read-only
