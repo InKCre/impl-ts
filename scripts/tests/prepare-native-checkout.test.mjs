@@ -11,13 +11,13 @@ async function fixture() {
   const output = join(root, 'candidate')
   const input = {
     'package.json': { name: 'fixture', private: true },
-    'packages/core/package.json': { name: '@inkcre/core', version: '0.4.3' },
+    'packages/core/package.json': { name: '@inkcre/core', version: '0.4.4' },
     'extensions/example/package.json': {
       name: '@inkcre/example',
       version: '0.1.0',
       inkcre: {
         name: 'inkcre/example',
-        module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.4.4 <0.5.0' },
+        module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.4.5 <0.5.0' },
       },
     },
     '.changeset/compatible.md': '---\n"@inkcre/core": patch\n---\nCompatible capability\n',
@@ -35,7 +35,7 @@ async function fixture() {
     if (command === 'pnpm' && args[0] === 'release:version') {
       await writeFile(
         join(cwd, 'packages/core/package.json'),
-        JSON.stringify({ name: '@inkcre/core', version: '0.4.4' })
+        JSON.stringify({ name: '@inkcre/core', version: '0.4.5' })
       )
       await unlink(join(cwd, '.changeset/compatible.md'))
     }
@@ -53,11 +53,11 @@ void test('the existing version command prepares an isolated candidate without c
       run: context.run,
       offline: true,
     })
-    assert.equal(result.versions['@inkcre/core'].prepared, '0.4.4')
+    assert.equal(result.versions['@inkcre/core'].prepared, '0.4.5')
     assert.equal(
       JSON.parse(await readFile(join(context.source, 'packages/core/package.json'), 'utf8'))
         .version,
-      '0.4.3'
+      '0.4.4'
     )
     assert.match(
       await readFile(join(context.source, '.changeset/compatible.md'), 'utf8'),
@@ -115,7 +115,7 @@ void test('loosening a future producer range cannot masquerade as version prepar
       if (command === 'pnpm' && args[0] === 'release:version') {
         const file = join(cwd, 'extensions/example/package.json')
         const value = JSON.parse(await readFile(file, 'utf8'))
-        value.inkcre.module_federation.host_sdk_version = '>=0.4.3 <0.5.0'
+        value.inkcre.module_federation.host_sdk_version = '>=0.4.4 <0.5.0'
         await writeFile(file, JSON.stringify(value))
       }
       return result

@@ -120,6 +120,10 @@ jobs:
         working-directory: ${{ runner.temp }}/native-checkout/workspace
         run: pnpm build
 
+      - name: Verify independent SDK and Job observations
+        working-directory: ${{ runner.temp }}/native-checkout/workspace
+        run: pnpm check:sdk && pnpm check:web
+
       - name: 验证 B 站收藏采集规则
         working-directory: ${{ runner.temp }}/native-checkout/workspace
         run: pnpm --filter @inkcre/ext-bilibili test
@@ -136,6 +140,7 @@ jobs:
           scripts/tests/job-cancellation.test.mjs
           scripts/tests/source-anchor.test.mjs
           scripts/tests/prepare-native-checkout.test.mjs
+          scripts/tests/database-contract-source.test.mjs
 
   peer-database:
     # Existing branch protection binds this exact check name.

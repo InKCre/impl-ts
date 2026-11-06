@@ -4,7 +4,7 @@
     {
       "kind": "module_federation",
       "producer": "../../extensions/bilibili/package.json",
-      "artifact": "../../extensions/bilibili/dist/client-web"
+      "artifact": "../../extensions/bilibili/dist/web"
     },
     {
       "kind": "module_federation",

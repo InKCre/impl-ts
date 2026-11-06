@@ -1,6 +1,7 @@
 ---
 '@inkcre/core': patch
-'@inkcre/client-webext': patch
+'@inkcre/web': patch
+'@inkcre/webext': patch
 ---
 
 为 Web Source 提供基于 Puppeteer 的本机浏览器能力，支持明确的 Web origin 授权、精确浏览器绑定、登录态页面交互与网络响应读取。

@@ -20,7 +20,7 @@ export const bilibiliArtifactBase = './'
 export const bilibiliBuildTarget = 'es2022'
 export const bilibiliBuildOptions = {
   target: bilibiliBuildTarget,
-  outDir: 'dist/client-web',
+  outDir: 'dist/web',
   sourcemap: true,
 }
 export const bilibiliFederationOptions = {

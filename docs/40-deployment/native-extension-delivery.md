@@ -73,8 +73,12 @@ changesets in the PR nor replaces the normal Version PR and protected-main relea
 
 Workspace contract 先在原 checkout 校验格式、静态规则和类型，再通过
 `scripts/prepare-native-checkout.mjs` 将当前未忽略的源文件复制到隔离候选，运行正式
-`pnpm release:version`，在候选中完成生产构建、资产闭包和发布检查。这样新增 API 的 MF
+`pnpm release:version`，在候选中完成生产构建、独立 SDK、Job 观测、资产闭包和发布检查。这样新增 API 的 MF
 可以明确要求下一兼容 SDK，而无需放宽为兼容旧已发布 SDK；原版本和 Changesets 保持不变。
+
+Pages preview 使用同一准备命令，从受信控制器所选的准确 PR head 建立派生候选。
+SPA、MF 与 Preview Registry facade 的生产者坐标都读取该候选；Python Toolkit 仍由原
+隔离 checkout 的冻结 PDM 环境执行。此流程不产生用于正式发布的版本或消费源分支的版本意图。
 
 本地可运行 `node scripts/prepare-native-checkout.mjs --output .runtime/native-checkout --offline`，
 随后进入输出的 `workspace` 执行 `pnpm build`。输出目录必须为空；准备过程记录原 HEAD、

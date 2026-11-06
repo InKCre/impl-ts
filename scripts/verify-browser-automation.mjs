@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { chromium } from '@playwright/test'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const require = createRequire(new URL('../apps/client-web/package.json', import.meta.url))
+const require = createRequire(new URL('../apps/web/package.json', import.meta.url))
 const { build } = await import(pathToFileURL(require.resolve('vite')).href)
 await mkdir(join(root, '.runtime'), { recursive: true })
 const temporary = await mkdtemp(join(root, '.runtime/browser-automation-'))
@@ -129,7 +129,7 @@ try {
       emptyOutDir: true,
     },
   })
-  await cp(join(root, 'apps/client-webext/.output/chrome-mv3'), extension, { recursive: true })
+  await cp(join(root, 'apps/webext/.output/chrome-mv3'), extension, { recursive: true })
   const manifest = JSON.parse(await readFile(join(extension, 'manifest.json'), 'utf8'))
   // This isolated fixture pregrants only its synthetic host. Native permission UX is separate evidence.
   manifest.host_permissions = ['http://127.0.0.1/*']
