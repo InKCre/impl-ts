@@ -75,6 +75,11 @@ export async function prepareNativeCheckout({
   run = execute,
 }) {
   const source = await realpath(sourceDirectory)
+  const shallow = String(await run('git', ['rev-parse', '--is-shallow-repository'], source)).trim()
+  if (shallow === 'true')
+    throw new Error(
+      'Version preparation requires complete source history; fetch the selected checkout with fetch-depth: 0'
+    )
   const output = resolve(outputDirectory)
   if (output === source || source.startsWith(output + sep))
     throw new Error('Candidate cannot replace the source or its ancestor')
@@ -108,17 +113,7 @@ export async function prepareNativeCheckout({
   /** @type {Array<[string, string[]]>} */
   const steps = [
     ['git', ['init', '--quiet']],
-    [
-      'git',
-      [
-        'fetch',
-        '--quiet',
-        '--no-tags',
-        '--depth=1',
-        source,
-        `${revision}:refs/remotes/origin/main`,
-      ],
-    ],
+    ['git', ['fetch', '--quiet', '--no-tags', source, `${revision}:refs/remotes/origin/main`]],
     ['git', ['update-ref', 'refs/heads/main', revision]],
     ['git', ['symbolic-ref', 'HEAD', 'refs/heads/main']],
     ['git', ['read-tree', revision]],

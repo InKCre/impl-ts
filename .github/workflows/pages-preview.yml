@@ -72,6 +72,7 @@ jobs:
         with:
           ref: ${{ needs.identity.outputs.head_sha }}
           path: candidate
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install the pinned pnpm release

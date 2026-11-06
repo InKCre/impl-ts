@@ -79,6 +79,8 @@ Workspace contract 先在原 checkout 校验格式、静态规则和类型，再
 Pages preview 使用同一准备命令，从受信控制器所选的准确 PR head 建立派生候选。
 SPA、MF 与 Preview Registry facade 的生产者坐标都读取该候选；Python Toolkit 仍由原
 隔离 checkout 的冻结 PDM 环境执行。此流程不产生用于正式发布的版本或消费源分支的版本意图。
+准备入口要求完整的所选源码历史，隔离候选保留该历史供 Changesets 查询变更记录；
+CI 与 Pages checkout 均使用 `fetch-depth: 0`，不依赖运行中尝试加深一个没有远端的浅候选。
 
 本地可运行 `node scripts/prepare-native-checkout.mjs --output .runtime/native-checkout --offline`，
 随后进入输出的 `workspace` 执行 `pnpm build`。输出目录必须为空；准备过程记录原 HEAD、

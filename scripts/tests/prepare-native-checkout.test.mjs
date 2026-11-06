@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, rm, writeFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { prepareNativeCheckout } from '../prepare-native-checkout.mjs'
+
+const repository = fileURLToPath(new URL('../..', import.meta.url))
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'inkcre-native-checkout-'))
@@ -29,6 +33,7 @@ async function fixture() {
   const calls = []
   const run = async (command, args, cwd) => {
     calls.push({ command, args, cwd })
+    if (command === 'git' && args.includes('--is-shallow-repository')) return 'false'
     if (command === 'git' && args[0] === 'rev-parse') return 'a'.repeat(40)
     if (command === 'git' && args[0] === 'status') return ' M packages/core/package.json\n'
     if (command === 'git' && args[0] === 'ls-files') return Object.keys(input).join('\0') + '\0'
@@ -79,6 +84,92 @@ void test('the existing version command prepares an isolated candidate without c
       false
     )
     assert.equal(result.source_modified, true)
+  } finally {
+    await rm(context.root, { recursive: true, force: true })
+  }
+})
+
+void test('committed version intent is resolved by the actual CLI from complete isolated Git history', async () => {
+  const context = await fixture()
+  const run = async (command, args, cwd) => {
+    if (command === 'pnpm' && args[0] === 'install') return ''
+    return execFileSync(
+      command === 'pnpm' ? join(repository, 'node_modules/.bin/changeset') : command,
+      command === 'pnpm' ? ['version'] : args,
+      { cwd, encoding: 'utf8', timeout: 15_000 }
+    )
+  }
+  try {
+    await writeFile(
+      join(context.source, 'pnpm-workspace.yaml'),
+      'packages:\n  - packages/*\n  - extensions/*\n'
+    )
+    await writeFile(
+      join(context.source, '.changeset/config.json'),
+      JSON.stringify({
+        changelog: '@changesets/cli/changelog',
+        commit: false,
+        fixed: [],
+        linked: [],
+        access: 'restricted',
+        baseBranch: 'main',
+        updateInternalDependencies: 'patch',
+        ignore: [],
+      })
+    )
+    execFileSync('git', ['init', '--quiet', '-b', 'main'], { cwd: context.source })
+    execFileSync('git', ['add', '.'], { cwd: context.source })
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.test',
+        'commit',
+        '--quiet',
+        '-m',
+        'Initial native packages',
+      ],
+      { cwd: context.source }
+    )
+    await writeFile(
+      join(context.source, 'README.md'),
+      'Version intent is committed before candidate preparation.\n'
+    )
+    execFileSync('git', ['add', 'README.md'], { cwd: context.source })
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.test',
+        'commit',
+        '--quiet',
+        '-m',
+        'Prepare source checkpoint',
+      ],
+      { cwd: context.source }
+    )
+    const result = await prepareNativeCheckout({
+      sourceDirectory: context.source,
+      outputDirectory: context.output,
+      run,
+    })
+    assert.equal(result.source_modified, false)
+    assert.equal(result.versions['@inkcre/core'].prepared, '0.4.5')
+    assert.equal(
+      execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+        cwd: result.candidate,
+        encoding: 'utf8',
+      }).trim(),
+      'false'
+    )
+    assert.match(
+      await readFile(join(context.source, '.changeset/compatible.md'), 'utf8'),
+      /Compatible capability/
+    )
   } finally {
     await rm(context.root, { recursive: true, force: true })
   }
