@@ -71,20 +71,12 @@ copy so the preview can load a mutually compatible Host and MF when a change rai
 Host SDK. This produces temporary derived versions for preview only. It neither consumes the pending
 changesets in the PR nor replaces the normal Version PR and protected-main release lifecycle.
 
-Workspace contract 先在原 checkout 校验格式、静态规则和类型，再通过
-`scripts/prepare-native-checkout.mjs` 将当前未忽略的源文件复制到隔离候选，运行正式
-`pnpm release:version`，在候选中完成生产构建、独立 SDK、Job 观测、资产闭包和发布检查。这样新增 API 的 MF
-可以明确要求下一兼容 SDK，而无需放宽为兼容旧已发布 SDK；原版本和 Changesets 保持不变。
+Workspace contract 先校验源代码格式、静态规则和类型，再直接在 CI 的临时 checkout 中运行
+`pnpm release:version` 与 `pnpm install --lockfile-only --ignore-scripts`，然后构建并验证 Host 和 MF。
+Pages preview 在受信控制器选定的 PR head 临时 checkout 中使用同样的正式版本命令，保留完整历史供 Changesets 读取。
+这些派生版本仅用于验证和预览，不回写源分支，也不替代 Version PR 或正式发布。
 
-Pages preview 使用同一准备命令，从受信控制器所选的准确 PR head 建立派生候选。
-SPA、MF 与 Preview Registry facade 的生产者坐标都读取该候选；Python Toolkit 仍由原
-隔离 checkout 的冻结 PDM 环境执行。此流程不产生用于正式发布的版本或消费源分支的版本意图。
-准备入口要求完整的所选源码历史，隔离候选保留该历史供 Changesets 查询变更记录；
-CI 与 Pages checkout 均使用 `fetch-depth: 0`，不依赖运行中尝试加深一个没有远端的浅候选。
-
-本地可运行 `node scripts/prepare-native-checkout.mjs --output .runtime/native-checkout --offline`，
-随后进入输出的 `workspace` 执行 `pnpm build`。输出目录必须为空；准备过程记录原 HEAD、
-是否有未提交变更与源快照摘要。它只为验证派生版本，不发布资产或创建提交。
+本地需要验证尚未发布的 SDK 时，在临时 clone 中运行上述命令及 `pnpm build`；日常工作树继续保留版本意图。
 
 A plugin owns compatibility of its shared configuration, state, Source/Job parameters and stored
 information. Changesets record MF changes even when no Python change is necessary. Published native

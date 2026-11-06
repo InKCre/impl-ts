@@ -113,23 +113,22 @@ jobs:
       - name: 校验源代码格式、静态规则和类型
         run: pnpm format:check && pnpm lint && pnpm type-check
 
-      - name: 以正式版本命令准备隔离验证坐标
-        run: node scripts/prepare-native-checkout.mjs --output "$RUNNER_TEMP/native-checkout"
+      - name: 在临时 checkout 中准备兼容构建版本
+        run: |
+          git show-ref --verify --quiet refs/heads/main || git branch main HEAD
+          pnpm release:version
+          pnpm install --lockfile-only --ignore-scripts
 
       - name: 构建并校验相互兼容的 Host 与 MF 产物
-        working-directory: ${{ runner.temp }}/native-checkout/workspace
         run: pnpm build
 
       - name: Verify independent SDK and Job observations
-        working-directory: ${{ runner.temp }}/native-checkout/workspace
         run: pnpm check:sdk && pnpm check:web
 
       - name: 验证 B 站收藏采集规则
-        working-directory: ${{ runner.temp }}/native-checkout/workspace
         run: pnpm --filter @inkcre/ext-bilibili test
 
       - name: Verify independent MF publication
-        working-directory: ${{ runner.temp }}/native-checkout/workspace
         run: >-
           node --test scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs
           scripts/tests/independent-extension-release.test.mjs
@@ -139,8 +138,6 @@ jobs:
           scripts/tests/browser-automation-transport.test.mjs
           scripts/tests/job-cancellation.test.mjs
           scripts/tests/source-anchor.test.mjs
-          scripts/tests/prepare-native-checkout.test.mjs
-          scripts/tests/database-contract-source.test.mjs
 
   peer-database:
     # Existing branch protection binds this exact check name.

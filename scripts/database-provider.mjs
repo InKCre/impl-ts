@@ -34,11 +34,7 @@ function optionalJson(path) {
 }
 
 function provisionEnvironment(config) {
-  return (
-    config.dev?.resources?.database?.actions?.ensure?.env ??
-    config.dev?.targets?.database?.provision?.env ??
-    {}
-  )
+  return config.dev?.targets?.database?.provision?.env ?? {}
 }
 
 function declaredProviderEnvironment() {

@@ -53,7 +53,7 @@ export async function collectFavorites(
       }
       const next = advanceProgress(progress, folder, current, cursor.next_page, options.max_pages)
       await commit(account, current, next)
-      // Progress is adopted only after the database confirms the graph and cursor together.
+      // Persisted progress follows the page's confirmed graph writes.
       progress = next
       cursor = progress.folders[folder]!
     }

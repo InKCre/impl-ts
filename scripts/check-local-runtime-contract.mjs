@@ -138,7 +138,7 @@ for (const legacyExport of ['httpAdapter', 'envAdapter', 'createEnvAdapter']) {
   }
 }
 
-const localTargets = svcConfig.dev?.resources ?? svcConfig.dev?.targets
+const localTargets = svcConfig.dev?.targets
 if (!localTargets) {
   errors.push('svc.json must declare development targets')
 } else {
@@ -173,17 +173,18 @@ if (!localTargets) {
     if (target.scope !== 'worktree') {
       errors.push(`SVC target "${name}" must be worktree-scoped`)
     }
-    const probe = target.observations?.ready?.probe ?? target.probe
-    const provision = target.actions?.ensure ?? target.provision
-    if (probe?.kind !== 'exec' || JSON.stringify(probe.argv) !== JSON.stringify(expected.probe)) {
+    if (
+      target.probe?.kind !== 'exec' ||
+      JSON.stringify(target.probe.argv) !== JSON.stringify(expected.probe)
+    ) {
       errors.push(`SVC target "${name}" must use the identity probe that proves dev.instance`)
     }
-    if (JSON.stringify(provision?.argv) !== JSON.stringify(expected.command)) {
+    if (JSON.stringify(target.provision?.argv) !== JSON.stringify(expected.command)) {
       errors.push(`SVC target "${name}" must provision through scripts/dev.mjs`)
     }
     if (
       expected.environment &&
-      JSON.stringify(provision?.env) !== JSON.stringify(expected.environment)
+      JSON.stringify(target.provision?.env) !== JSON.stringify(expected.environment)
     ) {
       errors.push(`SVC target "${name}" must commit only the portable local provider default`)
     }
@@ -236,10 +237,7 @@ for (const required of [
 if (remoteCompose.includes('eval ') || !remoteCompose.includes('"$docker_bin" compose')) {
   errors.push('remote Compose runner must preserve argv without eval or shell command construction')
 }
-const committedDatabaseEnvironment =
-  svcConfig.dev.resources?.database?.actions?.ensure?.env ??
-  svcConfig.dev.targets?.database?.provision?.env ??
-  {}
+const committedDatabaseEnvironment = svcConfig.dev.targets.database.provision.env
 if (
   committedDatabaseEnvironment?.INKCRE_DATABASE_SSH_TARGET ||
   committedDatabaseEnvironment?.INKCRE_DATABASE_SSH_DOCKER_BIN ||

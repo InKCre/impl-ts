@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
 
 import {
   inspectCoreRelease,
@@ -18,37 +17,19 @@ import {
   stopDatabaseRuntime,
   waitForRuntime,
 } from './database-runtime-lib.mjs'
-import {
-  readExternalDatabaseDescriptor,
-  resolveDatabaseProviderConfig,
-  runDatabaseDocker,
-} from './database-provider.mjs'
-import { validateDevelopmentContract } from './database-contract-source.mjs'
+import { resolveDatabaseProviderConfig, runDatabaseDocker } from './database-provider.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const args = process.argv.slice(2)
 const imageIndex = args.indexOf('--image')
 const requestedImage = imageIndex >= 0 ? args[imageIndex + 1] : null
-const runtimeIndex = args.indexOf('--runtime')
-const contractIndex = args.indexOf('--runtime-contract')
-const requestedRuntime = runtimeIndex >= 0 ? args[runtimeIndex + 1] : null
-const requestedContract = contractIndex >= 0 ? args[contractIndex + 1] : null
 const check = args.includes('--check')
-if ((runtimeIndex >= 0 || contractIndex >= 0) && (!requestedRuntime || !requestedContract)) {
-  throw new Error('local type generation requires --runtime and --runtime-contract together')
-}
-if (requestedRuntime && requestedImage) {
-  throw new Error('--runtime cannot be combined with --image')
-}
 const config = validateCoreReleaseConfig(await readJson(`${repoRoot}/contracts/core-release.json`))
-const provider = requestedRuntime ? null : resolveDatabaseProviderConfig()
+const provider = resolveDatabaseProviderConfig()
 const runDocker = (dockerArgs, options) => runDatabaseDocker(provider, dockerArgs, options)
-const release = requestedRuntime
-  ? null
-  : requestedImage
-    ? inspectCoreRelease(runDocker, requestedImage, { allowLocalImage: true })
-    : resolveConfiguredCoreRelease(runDocker, config)
-const sourceLabel = release?.image ?? 'explicit local development runtime'
+const release = requestedImage
+  ? inspectCoreRelease(runDocker, requestedImage, { allowLocalImage: true })
+  : resolveConfiguredCoreRelease(runDocker, config)
 const instance = `typegen-${createHash('sha256')
   .update(`${repoRoot}/${process.pid}/${Date.now()}`)
   .digest('hex')
@@ -97,38 +78,20 @@ function generateTypes(state, credentials) {
 async function writeOrCompare(path, content, label) {
   if (check) {
     const checked = await readFile(path)
-    if (!checked.equals(content)) throw new Error(`${label} is stale for ${sourceLabel}`)
+    if (!checked.equals(content)) throw new Error(`${label} is stale for ${release.image}`)
     return
   }
   await writeFile(path, content)
 }
 
 try {
-  let state
-  let credentials
-  let compatibility
-  if (requestedRuntime) {
-    const descriptorPath = resolve(requestedRuntime)
-    state = readExternalDatabaseDescriptor({ descriptor: descriptorPath })
-    const contract = await readJson(resolve(requestedContract))
-    compatibility = validateDevelopmentContract(state, contract)
-    credentials = await readJson(`${dirname(descriptorPath)}/credential.json`)
-  } else {
-    process.env.INKCRE_CORE_IMAGE = release.image
-    state = await ensureDatabaseRuntime(instance, { stdio: 'ignore' })
-    runtimeStarted = true
-    await waitForRuntime(state)
-    credentials = await runtimeCredentials(instance)
-    compatibility = projectDatabaseCompatibilityContract(release.runtime_contract)
-  }
+  process.env.INKCRE_CORE_IMAGE = release.image
+  const state = await ensureDatabaseRuntime(instance, { stdio: 'ignore' })
+  runtimeStarted = true
+  await waitForRuntime(state)
+  const credentials = await runtimeCredentials(instance)
 
-  let rawTypes
-  try {
-    rawTypes = generateTypes(state, credentials)
-  } catch {
-    // Child-process errors include argv, which contains the database password.
-    throw new Error('Supabase schema generation failed; inspect the development database owner')
-  }
+  const rawTypes = generateTypes(state, credentials)
   const generatedTypes = Buffer.from(
     output(workspaceBinary('oxfmt'), ['--stdin-filepath', 'database.generated.ts'], {
       input: rawTypes,
@@ -141,7 +104,7 @@ try {
   )
   const generatedRuntimeContract = Buffer.from(
     output(workspaceBinary('oxfmt'), ['--stdin-filepath', 'runtime-contract.generated.json'], {
-      input: stableJson(compatibility),
+      input: stableJson(projectDatabaseCompatibilityContract(release.runtime_contract)),
     })
   )
   await writeOrCompare(
@@ -150,7 +113,7 @@ try {
     'generated runtime contract'
   )
   console.log(
-    `[contract] ${check ? 'verified' : 'synchronized'} ${sourceLabel} through Supabase CLI`
+    `[contract] ${check ? 'verified' : 'synchronized'} ${release.image} through Supabase CLI`
   )
 } finally {
   if (runtimeStarted) {

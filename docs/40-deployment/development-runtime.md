@@ -22,14 +22,13 @@
 
 The committed [`svc.json`](../../svc.json) declares four worktree-scoped capabilities: `database`,
 `web`, `web-ui`, and `webext`. SVC resolves the worktree instance and coordinates provisioning and
-readiness through schema 5 resources, actions and observations; [`scripts/dev.mjs`](../../scripts/dev.mjs) and the database runtime scripts own the
+readiness; [`scripts/dev.mjs`](../../scripts/dev.mjs) and the database runtime scripts own the
 executable behavior. Observe without provisioning with `pnpm dev:status`, and run
 `pnpm run doctor` before diagnosing host setup.
 
 Portless gives the web and WXT targets instance-specific HTTPS `.localhost` routes. Their probes
-accept only the expected target and worktree identity. Database provisioning completes on exit and
-the ready observation; long-running web and WXT actions complete on readiness and retain their
-managed process owner. The optional `web-ui` target is a non-release
+accept only the expected target and worktree identity. Provisioning returns after readiness; it does
+not transfer long-lived process ownership to SVC. The optional `web-ui` target is a non-release
 source lane whose resolved checkout stays machine-local. Normal build, check, and CI continue to
 use the locked Registry package.
 
@@ -153,20 +152,6 @@ Pull-request evidence does not establish source-branch or migration equality bet
 `--check` 核对。镜像必须已存在于所选 local/ssh Docker daemon，工具核对 ID 并使用同一不可变镜像创建、清理
 独占的 typegen 数据库，不接受可移动 tag，也不会拉取本地 ID。此入口不支持 external provider；需选择构建候选的
 同一 provider。`contracts/core-release.json` 仍只接纳已发布的 GHCR digest，本地生成不能代替发布产物验收。
-
-联合开发尚未发布的数据库协议时，也可以从已就绪的 Python 工作树 runtime 生成类型，不拉取稳定镜像或创建第二个数据库：
-
-```bash
-# 在拥有该 runtime 的 impl-py 工作树导出当前协议。
-pdm run db:contract > .runtime/current-contract.json
-
-# 在 impl-ts 工作树显式指定 owner descriptor 与刚导出的合同。
-pnpm contract:sync --runtime /absolute/impl-py/.runtime/database/INSTANCE/runtime.json --runtime-contract /absolute/impl-py/.runtime/current-contract.json
-```
-
-此入口只接受 `InKCre/impl-py` 的 development descriptor，合同 revision 与 migration head 必须匹配。
-它通过 descriptor 指定的数据库 owner 运行 Supabase CLI，读取本机 credential 文件但不输出连接凭据；不停止或修改 owner runtime。
-追加 `--check` 验证生成结果。未传这两个参数时仍使用已发布镜像路径；本地生成不会修改 canonical candidate，也不能作为正式发布证据。
 
 ## Operator Commands
 

@@ -253,32 +253,6 @@ export type Database = {
           },
         ]
       }
-      collection_records: {
-        Row: {
-          block: number
-          namespace: string
-          native_key: string
-        }
-        Insert: {
-          block: number
-          namespace: string
-          native_key: string
-        }
-        Update: {
-          block?: number
-          namespace?: string
-          native_key?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'collection_records_block_fkey'
-            columns: ['block']
-            isOneToOne: false
-            referencedRelation: 'blocks'
-            referencedColumns: ['id']
-          },
-        ]
-      }
       configs: {
         Row: {
           created_at: string
@@ -881,19 +855,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      commit_source_batch: {
-        Args: {
-          expected_config: Json
-          expected_state: Json
-          namespace: string
-          next_state: Json
-          records: Json
-          relations: Json
-          root_key?: string
-          source_id: number
-        }
-        Returns: Json
-      }
       read_storage_blob: { Args: { blob_id: string }; Returns: unknown }
       renew_peer_lease: {
         Args: { peer: string; ttl_seconds: number }

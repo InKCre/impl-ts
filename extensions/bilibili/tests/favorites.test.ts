@@ -215,10 +215,10 @@ void test('a changed head restarts scanning and failed persistence never advance
       new AbortController().signal,
       session(changed, requested),
       async () => {
-        throw new Error('transaction rejected')
+        throw new Error('page write failed')
       }
     ),
-    /transaction rejected/
+    /page write failed/
   )
   assert.deepEqual(requested, [1])
   assert.deepEqual(persisted, before)

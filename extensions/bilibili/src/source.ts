@@ -2,7 +2,7 @@ import { BrowserAccess, type SourceImplementation } from '@inkcre/core'
 import { CollectConfigSchema, SourceConfigSchema } from './schema.ts'
 import { favoriteGraph } from './graph.ts'
 import { startProgress } from './progress.ts'
-import { commitBatch } from './repository.ts'
+import { BilibiliRepository } from './repository.ts'
 import { FavoriteSession } from './site.ts'
 import { collectFavorites } from './collect.ts'
 
@@ -15,6 +15,7 @@ export const bilibiliSource: SourceImplementation<typeof CollectConfigSchema, nu
   },
   async collect(source, _job, options, signal) {
     const config = SourceConfigSchema.parse(source.config)
+    const repository = new BilibiliRepository()
     await BrowserAccess.withPage(
       { provider: config.provider, target: { kind: 'new' }, signal },
       async (page) => {
@@ -25,7 +26,7 @@ export const bilibiliSource: SourceImplementation<typeof CollectConfigSchema, nu
           signal,
           new FavoriteSession(page, config),
           async (account, current, next) => {
-            await commitBatch(source, favoriteGraph(account, current), next)
+            await repository.reconcilePage(source, favoriteGraph(account, current), next)
           }
         )
       }
