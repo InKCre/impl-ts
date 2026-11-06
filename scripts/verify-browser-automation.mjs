@@ -167,6 +167,9 @@ throw new Error('Web fixture timed out');
     executable,
     [
       '--headless=new',
+      // Hosted Linux CI disallows Chromium's user-namespace sandbox. This browser
+      // uses a disposable profile and serves only this fixture's synthetic pages.
+      ...(process.platform === 'linux' && process.env.CI ? ['--no-sandbox'] : []),
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-background-networking',
@@ -183,6 +186,14 @@ throw new Error('Web fixture timed out');
   })
   browserProcess.on('error', (error) => {
     webReport = { ok: false, error: String(error) }
+    done()
+  })
+  browserProcess.on('exit', (code, signal) => {
+    if (webReport && nativeReport) return
+    webReport = {
+      ok: false,
+      error: `Browser fixture exited before reporting (code ${code}, signal ${signal})\n${stderr}`,
+    }
     done()
   })
   await Promise.race([
