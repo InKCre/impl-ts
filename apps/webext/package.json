@@ -20,6 +20,7 @@
     "@inkcre/ui-web": "2.7.0",
     "@inkcre/web-collection": "workspace:*",
     "@mozilla/readability": "^0.6.0",
+    "puppeteer-core": "25.16.0",
     "vue": "^3.5.44",
     "zod": "^4.6.7"
   },

@@ -16,13 +16,24 @@ HTML 和文字是普通 core 语义内容块，PDF 使用当前 Peer 支持的�
 
 本机待发送与已保存到信息库是不同状态。待办绑定入队时的信息库与本 Peer 身份，后台自行推进，不靠 popup 或设置页轮询触发；关闭界面或重启后仍可继续。暂停和排除停止未派发的自动工作，手动保存仍可使用；排除编辑器回填现有规则，刷新状态不覆盖未保存的编辑。恢复尽力复用可见图结果，但不承诺 exactly-once、全图事务或完整历史。响应丢失、并发或中途退出可能留下重复或孤立项，失败不会被显示为完整保存。
 
-书签和历史先预览范围，确认后保存来源事实并尝试取得当前正文。记录时间与当前取得时间分别保留。登录、失效或不可读项保留来源和原因，支持停止、继续和失败重试；原书签删除不自动删除信息库资料。第三方收藏服务连接器仍待选定真实资料源。
+书签和历史先预览范围，确认后保存来源事实并尝试取得当前正文。记录时间与当前取得时间分别保留。登录、失效或不可读项保留来源和原因，支持停止、继续和失败重试；原书签删除不自动删除信息库资料。第三方收藏服务由独立插件提供，Web-ext 本身不保存站点选择器或收藏模型。
 
 阅读页提供文本、出处、附注、HTML 源码和原始 PDF 下载，不执行来源脚本。不承诺取得尚未加载、虚拟化移除、canvas、封闭组件或不可读跨域 frame 的正文；已发现缺口会标注。
 
 Explain、Writing Assist、旧选区浮栏、图编辑侧栏和模型设置已彻底移除，没有开关、旧消息处理器或兼容运行入口。选区保存使用扩展按钮的新流程。旧连接和未完成摘录只做数据迁移，摘录需核对后手动迁入；已有 PostgREST 命名连接在一个事务中迁入，保留名称、当前选择和 Peer 身份。旧 HTTP API 地址及列表只保留原值供导出，不推断为 PostgREST 凭据；历史模型凭据留在私有存储中封存，不再执行或编辑，也不清空用户原数据。
 
 升级时重新加载扩展，并刷新此前已注入旧浮栏的网页，让旧版本留在页面中的内容一并清除。
+
+## 让 Web Source 使用浏览器
+
+Chromium 125 及以上版本可为 InKCre Web 中运行的 Source 提供浏览器能力。安装或升级这版扩展需要原生 debugger 权限；具体 Web 地址仍须由你单独授权。
+
+1. 在扩展设置中配置当前信息库连接。
+2. 在“浏览器操作”输入可信任的 InKCre Web 地址，点击“授权此站点”并完成原生站点权限操作。
+3. 回到 Web 的业务插件设置，查找并明确绑定此浏览器，再选择要采集的范围。B 站等网站的登录直接在该浏览器中完成，无需向 Source 复制 cookie。
+4. 从 Web 运行普通采集任务。扩展负责真实标签页操作，业务插件负责解释和保存信息。
+
+可在扩展设置撤销某个 Web 地址的授权，这会停止该授权下的浏览器会话。开始操作时会切换该浏览器窗口的活动标签页；采集新建的页面结束后关闭，借用的已有页面保留。Firefox 版本仍提供既有材料采集，暂不提供这条自动化路径。当前不承诺关闭 Web 或浏览器后继续运行采集任务。
 
 ## 开发与验证
 
@@ -36,7 +47,7 @@ Explain、Writing Assist、旧选区浮栏、图编辑侧栏和模型设置已�
 
 WebExt 固定使用正式发布的 `@inkcre/ui-web` 2.6.0，通过内置密码显隐能力、公开 `INK_I18N_KEY` 和中文词典提供按钮名称，不另写密码组件。2.5.0 和 2.6.0 的普通可编辑输入框都会额外渲染只读值和重复 ID，因此仓库分别维护版本限定的 pnpm patch，各修正一个渲染条件；升级到上游修复版后移除对应补丁。这次仅 WebExt 升级，web、twitter 和 ext-dev-utils 继续使用原 2.5.0 及其补丁，不改变组件 API、样式或仍使用 2.3.0 的扩展。
 
-根目录 `pnpm test:e2e:webext` 真正加载扩展。指定 `INKCRE_CHROMIUM_BINARY=/Applications/Helium.app/Contents/MacOS/Helium` 使用 Helium 的隔离测试 profile，测试结束清理，不连接日常会话。真实数据旅程还需要可销毁数据库/PostgREST 的 `INKCRE_E2E_WEBEXT_PGREST` 与 `INKCRE_E2E_WEBEXT_JWT_SECRET`。测试副本只对合成 localhost 资料预授予权限；原生权限 UI 另行验证，生产 manifest 保持 optional 权限。
+根目录 `pnpm test:e2e:webext` 真正加载扩展。指定 `INKCRE_CHROMIUM_BINARY=/Applications/Helium.app/Contents/MacOS/Helium` 使用 Helium 的隔离测试 profile，测试结束清理，不连接日常会话。真实数据旅程还需要可销毁数据库/PostgREST 的 `INKCRE_E2E_WEBEXT_PGREST` 与 `INKCRE_E2E_WEBEXT_JWT_SECRET`。测试副本只对合成 localhost 资料预授予权限；原生权限 UI 另行验证，合成 host 的预授权不进入生产 manifest；Chromium 的 debugger 为必选权限，站点权限仍按需申请。
 
 实现合同见[WebExt 运行时与材料](../../docs/30-unit-tdd/webext-collection.md)。安装、手动更新、旧身份迁移和 Changesets/GitHub Release 流程见[WebExt 版本与分发](../../docs/40-deployment/webext-delivery.md)。本地构建不等于发布；Firefox ZIP 尚未签名，不能作为正式安装包。
 

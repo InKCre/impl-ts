@@ -4,6 +4,7 @@ import { browser } from 'wxt/browser'
 import { InkButton, InkDropdown, InkForm, InkInput, InkSwitch, InkTextarea } from '@inkcre/ui-web'
 import type { MaterialRead } from '@inkcre/web-collection'
 import MaterialReader from '~/components/collection/MaterialReader.vue'
+import BrowserAutomationSettings from '~/components/BrowserAutomationSettings.vue'
 import logo from '@inkcre/ui-web/logo/svg/original-transparent/inkcre-original-transparent-32.svg?url'
 import reverseLogo from '@inkcre/ui-web/logo/svg/reverse-transparent/inkcre-reverse-transparent-32.svg?url'
 import { collectionMessage } from '~/logic/collection/messages'
@@ -202,6 +203,7 @@ onMounted(() => {
     <p v-if="error" role="alert" class="feedback error">{{ error }}</p>
     <p v-if="feedback" role="status" class="feedback">{{ feedback }}</p>
     <p v-if="status?.migrationWarning" class="feedback">{{ status.migrationWarning }}</p>
+    <BrowserAutomationSettings :provider="currentConnection?.peerId" />
     <section class="section" aria-labelledby="connection-heading">
       <h2 id="connection-heading">信息库</h2>
       <InkDropdown

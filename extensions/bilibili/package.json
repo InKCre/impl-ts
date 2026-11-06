@@ -1,0 +1,48 @@
+{
+  "name": "@inkcre/ext-bilibili",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@inkcre/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@inkcre/ext-dev-utils": "workspace:*",
+    "@inkcre/ui-web": "2.7.0",
+    "@module-federation/vite": "^1.1.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "catalog:",
+    "sass-embedded": "^1.90.0",
+    "typescript": "catalog:",
+    "vite": "^7.0.6",
+    "vue-tsc": "catalog:",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@vueuse/core": "^14.0.0",
+    "pinia": "^3.0.0",
+    "vue": "^3.5.25",
+    "vue-router": "^4.5.0",
+    "zod": "^4.1.0"
+  },
+  "inkcre": {
+    "name": "inkcre/bilibili",
+    "nickname": "哔哩哔哩",
+    "module_federation": {
+      "host_sdk": "@inkcre/core",
+      "host_sdk_version": ">=0.4.4 <0.5.0"
+    }
+  },
+  "intent": {
+    "skills": [
+      "@inkcre/ui-web"
+    ]
+  }
+}

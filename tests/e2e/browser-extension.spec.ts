@@ -680,7 +680,7 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
       )
     await expect(page.getByLabel('PostgREST 地址')).toBeVisible()
     const layout = await page.evaluate(() => {
-      const card = document.querySelector('.collection-page > .section')!
+      const card = document.querySelector('section[aria-labelledby="connection-heading"]')!
       const input = card.querySelector('input')!
       const primary = card.querySelector('button[type="submit"]')!
       const toggle = document.querySelector('[role="switch"]')!

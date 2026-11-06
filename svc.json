@@ -1,84 +1,144 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "dev": {
-    "targets": {
+    "resources": {
       "database": {
-        "poll_interval": 1,
-        "probe": {
-          "argv": ["node", "scripts/probe-database.mjs", "${dev.instance}"],
-          "cwd": ".",
-          "kind": "exec",
-          "output_limit": 2048,
-          "timeout": 5
+        "scope": "worktree",
+        "observations": {
+          "ready": {
+            "label": "就绪状态",
+            "purpose": "runtime-readiness",
+            "probe": {
+              "argv": ["node", "scripts/probe-database.mjs", "${dev.instance}"],
+              "cwd": ".",
+              "kind": "exec",
+              "output_limit": 2048,
+              "timeout": 5
+            }
+          }
         },
-        "provision": {
-          "argv": ["node", "scripts/database-runtime.mjs", "ensure", "${dev.instance}"],
-          "cwd": ".",
-          "env": {
-            "INKCRE_DATABASE_PROVIDER": "local"
-          },
-          "kind": "exec",
-          "mode": "run"
-        },
-        "readiness_timeout": 180,
-        "scope": "worktree"
+        "actions": {
+          "ensure": {
+            "argv": ["node", "scripts/database-runtime.mjs", "ensure", "${dev.instance}"],
+            "cwd": ".",
+            "env": {
+              "INKCRE_DATABASE_PROVIDER": "local"
+            },
+            "kind": "exec",
+            "intent": "准备database开发资源",
+            "traits": ["runtime", "provision"],
+            "effect_scope": "当前工作树的database开发资源",
+            "data_effect": "modify",
+            "completion": "exit",
+            "interruption": "wait",
+            "conditions": ["ready"],
+            "completion_timeout": 180,
+            "poll_interval": 1,
+            "convergent": true
+          }
+        }
       },
       "web": {
-        "access": ["https://client-web-${dev.instance}.localhost/"],
-        "poll_interval": 0.5,
-        "probe": {
-          "argv": ["node", "scripts/probe-dev.mjs", "web", "${dev.instance}"],
-          "cwd": ".",
-          "kind": "exec",
-          "output_limit": 1024,
-          "timeout": 5
+        "scope": "worktree",
+        "observations": {
+          "ready": {
+            "label": "就绪状态",
+            "purpose": "runtime-readiness",
+            "probe": {
+              "argv": ["node", "scripts/probe-dev.mjs", "web", "${dev.instance}"],
+              "cwd": ".",
+              "kind": "exec",
+              "output_limit": 1024,
+              "timeout": 5
+            }
+          }
         },
-        "provision": {
-          "argv": ["node", "scripts/dev.mjs", "web"],
-          "cwd": ".",
-          "kind": "exec",
-          "mode": "run"
+        "actions": {
+          "ensure": {
+            "argv": ["node", "scripts/dev.mjs", "web"],
+            "cwd": ".",
+            "kind": "exec",
+            "intent": "准备web开发资源",
+            "traits": ["runtime", "provision"],
+            "effect_scope": "当前工作树的web开发资源",
+            "data_effect": "modify",
+            "completion": "ready",
+            "interruption": "terminate",
+            "conditions": ["ready"],
+            "completion_timeout": 90,
+            "poll_interval": 0.5,
+            "convergent": true
+          }
         },
-        "readiness_timeout": 90,
-        "scope": "worktree"
+        "access": ["https://client-web-${dev.instance}.localhost/"]
       },
       "web-ui": {
-        "access": ["https://client-web-ui-${dev.instance}.localhost/"],
-        "poll_interval": 0.5,
-        "probe": {
-          "argv": ["node", "scripts/probe-dev.mjs", "web-ui", "${dev.instance}"],
-          "cwd": ".",
-          "kind": "exec",
-          "output_limit": 1024,
-          "timeout": 5
+        "scope": "worktree",
+        "observations": {
+          "ready": {
+            "label": "就绪状态",
+            "purpose": "runtime-readiness",
+            "probe": {
+              "argv": ["node", "scripts/probe-dev.mjs", "web-ui", "${dev.instance}"],
+              "cwd": ".",
+              "kind": "exec",
+              "output_limit": 1024,
+              "timeout": 5
+            }
+          }
         },
-        "provision": {
-          "argv": ["node", "scripts/dev.mjs", "web-ui"],
-          "cwd": ".",
-          "kind": "exec",
-          "mode": "run"
+        "actions": {
+          "ensure": {
+            "argv": ["node", "scripts/dev.mjs", "web-ui"],
+            "cwd": ".",
+            "kind": "exec",
+            "intent": "准备web-ui开发资源",
+            "traits": ["runtime", "provision"],
+            "effect_scope": "当前工作树的web-ui开发资源",
+            "data_effect": "modify",
+            "completion": "ready",
+            "interruption": "terminate",
+            "conditions": ["ready"],
+            "completion_timeout": 90,
+            "poll_interval": 0.5,
+            "convergent": true
+          }
         },
-        "readiness_timeout": 90,
-        "scope": "worktree"
+        "access": ["https://client-web-ui-${dev.instance}.localhost/"]
       },
       "webext": {
-        "access": ["https://webext-${dev.instance}.localhost/popup.html"],
-        "poll_interval": 0.5,
-        "probe": {
-          "argv": ["node", "scripts/probe-dev.mjs", "webext", "${dev.instance}"],
-          "cwd": ".",
-          "kind": "exec",
-          "output_limit": 1024,
-          "timeout": 5
+        "scope": "worktree",
+        "observations": {
+          "ready": {
+            "label": "就绪状态",
+            "purpose": "runtime-readiness",
+            "probe": {
+              "argv": ["node", "scripts/probe-dev.mjs", "webext", "${dev.instance}"],
+              "cwd": ".",
+              "kind": "exec",
+              "output_limit": 1024,
+              "timeout": 5
+            }
+          }
         },
-        "provision": {
-          "argv": ["node", "scripts/dev.mjs", "webext"],
-          "cwd": ".",
-          "kind": "exec",
-          "mode": "run"
+        "actions": {
+          "ensure": {
+            "argv": ["node", "scripts/dev.mjs", "webext"],
+            "cwd": ".",
+            "kind": "exec",
+            "intent": "准备webext开发资源",
+            "traits": ["runtime", "provision"],
+            "effect_scope": "当前工作树的webext开发资源",
+            "data_effect": "modify",
+            "completion": "ready",
+            "interruption": "terminate",
+            "conditions": ["ready"],
+            "completion_timeout": 120,
+            "poll_interval": 0.5,
+            "convergent": true
+          }
         },
-        "readiness_timeout": 120,
-        "scope": "worktree"
+        "access": ["https://webext-${dev.instance}.localhost/popup.html"]
       }
     }
   }

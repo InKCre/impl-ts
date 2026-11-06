@@ -75,6 +75,12 @@ manager does not impose a universal classification ladder.
 
 ## Browser Handles and Rendering
 
+`core.source.v1` is a provenance anchor rather than a business collection root. Its strict content
+contains only Source `id`, `type`, and optional `nickname`; the native Source Resolver projects the
+same readable sentence as the Python implementation and uses the existing text/preview renderers.
+Opening a Source does not load credentials or run a collector. Outgoing domain relations lead to
+the persisted business graph, which keeps its own exact Resolver contracts.
+
 Byte-oriented Resolvers may expose Blob or Object URL handles for image, audio, video, PDF, EPUB,
 ZIP, and file content. Handles are private runtime state, never persisted solved-graph authority.
 They are revoked on Resolver refresh, disposal, cache replacement, and eviction.

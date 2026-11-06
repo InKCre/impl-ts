@@ -35,7 +35,8 @@ export function checkManifest(manifest, version, browser, key) {
   if (browser === 'chrome')
     assert.equal(manifest.key, key, 'Release must use the fixed Chromium identity')
   else assert.equal(manifest.browser_specific_settings?.gecko?.id, 'webext@inkcre.org')
-  assert.ok(!manifest.permissions.includes('debugger'))
+  assert.equal(manifest.permissions.includes('debugger'), browser === 'chrome')
+  if (browser === 'chrome') assert.equal(manifest.minimum_chrome_version, '125')
 }
 
 async function api(route, options = {}) {

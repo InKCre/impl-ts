@@ -70,7 +70,7 @@ record(
   'docs/_shared must be initialized'
 )
 
-const localTargets = svcConfig.dev?.targets
+const localTargets = svcConfig.dev?.resources ?? svcConfig.dev?.targets
 record(
   'svc-dev-targets',
   localTargets?.web?.scope === 'worktree' &&

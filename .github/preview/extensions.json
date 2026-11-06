@@ -3,6 +3,11 @@
   "distributions": [
     {
       "kind": "module_federation",
+      "producer": "../../extensions/bilibili/package.json",
+      "artifact": "../../extensions/bilibili/dist/client-web"
+    },
+    {
+      "kind": "module_federation",
       "producer": "../../extensions/caldav/package.json",
       "artifact": "../../extensions/caldav/dist/web"
     },

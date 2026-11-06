@@ -74,11 +74,11 @@ export default defineConfig({
       'activeTab',
       'scripting',
       'alarms',
-      ...(browser === 'firefox' ? [] : ['offscreen']),
+      ...(browser === 'firefox' ? [] : ['offscreen', 'debugger']),
     ],
     optional_permissions: ['bookmarks', 'history'],
     optional_host_permissions: ['http://*/*', 'https://*/*'],
-    ...(browser === 'firefox' ? {} : { minimum_chrome_version: '116' }),
+    ...(browser === 'firefox' ? {} : { minimum_chrome_version: '125' }),
     ...(browser === 'firefox'
       ? {
           browser_specific_settings: {
@@ -105,6 +105,9 @@ export default defineConfig({
   vite: () => ({
     resolve: {
       alias: {
+        '@inkcre/core/browser-automation/protocol': fileURLToPath(
+          new URL('../../packages/core/src/browser-automation/protocol.ts', import.meta.url)
+        ),
         '@inkcre/core': fileURLToPath(new URL('../../packages/core/src/index.ts', import.meta.url)),
       },
     },

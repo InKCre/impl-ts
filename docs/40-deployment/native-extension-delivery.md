@@ -71,11 +71,14 @@ copy so the preview can load a mutually compatible Host and MF when a change rai
 Host SDK. This produces temporary derived versions for preview only. It neither consumes the pending
 changesets in the PR nor replaces the normal Version PR and protected-main release lifecycle.
 
-The Workspace contract check applies the same preparation after `pnpm check` has validated the
-original checkout. It builds the isolated candidate Host and MF before inspecting the native
-snapshot, and records the exact checked-out commit SHA in the job summary. For pull requests that
-SHA can be GitHub's synthetic merge commit; it identifies the source actually exported by
-`git archive`, while static, typed, and package checks still run on the original checkout first.
+Workspace contract 先在原 checkout 校验格式、静态规则和类型，再通过
+`scripts/prepare-native-checkout.mjs` 将当前未忽略的源文件复制到隔离候选，运行正式
+`pnpm release:version`，在候选中完成生产构建、资产闭包和发布检查。这样新增 API 的 MF
+可以明确要求下一兼容 SDK，而无需放宽为兼容旧已发布 SDK；原版本和 Changesets 保持不变。
+
+本地可运行 `node scripts/prepare-native-checkout.mjs --output .runtime/native-checkout --offline`，
+随后进入输出的 `workspace` 执行 `pnpm build`。输出目录必须为空；准备过程记录原 HEAD、
+是否有未提交变更与源快照摘要。它只为验证派生版本，不发布资产或创建提交。
 
 A plugin owns compatibility of its shared configuration, state, Source/Job parameters and stored
 information. Changesets record MF changes even when no Python change is necessary. Published native
