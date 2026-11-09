@@ -17,6 +17,7 @@ import {
   localStorageAdapter,
   registerCoreResolvers,
   TextResolver,
+  SourceResolver,
   MarkdownResolver,
   ResolverCache,
   AudioResolver,
@@ -122,6 +123,7 @@ export function setupResolvers(): void {
   MarkdownResolver.previewRenderer = ContentPreview
   MarkdownResolver.solvedContentRenderer = ContentHtml
   TextResolver.previewRenderer = ContentPreview
+  SourceResolver.previewRenderer = ContentPreview
   AudioResolver.previewRenderer = ContentPreview
   EpubResolver.previewRenderer = ContentPreview
   FileResolver.previewRenderer = ContentPreview
@@ -131,6 +133,7 @@ export function setupResolvers(): void {
   HtmlResolver.previewRenderer = ContentPreview
   ZipResolver.previewRenderer = ContentPreview
   TextResolver.solvedContentRenderer = ContentText
+  SourceResolver.solvedContentRenderer = ContentText
   AudioResolver.solvedContentRenderer = ContentAudio
   EpubResolver.solvedContentRenderer = ContentFile
   FileResolver.solvedContentRenderer = ContentFile

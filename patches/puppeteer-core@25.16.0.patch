@@ -1,0 +1,51 @@
+diff --git a/src/cdp/ExtensionTransport.ts b/src/cdp/ExtensionTransport.ts
+--- a/src/cdp/ExtensionTransport.ts
++++ b/src/cdp/ExtensionTransport.ts
+@@ -190,8 +190,8 @@
+       });
+   }
+ 
+-  close(): void {
++  close(): Promise<void> {
+     chrome.debugger.onEvent.removeListener(this.#debuggerEventHandler);
+-    void chrome.debugger.detach({tabId: this.#tabId});
++    return chrome.debugger.detach({tabId: this.#tabId});
+   }
+ }
+diff --git a/lib/puppeteer/cdp/ExtensionTransport.js b/lib/puppeteer/cdp/ExtensionTransport.js
+--- a/lib/puppeteer/cdp/ExtensionTransport.js
++++ b/lib/puppeteer/cdp/ExtensionTransport.js
+@@ -169,7 +169,7 @@
+     }
+     close() {
+         chrome.debugger.onEvent.removeListener(this.#debuggerEventHandler);
+-        void chrome.debugger.detach({ tabId: this.#tabId });
++        return chrome.debugger.detach({ tabId: this.#tabId });
+     }
+ }
+ //# sourceMappingURL=ExtensionTransport.js.map
+\ No newline at end of file
+diff --git a/lib/puppeteer/cdp/ExtensionTransport.d.ts b/lib/puppeteer/cdp/ExtensionTransport.d.ts
+--- a/lib/puppeteer/cdp/ExtensionTransport.d.ts
++++ b/lib/puppeteer/cdp/ExtensionTransport.d.ts
+@@ -23,6 +23,6 @@
+      */
+     constructor(tabId: number);
+     send(message: string): void;
+-    close(): void;
++    close(): Promise<void>;
+ }
+ //# sourceMappingURL=ExtensionTransport.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types.d.ts b/lib/types.d.ts
+--- a/lib/types.d.ts
++++ b/lib/types.d.ts
+@@ -3102,7 +3102,7 @@
+   onmessage?: (message: string) => void;
+   onclose?: () => void;
+   send(message: string): void;
+-  close(): void;
++  close(): Promise<void>;
+ }
+ 
+ /**

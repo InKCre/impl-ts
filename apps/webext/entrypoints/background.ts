@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser'
+import { initializeBrowserAutomation } from '~/logic/browser-automation/runtime'
 import {
   handleCollectionMessage,
   handlesCollectionMessage,
@@ -9,6 +10,7 @@ import {
 } from '~/logic/collection/runtime'
 
 export default defineBackground(() => {
+  initializeBrowserAutomation()
   const initialized = initializeCollection()
   initialized
     .then(() => Promise.all([wakeWork(), refreshPeers()]))

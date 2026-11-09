@@ -12,6 +12,14 @@ const common = {
 
 // Separate graphs keep the SDK's declarations independent of Vue peer dependencies.
 export default defineConfig([
-  { ...common, entry: ['src/index.ts'], outDir: 'dist', clean: false },
+  {
+    ...common,
+    entry: {
+      index: 'src/index.ts',
+      'browser-automation-protocol': 'src/browser-automation/protocol.ts',
+    },
+    outDir: 'dist',
+    clean: false,
+  },
   { ...common, entry: ['src/sdk.ts'], outDir: 'dist/sdk', clean: false },
 ])

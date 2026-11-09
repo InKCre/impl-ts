@@ -118,6 +118,12 @@ export class JobManager {
   private static async runAdmitted(id: JobRef): Promise<boolean> {
     const candidate = await Job.get(id)
     if (!this.accepting || candidate.status !== JobStatus.PENDING) return false
+    if (candidate.abort_requested) {
+      const claimed = await this.claim(candidate)
+      if (!claimed) return false
+      await this.observeExecution(claimed, () => this.close(claimed, JobStatus.ABORTED))
+      return true
+    }
     let prepared: [JobHandler, unknown] | null
     try {
       prepared = await this.prepare(candidate)
@@ -126,7 +132,7 @@ export class JobManager {
       if (!this.accepting) return false
       const claimed = await this.claim(candidate)
       if (!claimed) return false
-      if (!this.accepting) {
+      if (!this.accepting || claimed.abort_requested) {
         await this.observeExecution(claimed, () => this.close(claimed, JobStatus.ABORTED))
         return true
       }
@@ -140,7 +146,7 @@ export class JobManager {
     if (!claimed) return false
     // stopWorker may have run while claim was in flight. Do not start a handler
     // after its Extension resources have been disposed.
-    if (!this.accepting) {
+    if (!this.accepting || claimed.abort_requested) {
       await this.observeExecution(claimed, () => this.close(claimed, JobStatus.ABORTED))
       return true
     }

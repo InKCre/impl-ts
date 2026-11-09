@@ -46,9 +46,10 @@ into chunks and fetched on first navigation; repeat visits can reuse unchanged b
 [`.github/workflows/pages-deploy.yml`](../../.github/workflows/pages-deploy.yml) owns production
 delivery. A protected-`main` push selects that exact source SHA after strict required PR checks,
 while delivery rejects the run if a newer revision supersedes it. The delivery job checks out the
-exact source, installs the frozen workspace, builds the release, reverifies `main`, and deploys
-those same-run bytes to the Cloudflare Pages `main` branch in the protected `production`
-environment.
+exact source, installs the frozen workspace, and builds the Web App and its workspace dependencies.
+It runs `pnpm check:release:web` before deploying those same-run bytes to the Cloudflare Pages
+`main` branch in the protected `production` environment. Workspace CI checks Module Federation
+compatibility, and first-party MF publication validates each selected Extension release.
 
 The workspace lock owns the exact Wrangler version, and Pages production/preview execute it through
 the pinned pnpm toolchain. Preview cleanup is intentionally different: its tombstone is a standalone

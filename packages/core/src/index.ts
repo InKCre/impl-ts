@@ -10,6 +10,7 @@
 
 // Core singleton
 export { store } from './store'
+export * from './browser-automation'
 
 // Base layer
 export { APIError, DBAPIClient, rawPostgrestFetch } from './base'
@@ -117,6 +118,8 @@ export {
   SourceForm,
   SourceType,
   SourceManager,
+  SourceResolver,
+  SourceAnchorSchema,
   SOURCE_COLLECT_JOB_TYPE,
   SOURCE_BACKFILL_JOB_TYPE,
   type SourceImplementation,

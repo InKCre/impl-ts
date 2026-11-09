@@ -9,6 +9,7 @@ export const CORE_RESOLVER_IDS = [
   'core.epub.v1',
   'core.zip.v1',
   'core.file.v1',
+  'core.source.v1',
 ] as const
 
 export type CoreResolverId = (typeof CORE_RESOLVER_IDS)[number]
