@@ -83,9 +83,11 @@ jobs:
         working-directory: release
         run: pnpm install --frozen-lockfile
 
-      - name: Build the exact-main release
+      - name: Build and check the exact-main Web App
         working-directory: release
-        run: pnpm build
+        run: |
+          pnpm --filter @inkcre/web... run build
+          pnpm check:release:web
 
       - name: Deploy to Cloudflare Pages
         id: pages
