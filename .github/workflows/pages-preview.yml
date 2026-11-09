@@ -72,6 +72,7 @@ jobs:
         with:
           ref: ${{ needs.identity.outputs.head_sha }}
           path: candidate
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install the pinned pnpm release
@@ -101,6 +102,21 @@ jobs:
           pdm install --frozen-lockfile
         env:
           PDM_CHECK_UPDATE: 'false'
+
+      - name: Inspect pending preview versions
+        id: preview-versions
+        working-directory: candidate
+        run: |
+          git show-ref --verify --quiet refs/heads/main || git branch main HEAD
+          pnpm exec changeset status --output "$RUNNER_TEMP/preview-versions.json"
+          node -e 'console.log(`needed=${require(process.argv[1]).releases.length > 0}`)' "$RUNNER_TEMP/preview-versions.json" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare preview versions in the temporary checkout
+        if: steps.preview-versions.outputs.needed == 'true'
+        working-directory: candidate
+        run: |
+          pnpm release:version
+          pnpm install --lockfile-only --ignore-scripts
 
       - name: Build the exact-head SPA and Module Federation snapshots
         working-directory: candidate
