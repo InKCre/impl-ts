@@ -1,5 +1,12 @@
 # @inkcre/ext-github
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [6bace9c]
+  - @inkcre/core@0.4.5
+
 ## 0.1.4
 
 ### Patch Changes

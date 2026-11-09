@@ -1,5 +1,12 @@
 # @inkcre/web-collection
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [6bace9c]
+  - @inkcre/core@0.4.5
+
 ## 0.1.2
 
 ### Patch Changes
