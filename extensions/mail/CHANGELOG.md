@@ -1,5 +1,12 @@
 # @inkcre/ext-mail
 
+## 0.4.4
+
+### Patch Changes
+
+- Updated dependencies [6bace9c]
+  - @inkcre/core@0.4.5
+
 ## 0.4.3
 
 ### Patch Changes

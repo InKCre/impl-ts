@@ -1,5 +1,12 @@
 # @inkcre/ext-memos
 
+## 0.3.6
+
+### Patch Changes
+
+- Updated dependencies [6bace9c]
+  - @inkcre/core@0.4.5
+
 ## 0.3.5
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @inkcre/ext-local-files
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [6bace9c]
+  - @inkcre/core@0.4.5
+
 ## 0.2.1
 
 ### Patch Changes
