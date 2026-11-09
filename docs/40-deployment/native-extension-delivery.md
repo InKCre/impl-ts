@@ -71,9 +71,9 @@ copy so the preview can load a mutually compatible Host and MF when a change rai
 Host SDK. This produces temporary derived versions for preview only. It neither consumes the pending
 changesets in the PR nor replaces the normal Version PR and protected-main release lifecycle.
 
-Workspace contract 先校验源代码格式、静态规则和类型，再直接在 CI 的临时 checkout 中运行
-`pnpm release:version` 与 `pnpm install --lockfile-only --ignore-scripts`，然后构建并验证 Host 和 MF。
-Pages preview 在受信控制器选定的 PR head 临时 checkout 中使用同样的正式版本命令，保留完整历史供 Changesets 读取。
+Workspace contract 先校验源代码格式、静态规则和类型，再读取 Changesets 的版本计划。有待升版的包时，
+在 CI 的临时 checkout 中运行 `pnpm release:version` 与 `pnpm install --lockfile-only --ignore-scripts`，然后构建并验证 Host 和 MF。
+Pages preview 对受信控制器选定的 PR head 使用同样的版本计划和命令，保留完整历史供 Changesets 读取。
 这些派生版本仅用于验证和预览，不回写源分支，也不替代 Version PR 或正式发布。
 
 本地需要验证尚未发布的 SDK 时，在临时 clone 中运行上述命令及 `pnpm build`；日常工作树继续保留版本意图。

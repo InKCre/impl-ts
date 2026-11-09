@@ -113,9 +113,16 @@ jobs:
       - name: 校验源代码格式、静态规则和类型
         run: pnpm format:check && pnpm lint && pnpm type-check
 
-      - name: 在临时 checkout 中准备兼容构建版本
+      - name: 读取待处理的版本计划
+        id: build-versions
         run: |
           git show-ref --verify --quiet refs/heads/main || git branch main HEAD
+          pnpm exec changeset status --output "$RUNNER_TEMP/build-versions.json"
+          node -e 'console.log(`needed=${require(process.argv[1]).releases.length > 0}`)' "$RUNNER_TEMP/build-versions.json" >> "$GITHUB_OUTPUT"
+
+      - name: 在临时 checkout 中准备兼容构建版本
+        if: steps.build-versions.outputs.needed == 'true'
+        run: |
           pnpm release:version
           pnpm install --lockfile-only --ignore-scripts
 
