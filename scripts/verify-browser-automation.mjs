@@ -220,5 +220,6 @@ throw new Error('Web fixture timed out');
     if (browserProcess.exitCode === null) browserProcess.kill('SIGKILL')
   }
   for (const server of servers) server.close()
-  await rm(temporary, { recursive: true, force: true })
+  // Chromium helpers can still flush the disposable profile after the main process exits.
+  await rm(temporary, { recursive: true, force: true, maxRetries: 5 })
 }
