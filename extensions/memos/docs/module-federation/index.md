@@ -5,8 +5,9 @@ description: Use the Memos Web Extension to prepare connection details for a com
 # Prepare your client connection
 
 The Memos Web Extension provides a connection-preparation interface. It does not create a Source,
-schedule collection, or write a test note. The Core and browser must use matching Distributions of
-the same installed Extension Release.
+schedule collection, or write a test note. Core and the browser use compatible Distributions of `inkcre/memos`. Their versions are selected
+independently. During first setup, a repository-backed Web install looks up the official
+Python Release for a Core without an existing selection.
 
 1. In **Extensions**, enable Memos in this browser, then open **Setup**.
 2. Choose the online Core providing the service. A single eligible Core is selected automatically.

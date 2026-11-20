@@ -122,15 +122,16 @@ export async function getGitHubPythonSetupRelease(
   const webSelection = await ExtensionParticipationModel.get(webPeerId, name)
   const source = webSelection?.source_repository
   if (!source) return null
-  const repository =
+  const firstParty =
     source.toLowerCase() === FIRST_PARTY_EXTENSION_REPOSITORIES.module_federation.toLowerCase()
-      ? FIRST_PARTY_EXTENSION_REPOSITORIES.python
-      : source
+  const repository = firstParty ? FIRST_PARTY_EXTENSION_REPOSITORIES.python : source
   const release = (await listGitHubExtensionReleases(repository)).find(
     (candidate) => candidate.name === name && candidate.distribution === 'python'
   )
-  if (!release) throw new Error(`No published Python release for ${name} in ${repository}.`)
-  return release
+  // First-party Python and Web producers may publish at different times during the Registry transition.
+  if (!release && !firstParty)
+    throw new Error(`No published Python release for ${name} in ${repository}.`)
+  return release ?? null
 }
 
 export async function getGitHubExtensionRelease(

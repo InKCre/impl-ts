@@ -173,7 +173,7 @@ export async function verifyHostedCandidates(plan, siteDirectory, fetchImplement
       if (file === 'mf-manifest.json') assert.equal(contentType, 'application/json')
       else assert.ok(['application/javascript', 'text/javascript'].includes(contentType))
       const [remote, local] = await Promise.all([
-        response.arrayBuffer().then(Buffer.from),
+        response.arrayBuffer().then((buffer) => Buffer.from(buffer)),
         readFile(path.join(localDirectory, file)),
       ])
       assert.ok(remote.equals(local), 'Pages bytes differ: ' + url.href)
