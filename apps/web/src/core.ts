@@ -14,6 +14,8 @@ import {
   flushTelemetry,
   ExtensionRegistryOriginResolver,
   DEFAULT_EXTENSION_REGISTRY_ORIGIN,
+  getGitHubExtensionRelease,
+  supportsGitHubExtensionSdk,
   localStorageAdapter,
   registerCoreResolvers,
   TextResolver,
@@ -39,6 +41,7 @@ import { createInstance } from '@module-federation/runtime'
 import {
   ExtensionManager,
   RegistryReleaseReader,
+  HostSdkCompatibilityError,
   type WebExtensionModule,
 } from '@inkcre/extension-runtime-web'
 import * as InKCreCore from '@inkcre/core'
@@ -176,13 +179,41 @@ export function initializeExtensionHost(): AppExtensionManager {
     () => configStore.peerConfig.extension_registry_url
   )
   if (!moduleFederation) throw new Error('Module Federation has not been initialized.')
-  extensionRegistry = new RegistryReleaseReader({
+  const registry = new RegistryReleaseReader({
     registryOrigin: getExtensionRegistryOrigin,
     hostSdk: { name: '@inkcre/core', version: corePackageJson.version },
   })
+  extensionRegistry = registry
   extensionHost = new ExtensionManager<AppExtensionModule>({
     peerId: configStore.metaConfig.INKCRE_PEER_ID,
-    releases: extensionRegistry,
+    releases: {
+      async get(name, version, requirePublished, sourceRepository) {
+        if (!sourceRepository) return registry.get(name, version, requirePublished)
+
+        const release = await getGitHubExtensionRelease(
+          sourceRepository,
+          name,
+          'module_federation',
+          version
+        )
+        if (!release.descriptor.manifest_url || !isCompatibleWithCurrentWebSdk(release))
+          throw new HostSdkCompatibilityError(
+            `Release ${name}@${version} does not support this Web Host SDK.`
+          )
+        return {
+          name: release.name,
+          nickname: release.name,
+          version: release.version,
+          distribution: 'module_federation',
+          state: 'published',
+          module_federation: {
+            host_sdk: '@inkcre/core',
+            host_sdk_version: release.descriptor.host_sdk_version,
+            manifest_url: release.descriptor.manifest_url,
+          },
+        }
+      },
+    },
     moduleFederation,
   })
   return extensionHost
@@ -228,6 +259,12 @@ export function getExtensionRegistry(): RegistryReleaseReader {
     throw new Error('Extension Registry reader has not been initialized.')
   }
   return extensionRegistry
+}
+
+export function isCompatibleWithCurrentWebSdk(
+  release: Parameters<typeof supportsGitHubExtensionSdk>[0]
+): boolean {
+  return supportsGitHubExtensionSdk(release, '@inkcre/core', corePackageJson.version)
 }
 
 export function getExtensionRegistryOrigin(): Promise<string> {

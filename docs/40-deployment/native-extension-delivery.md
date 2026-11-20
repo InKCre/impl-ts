@@ -1,11 +1,9 @@
 # First-party Extension Delivery
 
-This document owns the operational Release and Registry delivery contract for first-party web
-Extensions. Extension lifecycle and Host internals belong to
-[Native Extension Runtime](../30-unit-tdd/native-extension-runtime.md). A producer is an
-`extensions/*/package.json` declaring `inkcre.module_federation`; its package version is the
-exact Registry Release version, and its `inkcre` metadata owns the canonical Extension identity and
-compatible `@inkcre/core` Host SDK range.
+本仓 `extensions/*/package.json` 中声明 `inkcre.module_federation` 的包是 MF producer。
+包版本、逻辑名和 SDK 兼容范围来自同一个 manifest。
+[扩展发行与安装](../_shared/20-product-tdd/extension-release-and-installation.md)定义宿主与发行端共同遵循的协议。
+宿主加载实现见[原生扩展运行时](../30-unit-tdd/native-extension-runtime.md)。
 
 ## Release Intent and Versioning
 
@@ -27,40 +25,27 @@ packages are versioned too; `private` does not mean their release intent should 
 Changesets own versions and changelogs, while each delivery workflow owns its artifact. A package's
 commit or PR scope is not a substitute for selecting it in the Changeset.
 
-On a protected `main` push,
-[`.github/workflows/extension-release.yml`](../../.github/workflows/extension-release.yml) runs the
-**First-party Extension release** lifecycle:
+[First-party Extension release](../../.github/workflows/extension-release.yml)在受保护的
+`main` 上执行以下步骤。
 
-- With pending changesets, Changesets Action runs `pnpm release:version` and creates or updates the
-  Extension Version PR. That PR owns generated package versions and changelogs; contributors do not
-  edit those outputs separately. The reconciliation step does not publish, create GitHub Releases,
-  or push tags.
-- The candidate job checks out the exact protected-main revision, installs the frozen workspace,
-  and builds `@inkcre/core` plus every
-  `extensions/*` producer itself. It saves the selected plan, original prepare descriptors, full ZIP
-  snapshots and SHA-256 digests as the immutable `first-party-extension-candidate` Actions artifact.
-  No Registry writes occur until that artifact is retained and checked.
-- Producers are discovered from package metadata. A producer with its own direct pending Changeset
-  is not selected, including a new producer whose initial coordinate does not yet exist. Dependency
-  bumps inferred by Changesets do not count as direct intent. This allows an independently prepared
-  version to publish while other packages still have pending changesets. A published Release with
-  an existing Module Federation association is a historical no-op at candidate selection. Missing MF native coordinates become
-  fixed candidates; the publish job downloads this run's exact artifact, prepares them with their
-  saved provenance, uploads, publishes, and verifies every candidate from the public Registry.
-  It never consumes pull-request CI artifacts or rebuilds a publication candidate.
+- Changesets 通过 Version PR 生成包版本和 changelog。一个 producer 仍有自己的待升版 Changeset
+  时，正式流程等其版本提交后再发布。
+- 候选只选择此次 push 新增或升版、且 GitHub 尚无公开 Release 的 MF producer。
+  手动恢复的 source SHA 必须是当时的 `main`，候选选择与其父提交比较。
+- 构建选中的包和 Core SDK，校验 MF manifest 和资产，再生成带版本的静态地址、
+  Release 正文和唯一的 `module-federation.zip`。工作流保存原始 ZIP、SHA-256 和发布计划。
 
 The repository must enable **Allow GitHub Actions to create and approve pull requests** for
 Changesets to create its Version PR. GitHub combines these capabilities in one setting; this
 workflow only creates PRs and must never approve reviews. Default workflow-token permissions stay
-read-only, with write permissions confined to reconciliation. GitHub may require a maintainer to
+read-only, with write permissions confined to reconciliation and publication. GitHub may require a maintainer to
 select **Approve workflows to run** on a token-created Version PR before its checks execute; do not
 replace this gate with an empty-check merge or a broader credential.
 
 App checks, Pages production, and Pages preview are separate application lifecycles. They cannot
 publish first-party Extensions. Local development and local verification must never publish either.
 
-Python and Module Federation are independent native releases. Each producer owns
-`(extension name, distribution, version)` and publishes only that distribution through Registry v2.
+Python and Module Federation are independent native releases. Each producer owns its native version and publishes that distribution to its own repository.
 The Web workflow does not read Core source or a Core version plan. Python publication neither
 selects nor waits for MF, and MF publication neither selects nor waits for Python. Host SDK ranges
 remain native loading requirements; they do not describe cross-distribution business compatibility.
@@ -112,8 +97,7 @@ are published or have a saved production candidate; it does not create a second 
 If either a published coordinate or a saved candidate exists, preserve its original bytes instead
 of rebuilding the same version. Subsequent producer changes continue to use ordinary Changesets.
 
-Current package identity and the exact admitted Runtime 0.4.2 asset are recorded in
-[App 命名与兼容身份](web-delivery.md#app-命名与兼容身份); the earlier qualification history above does not select today's dependency.
+当前 Runtime 依赖由 [App 命名与兼容身份](web-delivery.md#app-命名与兼容身份)引用的 workspace catalog 管理。
 
 Required database checks normally resolve the protected Core `stable` artifact. During this cutover,
 `contracts/core-release.json` can admit a `canonical_candidate` with an existing canonical Core
@@ -124,88 +108,27 @@ canonical artifact lane publishes it; a local or preview image is qualification 
 be entered as that canonical candidate. Omitting the entry continues to use stable. This admission
 does not move stable, deploy Core or migrate a production database.
 
-## Registry Authority and Secret Boundary
+## 静态分发与公开 Release
 
-Publication runs only in the protected GitHub `production` environment. The scoped bearer secret
-`INKCRE_EXTENSION_REGISTRY_TOKEN` belongs only to the first-party Extension publish job; it must not be
-copied to a file, exposed to Pages or checks, or used for protected delivery from a developer
-machine. The public Registry defaults to `https://registry.inkcre.dev`; operators may override only
-the endpoint through repository variable `INKCRE_EXTENSION_REGISTRY_URL`.
+启用本仓 **Settings → Pages → Source → GitHub Actions**，使用仓库默认
+`https://inkcre.github.io/impl-ts/` 站点。发布工作流在受保护的 `production` 环境执行。
+站点只承载版本化路径 `extensions/<namespace>/<name>/<version>/`。常规 Web App 的
+Cloudflare Pages 部署与此独立。首次启用仓库发现时给两个发布者仓库添加 `inkcre-extension` Topic。
 
-The workflow records `source_repository`, `source_revision`, and a release-workflow `build_id` in
-the Module Federation distribution before upload. These Web-distribution provenance facts remain
-independent of Python release provenance.
+发布工作流从所有已公开的 MF Release 附件还原历史版本，并从本次保存的 ZIP 加入新版本。
+站点部署完成后，流程检查公开 manifest 和 Remote entry 的跨源响应、内容类型和字节。
+GitHub Release 草稿与保存的 ZIP 摘要一致后才公开。之后读回标签提交、正文和附件摘要。
+现有版本继续从原来的精确来源读取，新发行的文档在 producer 的 `docs/user`。
 
-Hosted documentation is discovered separately for the exact Release. Browser code follows the
-absolute entry or snapshot URL returned by Registry and never derives a content hostname from the
-Registry origin, Extension identity, or snapshot ID. The first-party deployment currently uses a
-broad `*.inkcre.dev` DNS/TLS catch-all while Registry admits only
-`registry-docs-{snapshot}.inkcre.dev`; therefore DNS resolution or a successful TLS handshake is
-not documentation availability. A 421 response is a rejected Host, not a URL pattern for the Web
-App to repair or retry under another subdomain.
+失败时在原 run 上使用 **Re-run failed jobs**，从同一个 GitHub Actions 附件恢复候选。
+候选保留 90 天。公开后的修订需要 producer 升版。
 
-## Failure and Recovery
-
-An upload timeout is an unknown outcome, not proof of a rejected snapshot: a Registry behind Heroku
-may finish after its router returns H12. The publisher makes a bounded attempt to complete the
-existing publish operation and read back the Release. A new MF-only Release remains publicly
-invisible while preparing, so recovery cannot rely on public GET alone. Authentication failures,
-immutable conflicts, blocked/yanked Releases and byte mismatches fail rather than becoming retries
-or successful skips.
-
-After a transient publication failure, use **Re-run failed jobs** or re-run only
-**Publish first-party MF distributions**. These partial reruns retain the successful candidate
-job's artifact and output, so publication downloads the same exact artifact ID. Do not use
-**Re-run all jobs**: GitHub removes the original artifacts before executing the new attempt.
-Candidate discovery rejects a missing artifact on any attempt after the first, before build or
-Registry writes. An existing candidate is restored and checked, never silently replaced.
-Both first publication and recovery verify the full public
-snapshot, including candidates whose association appeared after an earlier timeout. A later,
-unrelated main push may classify those historical Releases as no-ops; it does not claim to verify
-them against a new build.
-
-Candidates are retained for 90 days. Do not delete the artifact of an unfinished release or start
-a new run to replace its prepared provenance. An expired or lost candidate requires operator
-investigation using the original run and Registry state; a fresh build is not equivalent evidence.
-The same conservative stop applies if the first attempt failed before saving any candidate. After
-confirming that publication never ran, the operator may proceed through a new normal main run.
-If publication did run, recover the original candidate; do not use a new build or new run to replace
-its bytes or prepared provenance.
-The original ZIP digest and all-file verification count are written to the publish job summary.
-
-`node --test scripts/test-extension-publication.mjs` exercises the publisher over an isolated HTTP
-fault-injection endpoint: an MF-only upload returns 503 while the saved snapshot becomes available,
-publish initially reports incomplete objects, and recovery verifies the original ZIP even after
-local build output changes. It also proves that an existing selected association cannot bypass
-byte verification, immutable conflicts stop immediately, and invalid saved candidates cause no
-Registry writes. It also checks that a rerun without its saved candidate stops before rebuilding.
-This is a publisher regression check, not evidence of production R2 latency.
-
-## Snapshot and Verification
-
-Each producer retains the relative artifact base `base: './'`, emits
-`dist/web/mf-manifest.json`, and declares its Registry association in package metadata. The
-distribution verifier checks the manifest Remote entry and every synchronous or asynchronous
-shared/exposed JavaScript and CSS reference, then compares every file in the uploaded snapshot,
-including transitive chunks and generated metadata. The uploaded snapshot is self-contained and
-relocatable; publication does not invent a generic target descriptor or rewrite the producer
-manifest.
-
-Public executable responses use `Cache-Control: public, no-cache` and an ETag. Immutable Release
-bytes do not imply an immutable HTTP cache policy: browsers must revalidate Registry readability
-so a blocked Release stops being served. Verification also checks CORS, the trusted Registry origin,
-manifest structure, and the exact bytes of every referenced asset.
-
-The executable contract is
-[`scripts/verify-native-extension-distribution.mjs`](../../scripts/verify-native-extension-distribution.mjs).
-`pnpm check:package` 在本地与 CI 中检查所有生产扩展的真实 MF 产物，并确认 Twitter 这类使用 UI 组件的扩展保留共享 UI 模块。
-Verify locally without publishing:
+本地构建和验证不进行发布。
 
 ```bash
 pnpm --filter @inkcre/core build
-pnpm --filter './extensions/*' build
-node scripts/verify-native-extension-distribution.mjs inspect-local \
-  --package extensions/<extension>/package.json \
-  --core-package packages/core/package.json \
-  --artifact-directory extensions/<extension>/dist/web
+pnpm --filter @inkcre/ext-mail build
+fixture="$(mktemp -d)"
+node scripts/prepare-repository-extension.mjs mail "$fixture" https://inkcre.github.io/impl-ts/
+node --test scripts/test-extension-publication.mjs scripts/tests/independent-extension-release.test.mjs
 ```

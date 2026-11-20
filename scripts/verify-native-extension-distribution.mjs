@@ -58,10 +58,10 @@ function assetReferences(items, collectionName) {
   return references
 }
 
-export function manifestClosure(manifest) {
+export function manifestClosure(manifest, publicPath = './') {
   assert.ok(manifest && typeof manifest === 'object', 'mf-manifest.json must contain an object')
   assert.ok(manifest.metaData && typeof manifest.metaData === 'object', 'metaData is required')
-  assert.equal(manifest.metaData.publicPath, './', "metaData.publicPath must be './'")
+  assert.equal(manifest.metaData.publicPath, publicPath, 'unexpected Module Federation publicPath')
 
   /** @type {Set<string>} */
   const references = new Set([remoteEntryPath(manifest.metaData)])
@@ -114,6 +114,7 @@ export async function inspectNativeModuleFederation({
   packagePath,
   corePackagePath,
   artifactDirectory,
+  publicPath,
 }) {
   const [extensionPackage, corePackage, manifest] = await Promise.all([
     readJson(packagePath),
@@ -121,7 +122,7 @@ export async function inspectNativeModuleFederation({
     readJson(path.join(artifactDirectory, 'mf-manifest.json')),
   ])
   const association = readAssociation(extensionPackage, corePackage)
-  const closure = manifestClosure(manifest)
+  const closure = manifestClosure(manifest, publicPath)
 
   for (const relativePath of closure) {
     const absolutePath = path.join(artifactDirectory, ...relativePath.split('/'))

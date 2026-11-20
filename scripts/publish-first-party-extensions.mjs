@@ -4,112 +4,52 @@ import { createHash } from 'node:crypto'
 import { appendFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { setTimeout } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { valid as validSemVer } from 'semver'
 import {
-  inspectNativeModuleFederation,
-  listSnapshotFiles,
-  prepareBody,
-  verifyPublicModuleFederation,
-} from './verify-native-extension-distribution.mjs'
+  ARCHIVE_NAME,
+  extensionSitePath,
+  prepareRepositoryExtension,
+  repositoryReleaseBody,
+} from './prepare-repository-extension.mjs'
+import { inspectNativeModuleFederation } from './verify-native-extension-distribution.mjs'
 
 const ARTIFACT_NAME = 'first-party-extension-candidate'
-const OBJECTS_PENDING = 'Release native Distribution objects are not completely available'
-const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
+const PAGES_BASE = 'https://inkcre.github.io/impl-ts/'
+const MF_TAG = /^inkcre-ext\/([a-z0-9-]+\/[a-z0-9-]+)\/module_federation\/v([^/]+)$/
+const digest = (bytes) => 'sha256:' + createHash('sha256').update(bytes).digest('hex')
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
-const writeJson = (file, data) => writeFile(file, `${JSON.stringify(data, null, 2)}\n`)
+const tagFor = (name, version) => 'inkcre-ext/' + name + '/module_federation/v' + version
 
 export function selectSavedCandidate(artifacts, runAttempt) {
   assert.match(runAttempt, /^[1-9]\d*$/, 'current GitHub run attempt is required')
   const candidates = artifacts.filter((artifact) => artifact.name === ARTIFACT_NAME)
   assert.ok(candidates.length <= 1, 'workflow run has multiple release candidates')
   const candidate = candidates[0]
-  assert.ok(!candidate?.expired, 'saved candidate expired; do not rebuild a prepared Release')
-  // GitHub deletes artifacts on rerun-all. Only partial reruns can retain the original candidate.
-  // ponytail: also reject pre-capture retries; operator review is safer than inferring prior writes.
+  assert.ok(!candidate?.expired, 'saved candidate expired; preserve the original Release bytes')
   assert.ok(
     candidate || runAttempt === '1',
-    'Saved candidate is missing on a rerun. Stop: never rebuild a possibly prepared Release. Use the original artifact and rerun only publication; see first-party delivery recovery guidance.'
+    'Saved candidate is missing on a rerun. Re-run only the publication job with its saved candidate.'
   )
   return candidate
-}
-
-class RegistryError extends Error {
-  constructor(stage, status, detail) {
-    super(`${stage}: Registry HTTP ${status || 'unavailable'}: ${detail}`)
-    this.status = status
-    this.detail = detail
-    this.uncertain = [0, 408, 500, 502, 503, 504].includes(status)
-  }
-}
-
-async function request(url, options, fetchImplementation) {
-  let response
-  let body
-  try {
-    response = await fetchImplementation(url, {
-      ...options,
-      redirect: 'error',
-      signal: AbortSignal.timeout(45_000),
-    })
-    body = await response.text()
-  } catch (error) {
-    throw new RegistryError(`${options.method ?? 'GET'} ${url.pathname}`, 0, error.message)
-  }
-  let result
-  try {
-    result = JSON.parse(body)
-  } catch {
-    result = { detail: body.slice(0, 500) }
-  }
-  if (!response.ok) {
-    throw new RegistryError(
-      `${options.method ?? 'GET'} ${url.pathname}`,
-      response.status,
-      result.detail ?? body.slice(0, 500)
-    )
-  }
-  return result
-}
-
-function releaseUrl(registryUrl, name, version) {
-  return new URL(
-    `/v2/extensions/${name}/distributions/module_federation/releases/${version}`,
-    registryUrl
-  )
-}
-
-async function publicRelease(url, fetchImplementation) {
-  try {
-    const release = await request(url, {}, fetchImplementation)
-    assert.equal(
-      release.distribution,
-      'module_federation',
-      'Registry returned a different native distribution'
-    )
-    assert.equal(release.state, 'published', `cannot deliver a ${release.state} Release`)
-    return release
-  } catch (error) {
-    if (error.status === 404) return null
-    throw error
-  }
 }
 
 export async function captureCandidates({
   workspace,
   deliveryDirectory,
-  registryUrl,
+  pagesBase,
   provenance,
+  previousVersion,
+  publishedTags = new Set(),
   pendingPackages = new Set(),
-  fetchImplementation = fetch,
+  build = () => {},
 }) {
   await mkdir(deliveryDirectory, { recursive: true })
   const candidates = []
-  for (const directory of await readdir(path.join(workspace, 'extensions'), {
-    withFileTypes: true,
-  })) {
-    if (!directory.isDirectory()) continue
-    const packagePath = path.join(workspace, 'extensions', directory.name, 'package.json')
+  for (const entry of await readdir(path.join(workspace, 'extensions'), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const directory = entry.name
+    const packagePath = path.join(workspace, 'extensions', directory, 'package.json')
     let manifest
     try {
       manifest = await readJson(packagePath)
@@ -117,267 +57,314 @@ export async function captureCandidates({
       if (error.code === 'ENOENT') continue
       throw error
     }
-    if (!manifest.inkcre?.module_federation) continue
-    if (pendingPackages.has(manifest.name)) {
-      console.log(
-        `${manifest.inkcre.name}: release intent is still pending; no publication selected.`
-      )
-      continue
-    }
-    const existing = await publicRelease(
-      releaseUrl(registryUrl, manifest.inkcre.name, manifest.version),
-      fetchImplementation
-    )
-    if (existing?.module_federation) {
-      console.log(
-        `${manifest.inkcre.name} ${manifest.version}: historical Release, no publication selected.`
-      )
-      continue
-    }
-    const artifactDirectory = path.join(path.dirname(packagePath), 'dist/web')
-    const local = await inspectNativeModuleFederation({
-      packagePath,
-      corePackagePath: path.join(workspace, 'packages/core/package.json'),
-      artifactDirectory,
+    if (!manifest.inkcre?.module_federation || pendingPackages.has(manifest.name)) continue
+    const name = manifest.inkcre.name
+    const version = manifest.version
+    if (previousVersion(directory) === version || publishedTags.has(tagFor(name, version))) continue
+
+    build(directory)
+    const output = path.join(deliveryDirectory, directory)
+    const { body, archive } = await prepareRepositoryExtension({
+      workspace,
+      directory,
+      output,
+      pagesBase,
     })
-    await listSnapshotFiles(artifactDirectory)
-    const candidateDirectory = path.join(deliveryDirectory, directory.name)
-    // A candidate is written once. Re-runs restore the saved artifact before entering this command.
-    await mkdir(candidateDirectory)
-    const prepare = prepareBody(local, provenance)
-    await writeJson(path.join(candidateDirectory, 'prepare.json'), prepare)
-    const archive = path.join(candidateDirectory, 'snapshot.zip')
-    execFileSync('zip', ['-q', '-r', archive, '.'], { cwd: artifactDirectory })
-    candidates.push({
-      directory: directory.name,
-      name: local.name,
-      version: local.version,
-      sha256: sha256(await readFile(archive)),
-    })
+    // Save only the archive used by GitHub Release and Pages, plus the release plan.
+    await rm(path.join(output, 'site'), { recursive: true })
+    candidates.push({ directory, name, version, body, digest: digest(await readFile(archive)) })
   }
-  const plan = { ...provenance, registry_url: registryUrl, candidates }
-  await writeJson(path.join(deliveryDirectory, 'plan.json'), plan)
+  const plan = { ...provenance, pages_base: pagesBase, candidates }
+  await writeFile(path.join(deliveryDirectory, 'plan.json'), JSON.stringify(plan) + '\n', {
+    flag: 'wx',
+  })
   return plan
 }
 
-export async function checkCandidates({ workspace, deliveryDirectory, registryUrl, provenance }) {
+export async function stageCandidates({
+  workspace,
+  deliveryDirectory,
+  siteDirectory,
+  pagesBase,
+  provenance,
+  releases = [],
+  download,
+}) {
   const plan = await readJson(path.join(deliveryDirectory, 'plan.json'))
   assert.deepEqual(
-    {
-      source_repository: plan.source_repository,
-      source_revision: plan.source_revision,
-      build_id: plan.build_id,
-      registry_url: plan.registry_url,
-    },
-    { ...provenance, registry_url: registryUrl },
-    'saved candidate must belong to this source revision, workflow run and Registry'
+    { source_revision: plan.source_revision, run_id: plan.run_id, pages_base: plan.pages_base },
+    { ...provenance, pages_base: pagesBase },
+    'saved candidate belongs to a different source revision, workflow run or Pages site'
   )
+  if (!plan.candidates.length) return plan
+  const selectedTags = new Set()
   for (const candidate of plan.candidates) {
-    assert.match(candidate.directory, /^[a-zA-Z0-9_-]+$/)
-    const candidateDirectory = path.join(deliveryDirectory, candidate.directory)
-    const archive = await readFile(path.join(candidateDirectory, 'snapshot.zip'))
-    assert.equal(sha256(archive), candidate.sha256, `${candidate.name}: saved ZIP digest differs`)
-    const artifactDirectory = await mkdtemp(path.join(os.tmpdir(), 'inkcre-release-candidate-'))
-    try {
-      execFileSync('unzip', [
-        '-q',
-        path.join(candidateDirectory, 'snapshot.zip'),
-        '-d',
-        artifactDirectory,
-      ])
-      const local = await inspectNativeModuleFederation({
-        packagePath: path.join(workspace, 'extensions', candidate.directory, 'package.json'),
-        corePackagePath: path.join(workspace, 'packages/core/package.json'),
-        artifactDirectory,
-      })
-      await listSnapshotFiles(artifactDirectory)
-      assert.equal(candidate.name, local.name)
-      assert.equal(candidate.version, local.version)
-      assert.deepEqual(
-        await readJson(path.join(candidateDirectory, 'prepare.json')),
-        prepareBody(local, provenance)
-      )
-    } finally {
-      await rm(artifactDirectory, { recursive: true })
+    const tag = tagFor(candidate.name, candidate.version)
+    assert.ok(!selectedTags.has(tag), 'duplicate saved Release ' + tag)
+    selectedTags.add(tag)
+    const release = releases.find((item) => item.tag_name === tag && !item.draft)
+    if (release) assert.equal(releaseAsset(release).digest, candidate.digest)
+    const relativePath = extensionSitePath(candidate.name, candidate.version)
+    const publicPath = new URL(relativePath, pagesBase).href
+    const unpacked = path.join(siteDirectory, relativePath)
+    const archive = path.join(deliveryDirectory, candidate.directory, ARCHIVE_NAME)
+    assert.equal(digest(await readFile(archive)), candidate.digest, 'saved ZIP digest differs')
+    await unpack(archive, unpacked)
+    const local = await inspectNativeModuleFederation({
+      packagePath: path.join(workspace, 'extensions', candidate.directory, 'package.json'),
+      corePackagePath: path.join(workspace, 'packages/core/package.json'),
+      artifactDirectory: unpacked,
+      publicPath,
+    })
+    assert.equal(local.name, candidate.name)
+    assert.equal(local.version, candidate.version)
+    assert.equal(candidate.body, repositoryReleaseBody(candidate.directory, local, publicPath))
+  }
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'inkcre-released-extension-'))
+  try {
+    for (const release of releases) {
+      const identity = release.tag_name.match(MF_TAG)
+      if (!identity || release.draft || selectedTags.has(release.tag_name)) continue
+      const [, name, version] = identity
+      assert.equal(validSemVer(version), version)
+      const archive = path.join(temporary, ARCHIVE_NAME)
+      await download(release.tag_name, archive)
+      assert.equal(digest(await readFile(archive)), releaseAsset(release).digest)
+      await unpack(archive, path.join(siteDirectory, extensionSitePath(name, version)))
+      await rm(archive)
     }
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
   }
   return plan
 }
 
-async function finishPublication(url, token, fetchImplementation) {
-  // A new MF-only Release stays invisible while preparing. Retry publish, not just public GET.
-  for (let attempt = 0; attempt < 7; attempt++) {
-    if (attempt) await setTimeout(5_000)
-    try {
-      const result = await request(
-        new URL(`${url.pathname}/publish`, url),
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        },
-        fetchImplementation
-      )
-      if (result.state === 'published' && result.module_federation) return
-    } catch (error) {
-      if (!error.uncertain && !(error.status === 409 && error.detail === OBJECTS_PENDING))
-        throw error
-      console.warn(error.message)
-    }
-    try {
-      const visible = await publicRelease(url, fetchImplementation)
-      if (visible?.module_federation) return
-    } catch (error) {
-      if (!error.uncertain) throw error
-      console.warn(error.message)
-    }
-  }
-  throw new Error(
-    'Publication is not confirmed. Re-run the failed job with its saved candidate; do not rebuild or replace the Release.'
-  )
+async function unpack(archive, destination) {
+  await mkdir(destination, { recursive: true })
+  execFileSync('unzip', ['-q', archive, '-d', destination])
 }
 
-export async function publishCandidates(options) {
-  const { workspace, deliveryDirectory, registryUrl, token, fetchImplementation = fetch } = options
-  assert.ok(token, 'publisher token is required')
-  const plan = await checkCandidates(options)
+function releaseAsset(release) {
+  const asset = release.assets.find((item) => item.name === ARCHIVE_NAME)
+  assert.ok(asset, 'Release is missing ' + ARCHIVE_NAME + ': ' + release.tag_name)
+  return asset
+}
+
+export async function verifyHostedCandidates(plan, siteDirectory, fetchImplementation = fetch) {
   for (const candidate of plan.candidates) {
-    const candidateDirectory = path.join(deliveryDirectory, candidate.directory)
-    const url = releaseUrl(registryUrl, candidate.name, candidate.version)
-    const prepare = await readFile(path.join(candidateDirectory, 'prepare.json'))
-    // prepare is idempotent and also checks immutable provenance before a resumed publication.
-    await request(
-      new URL(
-        `/v2/extensions/${candidate.name}/distributions/module_federation/releases`,
-        registryUrl
-      ),
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: prepare,
-      },
-      fetchImplementation
-    )
-    const existing = await publicRelease(url, fetchImplementation)
-    if (!existing?.module_federation) {
-      const form = new FormData()
-      form.append(
-        'content',
-        new Blob([await readFile(path.join(candidateDirectory, 'snapshot.zip'))], {
-          type: 'application/zip',
-        }),
-        'snapshot.zip'
-      )
-      try {
-        await request(
-          new URL(`${url.pathname}/module-federation`, url),
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: form,
-          },
-          fetchImplementation
-        )
-      } catch (error) {
-        if (!error.uncertain) throw error
-        console.warn(`${error.message}; upload outcome is unknown, checking completion.`)
-      }
-      await finishPublication(url, token, fetchImplementation)
-    }
-    const artifactDirectory = await mkdtemp(path.join(os.tmpdir(), 'inkcre-release-verification-'))
-    try {
-      execFileSync('unzip', [
-        '-q',
-        path.join(candidateDirectory, 'snapshot.zip'),
-        '-d',
-        artifactDirectory,
-      ])
-      const result = await verifyPublicModuleFederation({
-        registryUrl,
-        packagePath: path.join(workspace, 'extensions', candidate.directory, 'package.json'),
-        corePackagePath: path.join(workspace, 'packages/core/package.json'),
-        artifactDirectory,
-        fetchImplementation,
+    const relativePath = extensionSitePath(candidate.name, candidate.version)
+    const publicPath = new URL(relativePath, plan.pages_base)
+    const localDirectory = path.join(siteDirectory, relativePath)
+    const manifest = await readJson(path.join(localDirectory, 'mf-manifest.json'))
+    const { name, path: entryPath = '' } = manifest.metaData.remoteEntry
+    for (const file of ['mf-manifest.json', path.posix.join(entryPath, name)]) {
+      const url = new URL(file, publicPath)
+      const response = await fetchImplementation(url, {
+        headers: { Origin: 'https://app.inkcre.dev' },
+        signal: AbortSignal.timeout(30_000),
       })
-      const summary = `${candidate.name} ${candidate.version}: published and verified (${result.verified_assets} files), ZIP SHA256 ${candidate.sha256}.\n`
-      console.log(summary.trim())
-      if (process.env.GITHUB_STEP_SUMMARY)
-        await appendFile(process.env.GITHUB_STEP_SUMMARY, summary)
-    } finally {
-      await rm(artifactDirectory, { recursive: true })
+      assert.ok(response.ok, url.href + ' returned HTTP ' + response.status)
+      assert.equal(
+        response.headers.get('access-control-allow-origin'),
+        '*',
+        'Pages CORS verification failed'
+      )
+      const contentType = response.headers.get('content-type')?.split(';')[0]
+      if (file === 'mf-manifest.json') assert.equal(contentType, 'application/json')
+      else assert.ok(['application/javascript', 'text/javascript'].includes(contentType))
+      const [remote, local] = await Promise.all([
+        response.arrayBuffer().then(Buffer.from),
+        readFile(path.join(localDirectory, file)),
+      ])
+      assert.ok(remote.equals(local), 'Pages bytes differ: ' + url.href)
     }
+  }
+}
+
+function gh(args) {
+  return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+}
+
+function api(endpoint, args = []) {
+  return JSON.parse(gh(['api', endpoint, ...args]))
+}
+
+function listReleases(repository) {
+  return api('repos/' + repository + '/releases?per_page=100', ['--paginate', '--slurp']).flat()
+}
+
+async function publishCandidates({ repository, plan, deliveryDirectory, siteDirectory }) {
+  await verifyHostedCandidates(plan, siteDirectory)
+  const base = 'repos/' + repository + '/releases'
+  const releases = listReleases(repository)
+  for (const candidate of plan.candidates) {
+    const tag = tagFor(candidate.name, candidate.version)
+    const tagPath = '/tags/' + encodeURIComponent(tag)
+    const git = 'repos/' + repository + '/git/'
+    const existingTag = api(git + 'matching-refs' + tagPath).find(
+      (item) => item.ref === 'refs/tags/' + tag
+    )
+    if (existingTag) assert.equal(existingTag.object.sha, plan.source_revision)
+    let release =
+      releases.find((item) => item.tag_name === tag) ??
+      api(base, [
+        '--method',
+        'POST',
+        '-f',
+        'tag_name=' + tag,
+        '-f',
+        'name=' + tag,
+        '-f',
+        'target_commitish=' + plan.source_revision,
+        '-f',
+        'body=' + candidate.body,
+        '-F',
+        'draft=true',
+      ])
+    assert.equal(release.body, candidate.body)
+    if (release.draft) {
+      assert.equal(release.target_commitish, plan.source_revision)
+      if (!release.assets.some((item) => item.name === ARCHIVE_NAME)) {
+        const upload =
+          'https://uploads.github.com/' + base + '/' + release.id + '/assets?name=' + ARCHIVE_NAME
+        api(upload, [
+          '--method',
+          'POST',
+          '-H',
+          'Content-Type: application/zip',
+          '--input',
+          path.join(deliveryDirectory, candidate.directory, ARCHIVE_NAME),
+        ])
+        release = api(base + '/' + release.id)
+      }
+      assert.equal(releaseAsset(release).digest, candidate.digest)
+      api(base + '/' + release.id, [
+        '--method',
+        'PATCH',
+        '-F',
+        'draft=false',
+        '-f',
+        'make_latest=false',
+      ])
+    }
+    assert.equal(api(git + 'ref' + tagPath).object.sha, plan.source_revision)
+    const published = api(base + tagPath)
+    assert.equal(published.draft, false)
+    assert.equal(published.body, candidate.body)
+    assert.equal(releaseAsset(published).digest, candidate.digest)
+    console.log('Published ' + tag + ' (' + candidate.digest + ')')
   }
 }
 
 async function main() {
-  const command = process.argv[2]
+  const [, , command] = process.argv
+  const {
+    GITHUB_REPOSITORY: repository,
+    GITHUB_RUN_ID: runId,
+    GITHUB_RUN_ATTEMPT: runAttempt,
+    GITHUB_OUTPUT: output,
+    SOURCE_REVISION: revision,
+    BEFORE_SHA: before,
+  } = process.env
+  assert.ok(repository && runId && output, 'publication requires the current GitHub workflow run')
   if (command === 'locate') {
-    const {
-      GITHUB_REPOSITORY: repository,
-      GITHUB_RUN_ID: runId,
-      GITHUB_RUN_ATTEMPT: runAttempt,
-      GITHUB_OUTPUT: output,
-    } = process.env
-    assert.ok(repository && runId && output, 'locate requires the current GitHub workflow run')
-    const pages = JSON.parse(
-      execFileSync(
-        'gh',
-        ['api', `repos/${repository}/actions/runs/${runId}/artifacts`, '--paginate', '--slurp'],
-        { encoding: 'utf8' }
-      )
-    )
+    const pages = api('repos/' + repository + '/actions/runs/' + runId + '/artifacts', [
+      '--paginate',
+      '--slurp',
+    ])
     const candidate = selectSavedCandidate(
       pages.flatMap((page) => page.artifacts),
       runAttempt
     )
-    await appendFile(output, `artifact_id=${candidate?.id ?? ''}\n`)
+    await appendFile(output, 'artifact_id=' + (candidate?.id ?? '') + '\n')
     return
   }
-  const {
-    SOURCE_REPOSITORY: repository,
-    SOURCE_REVISION: revision,
-    GITHUB_RUN_ID: runId,
-    INKCRE_EXTENSION_REGISTRY_URL: registryUrl,
-  } = process.env
-  assert.ok(
-    repository && revision && runId && registryUrl,
-    'source, workflow run and Registry are required'
-  )
-  assert.equal(new URL(registryUrl).protocol, 'https:', 'Registry must use HTTPS')
+  assert.match(revision, /^[a-f0-9]{40}$/, 'exact candidate source revision is required')
+  const workspace = process.cwd()
   const options = {
-    workspace: process.cwd(),
+    workspace,
     deliveryDirectory: path.resolve('.extension-delivery'),
-    registryUrl,
-    provenance: {
-      source_repository: repository,
-      source_revision: revision,
-      build_id: `web-extension-release-${runId}`,
-    },
+    siteDirectory: path.resolve('.extension-site'),
+    pagesBase: PAGES_BASE,
+    provenance: { source_revision: revision, run_id: runId },
   }
   if (command === 'capture') {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'inkcre-release-intent-'))
     try {
       const statusPath = path.join(temporary, 'status.json')
       execFileSync('pnpm', ['exec', 'changeset', 'status', '--output', statusPath], {
-        cwd: options.workspace,
         stdio: 'inherit',
       })
       const status = await readJson(statusPath)
       const pendingPackages = new Set(
         status.changesets.flatMap((changeset) => changeset.releases.map((release) => release.name))
       )
-      await captureCandidates({ ...options, pendingPackages })
+      const baseRevision =
+        before || execFileSync('git', ['rev-parse', 'HEAD^'], { encoding: 'utf8' }).trim()
+      assert.match(baseRevision, /^[a-f0-9]{40}$/)
+      execFileSync('git', ['merge-base', '--is-ancestor', baseRevision, revision])
+      const previousVersion = (directory) => {
+        const file = 'extensions/' + directory + '/package.json'
+        if (!execFileSync('git', ['ls-tree', baseRevision, '--', file], { encoding: 'utf8' }))
+          return
+        return JSON.parse(
+          execFileSync('git', ['show', baseRevision + ':' + file], { encoding: 'utf8' })
+        ).version
+      }
+      const publishedTags = new Set(
+        listReleases(repository)
+          .filter((release) => !release.draft)
+          .map((release) => release.tag_name)
+      )
+      let coreBuilt = false
+      const build = (directory) => {
+        if (!coreBuilt) {
+          execFileSync('pnpm', ['--filter', '@inkcre/core', 'build'], { stdio: 'inherit' })
+          coreBuilt = true
+        }
+        execFileSync('pnpm', ['--filter', './extensions/' + directory, 'build'], {
+          stdio: 'inherit',
+        })
+      }
+      await captureCandidates({
+        ...options,
+        previousVersion,
+        publishedTags,
+        pendingPackages,
+        build,
+      })
     } finally {
       await rm(temporary, { recursive: true, force: true })
     }
-  } else if (command === 'check') await checkCandidates(options)
-  else if (command === 'publish')
-    await publishCandidates({ ...options, token: process.env.INKCRE_EXTENSION_REGISTRY_TOKEN })
-  else throw new Error(`unsupported command: ${command}`)
+  } else if (command === 'stage') {
+    const plan = await stageCandidates({
+      ...options,
+      releases: listReleases(repository),
+      download: (tag, destination) =>
+        gh([
+          'release',
+          'download',
+          tag,
+          '--repo',
+          repository,
+          '--pattern',
+          ARCHIVE_NAME,
+          '--output',
+          destination,
+        ]),
+    })
+    await appendFile(output, 'selected=' + Boolean(plan.candidates.length) + '\n')
+  } else if (command === 'publish') {
+    const plan = await readJson(path.join(options.deliveryDirectory, 'plan.json'))
+    await publishCandidates({ ...options, repository, plan })
+  } else {
+    throw new Error('unsupported command: ' + command)
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(`[ERROR] ${error.message}`)
+    console.error('[ERROR] ' + error.message)
     process.exitCode = 1
   })
 }

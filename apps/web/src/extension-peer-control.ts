@@ -1,6 +1,7 @@
 import {
   ExtensionModel,
   ExtensionParticipationModel,
+  getGitHubExtensionRelease,
   Peer,
   type ExtensionParticipation,
   type ExtensionRuntimeStatus,
@@ -91,6 +92,7 @@ export async function selectExtensionPeerVersion(input: {
   nickname: string
   releases: RegistryReleaseReader
   version: string
+  sourceRepository?: string | null
   distribution: NativeDistribution
   peer: Peer
   currentPeerId: string
@@ -103,7 +105,10 @@ export async function selectExtensionPeerVersion(input: {
   if (mode === 'current-runtime') {
     if (input.distribution !== 'module_federation')
       throw new Error('This Peer supports Module Federation.')
-    return input.manager.install({ name: input.name, version: input.version }, input.currentPeerId)
+    return input.manager.install(
+      { name: input.name, version: input.version, sourceRepository: input.sourceRepository },
+      input.currentPeerId
+    )
   }
   if (mode === 'remote-host') {
     return manageExtensionOnPeer(input.peer.id, {
@@ -111,12 +116,16 @@ export async function selectExtensionPeerVersion(input: {
       extension: input.name,
       distribution: input.distribution,
       version: input.version,
+      ...(input.sourceRepository !== undefined && { source_repository: input.sourceRepository }),
     })
   }
-  await input.releases.getRelease(input.name, input.version, true, input.distribution)
   const previous = await ExtensionParticipationModel.get(input.peer.id, input.name)
   if (previous?.distribution !== input.distribution)
     throw new Error('Connect this Peer to verify its supported distributions.')
+  const source =
+    input.sourceRepository === undefined ? previous.source_repository : input.sourceRepository
+  if (source) await getGitHubExtensionRelease(source, input.name, input.distribution, input.version)
+  else await input.releases.getRelease(input.name, input.version, true, input.distribution)
   await ExtensionModel.install({ name: input.name, nickname: input.nickname })
   return ExtensionParticipationModel.select({
     name: input.name,
@@ -124,5 +133,7 @@ export async function selectExtensionPeerVersion(input: {
     distribution: input.distribution,
     version: input.version,
     expectedVersion: previous.version,
+    expectedSourceRepository: previous.source_repository ?? null,
+    sourceRepository: input.sourceRepository,
   })
 }

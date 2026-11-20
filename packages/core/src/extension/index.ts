@@ -10,6 +10,7 @@ export {
   ExtensionVersionSchema,
   InstalledExtensionSchema,
   InstallExtensionInputSchema,
+  normalizeExtensionSourceRepository,
   ExtensionModel,
   ExtensionPersistenceError,
   type ExtensionModule,
@@ -25,3 +26,15 @@ export {
   EXTENSION_REGISTRY_CONFIG_SCHEMA,
   ExtensionRegistryOriginResolver,
 } from './registry-origin'
+
+export {
+  FIRST_PARTY_EXTENSION_REPOSITORIES,
+  getGitHubExtensionDocumentation,
+  getGitHubExtensionRelease,
+  getGitHubPythonSetupRelease,
+  listGitHubExtensionReleases,
+  searchGitHubExtensionRepositories,
+  supportsGitHubExtensionSdk,
+  type GitHubExtensionDistribution,
+  type GitHubExtensionRelease,
+} from './github'

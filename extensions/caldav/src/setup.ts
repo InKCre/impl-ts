@@ -3,11 +3,13 @@ import {
   ExtensionModel,
   ExtensionRegistryOriginResolver,
   DBAPIClient,
+  configStore,
   PeerManager,
   PeerProtocolResponseSchema,
   type ExtensionRuntimeStatus,
   type Peer,
 } from '@inkcre/core'
+import * as core from '@inkcre/core'
 import {
   listAdvertisedExtensionManagementPeers,
   manageExtensionOnPeer,
@@ -84,6 +86,49 @@ export async function readConnection(
   return { server_url: url.href, username: body.username }
 }
 
+async function selectPythonRelease(peer: Peer): Promise<ExtensionRuntimeStatus> {
+  const release = await core.getGitHubPythonSetupRelease?.(
+    extensionName,
+    configStore.metaConfig.INKCRE_PEER_ID
+  )
+  if (release)
+    return manageExtensionOnPeer(peer.id, {
+      action: 'select',
+      extension: extensionName,
+      distribution: 'python',
+      version: release.version,
+      source_repository: release.repository,
+    })
+
+  const override = peer.config.extension_registry_url
+  let deployment = null
+  if (override == null || override === '') {
+    const result = await new DBAPIClient<'configs'>('configs')
+      .from()
+      .select('schema,value')
+      .eq('key', 'extension.registry')
+      .maybeSingle()
+    if (result.error) throw new Error('Unable to read deployment Registry configuration.')
+    deployment = result.data
+  }
+  const configured = configuredRegistry(override, deployment)
+  const registryOrigin = await new ExtensionRegistryOriginResolver(() => configured).resolve()
+  const reader = new RegistryReleaseReader({
+    registryOrigin,
+    hostSdk: { name: '@inkcre/core', version: corePackage.version },
+  })
+  const legacy = sortPublishedReleases(
+    (await reader.getExtension(extensionName, 'python')).releases ?? []
+  )[0]
+  if (!legacy) throw new Error('No published Python release.')
+  return manageExtensionOnPeer(peer.id, {
+    action: 'select',
+    extension: extensionName,
+    distribution: 'python',
+    version: legacy.version,
+  })
+}
+
 /** Each explicit action advances only this Peer; a restart requires a read before further writes. */
 export async function prepareConnection(peer: Peer): Promise<ExtensionRuntimeStatus> {
   const observed = await readExtensionPeerStatus(peer.id, extensionName)
@@ -93,33 +138,7 @@ export async function prepareConnection(peer: Peer): Promise<ExtensionRuntimeSta
   if (runtimeFailed(status)) throw new Error('Recover the failed Peer operation before continuing.')
   if (waitingForRuntime(status)) return status!
   if (!status?.version) {
-    const override = peer.config.extension_registry_url
-    let deployment = null
-    if (override == null || override === '') {
-      const result = await new DBAPIClient<'configs'>('configs')
-        .from()
-        .select('schema,value')
-        .eq('key', 'extension.registry')
-        .maybeSingle()
-      if (result.error) throw new Error('Unable to read deployment Registry configuration.')
-      deployment = result.data
-    }
-    const configured = configuredRegistry(override, deployment)
-    const registryOrigin = await new ExtensionRegistryOriginResolver(() => configured).resolve()
-    const reader = new RegistryReleaseReader({
-      registryOrigin,
-      hostSdk: { name: '@inkcre/core', version: corePackage.version },
-    })
-    const release = sortPublishedReleases(
-      (await reader.getExtension(extensionName, 'python')).releases ?? []
-    )[0]
-    if (!release) throw new Error('No published Python release.')
-    status = await manageExtensionOnPeer(peer.id, {
-      action: 'select',
-      extension: extensionName,
-      distribution: 'python',
-      version: release.version,
-    })
+    status = await selectPythonRelease(peer)
     if (runtimeFailed(status) || waitingForRuntime(status)) return status
   }
   if (status.distribution !== 'python') throw new Error('The selected distribution is not Python.')

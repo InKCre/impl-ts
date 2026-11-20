@@ -60,7 +60,7 @@ void test('a prepared Mail release does not publish another producer with pendin
   try {
     await mkdir(path.join(workspace, 'packages/core'), { recursive: true })
     await json('packages/core/package.json', { version: '0.4.0' })
-    for (const name of ['mail', 'new-producer']) {
+    for (const name of ['mail', 'new-producer', 'existing-producer']) {
       await mkdir(path.join(workspace, `extensions/${name}`), { recursive: true })
       await json(`extensions/${name}/package.json`, {
         name: `@inkcre/ext-${name}`,
@@ -80,29 +80,24 @@ void test('a prepared Mail release does not publish another producer with pendin
       exposes: [],
     })
     await writeFile(path.join(workspace, build, 'remoteEntry.js'), 'export default {}')
-    const queried = []
+    const built = []
     const plan = await captureCandidates({
       workspace,
       deliveryDirectory: path.join(workspace, 'candidate'),
-      registryUrl: 'https://registry.example.test',
+      pagesBase: 'https://inkcre.github.io/impl-ts/',
       provenance: {
-        source_repository: 'https://github.com/InKCre/impl-ts',
         source_revision: 'reviewed-main',
-        build_id: 'same-run',
+        run_id: 'same-run',
       },
       pendingPackages: new Set(['@inkcre/core', '@inkcre/ext-new-producer']),
-      fetchImplementation: async (url) => {
-        queried.push(url.pathname)
-        return new Response('{}', { status: 404 })
-      },
+      previousVersion: (directory) => (directory === 'mail' ? '0.3.9' : '0.4.0'),
+      build: (directory) => built.push(directory),
     })
     assert.deepEqual(
       plan.candidates.map((candidate) => candidate.name),
       ['inkcre/mail']
     )
-    assert.deepEqual(queried, [
-      '/v2/extensions/inkcre/mail/distributions/module_federation/releases/0.4.0',
-    ])
+    assert.deepEqual(built, ['mail'])
   } finally {
     await rm(workspace, { recursive: true, force: true })
   }

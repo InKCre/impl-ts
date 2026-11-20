@@ -27,9 +27,10 @@ GitHub 的 `client-web E2E` / `client-webext E2E` check 名仍与已有分支保
 
 浏览器配置键 `inkcre_app_config`、Peer ID 和旧 `client_id` / `INKCRE_CLIENT_ID` 迁移输入不变。WebExt 的 Chromium 公钥、Gecko ID、IndexedDB `inkcre-webext-collection`、导出格式、`webext-v<version>` 标签和下载文件名也不变；继续按原安装目录覆盖更新，不卸载现有实例。新建的开发数据库使用 `inkcre-web-<instance>` 命名，已有 runtime state 中的项目名、凭据和数据继续沿用。开发凭据派生继续使用旧 `inkcre-client-web` 命名空间，避免重建一次性数据库后浏览器中已保存的凭据失效；修改它属于凭据轮换，需要单独迁移。
 
-应用以 `@inkcre/extension-runtime-web` 导入 Runtime SDK；当前依赖仍固定到 ext-reg 已发布的 `runtime-client-web-v0.4.2` 精确 tarball。安装别名不表示新名称的包已发布，正式新包发布后再更新 artifact URL、完整性与版本准入。现有 `@inkcre/core` Host ABI、`module_federation` distribution ID 和已发布 Release/manifest URL 不改写，新源码构建输出采用 `dist/web`。
-
-该旧 tarball 的 Zod 4.1.12 受 [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) 影响；工作区只对 Runtime 0.4.2 的这条依赖覆写为已有的 4.6.7，保留 tarball 原始字节和身份。采用直接依赖已修复版本的新 Runtime 后移除该覆写，不关闭依赖安全检查。
+Web App 和使用 Runtime 的 Web 扩展通过 [pnpm 工作区 catalog](../../pnpm-workspace.yaml)
+共享 `@inkcre/extension-runtime-web` 依赖。Catalog 固定 ext-reg 的精确提交与 `runtimes/web`
+子目录，安装时运行该包的构建。Runtime 读取每个 Peer 保存的仓库选择，再从精确 GitHub Release
+或现有 Registry 获取 `module_federation` manifest。Web 构建输出采用 `dist/web`。
 
 访问 Registry 时发送 `app_origin`，同时携带同值的旧 `client_origin`，兼容已部署 Registry 的安装返回地址。新 Registry 接受同值别名并拒绝冲突输入；待旧版本退出准入后才能移除旧参数。
 
