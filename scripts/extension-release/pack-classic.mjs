@@ -179,6 +179,7 @@ export async function packClassic({ artifactDirectory, outputFile, globalName, w
     const entryPath = './' + path.relative(staging, file).split(path.sep).join('/')
     // Explicit exports also make Webpack fail for an input that is not an MF container.
     await writeFile(entryModule, `export { get, init } from ${JSON.stringify(entryPath)};\n`)
+    const assetRoot = pathToFileURL(root + path.sep).href
     await compile(webpack, {
       context: root,
       entry: entryModule,
@@ -200,6 +201,27 @@ export async function packClassic({ artifactDirectory, outputFile, globalName, w
       plugins: [
         new webpack.NormalModuleReplacementPlugin(VITE_PRELOAD, helper),
         new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
+        {
+          apply(compiler) {
+            const name = 'InKCreArtifactUrls'
+            compiler.hooks.thisCompilation.tap(name, (compilation) => {
+              compilation.hooks.processAssets.tap(
+                // Minifiers can use string contents when assigning short variable names.
+                { name, stage: webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE - 1 },
+                () => {
+                  if (!compilation.getAsset(BUNDLE)) return
+                  compilation.updateAsset(
+                    BUNDLE,
+                    (source) =>
+                      new webpack.sources.RawSource(
+                        source.source().toString().replaceAll(assetRoot, ARTIFACT_ORIGIN)
+                      )
+                  )
+                }
+              )
+            })
+          },
+        },
       ],
       optimization: { splitChunks: false },
       performance: false,
@@ -212,11 +234,7 @@ export async function packClassic({ artifactDirectory, outputFile, globalName, w
         `Webpack emitted extra assets: ${files.filter((file) => file !== BUNDLE && file !== licenseFile).join(', ')}`
       )
 
-    const assetRoot = pathToFileURL(root + path.sep).href
-    let script = (await readFile(path.join(dist, BUNDLE), 'utf8')).replaceAll(
-      assetRoot,
-      ARTIFACT_ORIGIN
-    )
+    let script = await readFile(path.join(dist, BUNDLE), 'utf8')
     if (files.includes(licenseFile)) {
       const licenses = await readFile(path.join(dist, licenseFile), 'utf8')
       script = script.replace(/^\/\*! For license information please see [^\n]*\*\/\n?/, '')
