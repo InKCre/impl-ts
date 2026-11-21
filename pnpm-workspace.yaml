@@ -10,7 +10,6 @@ catalog:
   vue-tsc: 3.3.8
 
 allowBuilds:
-  '@inkcre/extension-runtime-web@https://codeload.github.com/InKCre/ext-reg/tar.gz/72ad229298607fd9008c011385da5fef33aff929#path:/runtimes/web': set this to true or false
   '@inkcre/extension-runtime-web@https://codeload.github.com/InKCre/ext-reg/tar.gz/cf6ad271371bd6ac53a21e99d4e6b26fa0e5fdff#path:/runtimes/web': true
   '@parcel/watcher': false
   esbuild: false
@@ -25,7 +24,7 @@ overrides:
   '@inkcre/ui-web@2.3.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.3.0/inkcre-ui-web-2.3.0.tgz
   '@inkcre/ui-web@2.5.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.5.0/inkcre-ui-web-2.5.0.tgz
   '@inkcre/ui-web@2.7.0': https://github.com/InKCre/ui/releases/download/%40inkcre%2Fui-web%402.7.0/inkcre-ui-web-2.7.0.tgz
-  typescript: npm:typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2
+  typescript: *typescript
   '@babel/core@<=7.29.0': 7.29.7
   adm-zip@<0.6.0: 0.6.0
   brace-expansion@>=4.0.0 <5.0.9: 5.0.9
