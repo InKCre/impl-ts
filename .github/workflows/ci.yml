@@ -136,7 +136,8 @@ jobs:
         run: pnpm --filter @inkcre/ext-bilibili test
 
       - name: Install the locked Extension publishing tools
-        run: npm ci --prefix .github/actions/publish-extension --ignore-scripts
+        working-directory: .github/actions/publish-extension
+        run: npm ci --ignore-scripts
 
       - name: Verify independent MF publication
         run: >-
