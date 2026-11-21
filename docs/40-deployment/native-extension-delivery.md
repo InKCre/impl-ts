@@ -32,8 +32,8 @@ commit or PR scope is not a substitute for selecting it in the Changeset.
   时，正式流程等其版本提交后再发布。
 - 候选只选择此次 push 新增或升版、且 GitHub 尚无公开 Release 的 MF producer。
   手动恢复的 source SHA 必须是当时的 `main`，候选选择与其父提交比较。
-- 构建选中的包和 Core SDK，校验 MF manifest 和资产，再生成带版本的静态地址、
-  Release 正文和唯一的 `module-federation.zip`。工作流保存原始 ZIP、SHA-256 和发布计划。
+- 构建选中的包和 Core SDK，校验 MF manifest 与资源。工作流保存原始
+  `module-federation.zip`、SHA-256 和发布计划，由 ZIP 生成同仓的产物提交。
 
 The repository must enable **Allow GitHub Actions to create and approve pull requests** for
 Changesets to create its Version PR. GitHub combines these capabilities in one setting; this
@@ -110,15 +110,17 @@ does not move stable, deploy Core or migrate a production database.
 
 ## 静态分发与公开 Release
 
-启用本仓 **Settings → Pages → Source → GitHub Actions**，使用仓库默认
-`https://inkcre.github.io/impl-ts/` 站点。发布工作流在受保护的 `production` 环境执行。
-站点只承载版本化路径 `extensions/<namespace>/<name>/<version>/`。常规 Web App 的
-Cloudflare Pages 部署与此独立。首次启用仓库发现时给两个发布者仓库添加 `inkcre-extension` Topic。
+发布工作流在受保护的 `production` 环境执行。它只发布本次候选，从保存的 ZIP 生成
+独立的产物提交，并用同仓的 `inkcre-mf/<namespace>/<name>/v<version>` 标签保留该提交。
+GitHub Release 原有的版本标签仍指向源码提交，可由此查看 producer 的 `docs/user`。
 
-发布工作流从所有已公开的 MF Release 附件还原历史版本，并从本次保存的 ZIP 加入新版本。
-站点部署完成后，流程检查公开 manifest 和 Remote entry 的跨源响应、内容类型和字节。
-GitHub Release 草稿与保存的 ZIP 摘要一致后才公开。之后读回标签提交、正文和附件摘要。
-现有版本继续从原来的精确来源读取，新发行的文档在 producer 的 `docs/user`。
+InKCre 官方发行的 `manifest_url` 使用 jsDelivr 按完整 Git commit SHA 提供的静态地址。
+Manifest 的 `publicPath` 使用 `auto`，入口和异步资源从该发行的目录加载。
+流程验证公开 manifest 和入口的跨源响应及字节，再公开同一份 ZIP 和 Release 正文。
+每次只追加本次产物，过去的发行保留自己的精确 URL。其他发布者由自己的仓库发行，
+并自行选择满足[共享契约](../_shared/20-product-tdd/extension-release-and-installation.md)的静态托管。
+
+首次启用仓库发现时给两个发布者仓库添加 `inkcre-extension` Topic。
 
 失败时在原 run 上使用 **Re-run failed jobs**，从同一个 GitHub Actions 附件恢复候选。
 候选保留 90 天。公开后的修订需要 producer 升版。
@@ -129,6 +131,6 @@ GitHub Release 草稿与保存的 ZIP 摘要一致后才公开。之后读回标
 pnpm --filter @inkcre/core build
 pnpm --filter @inkcre/ext-mail build
 fixture="$(mktemp -d)"
-node scripts/prepare-repository-extension.mjs mail "$fixture" https://inkcre.github.io/impl-ts/
+node scripts/prepare-repository-extension.mjs mail "$fixture" InKCre/impl-ts
 node --test scripts/test-extension-publication.mjs scripts/tests/independent-extension-release.test.mjs
 ```

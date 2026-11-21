@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -58,6 +59,18 @@ void test('a prepared Mail release does not publish another producer with pendin
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-independent-release-'))
   const json = (file, value) => writeFile(path.join(workspace, file), JSON.stringify(value))
   try {
+    const git = (...args) => execFileSync('git', args, { cwd: workspace, encoding: 'utf8' }).trim()
+    git('init', '-q')
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.test',
+      'commit',
+      '--allow-empty',
+      '-qm',
+      'Source'
+    )
     await mkdir(path.join(workspace, 'packages/core'), { recursive: true })
     await json('packages/core/package.json', { version: '0.4.0' })
     for (const name of ['mail', 'new-producer', 'existing-producer']) {
@@ -84,9 +97,9 @@ void test('a prepared Mail release does not publish another producer with pendin
     const plan = await captureCandidates({
       workspace,
       deliveryDirectory: path.join(workspace, 'candidate'),
-      pagesBase: 'https://inkcre.github.io/impl-ts/',
+      repository: 'InKCre/impl-ts',
       provenance: {
-        source_revision: 'reviewed-main',
+        source_revision: git('rev-parse', 'HEAD'),
         run_id: 'same-run',
       },
       pendingPackages: new Set(['@inkcre/core', '@inkcre/ext-new-producer']),

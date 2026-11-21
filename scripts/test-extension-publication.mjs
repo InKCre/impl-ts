@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict'
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { once } from 'node:events'
-import { createServer } from 'node:http'
+import { execFileSync } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 import {
   captureCandidates,
+  publishArtifact,
   selectSavedCandidate,
-  stageCandidates,
-  verifyHostedCandidates,
 } from './publish-first-party-extensions.mjs'
 import { ARCHIVE_NAME } from './prepare-repository-extension.mjs'
 
@@ -24,44 +22,64 @@ void test('a rerun cannot replace a missing or expired release candidate', () =>
   assert.throws(() => selectSavedCandidate([], undefined), /current GitHub run attempt/)
 })
 
-void test('a new Pages deployment keeps historical Releases and uses the saved candidate bytes', async () => {
+void test('the saved ZIP recreates its artifact commit and later publishes preserve older artifact tags', async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-publication-test-'))
-  const siteDirectory = path.join(workspace, 'site')
+  const remote = path.join(workspace, 'remote.git')
+  const repository = 'InKCre/impl-ts'
   const extension = path.join(workspace, 'extensions/mail')
   const build = path.join(extension, 'dist/web')
   const writeJson = (file, object) => writeFile(file, JSON.stringify(object))
-
-  const server = createServer(async (request, response) => {
-    const file = path.join(siteDirectory, request.url)
-    try {
-      const bytes = await readFile(file)
-      response.setHeader('Access-Control-Allow-Origin', '*')
-      response.setHeader(
-        'Content-Type',
-        file.endsWith('.json') ? 'application/json' : 'text/javascript'
-      )
-      response.end(bytes)
-    } catch {
-      response.writeHead(404).end()
-    }
-  })
-  server.listen(0, '127.0.0.1')
-  await once(server, 'listening')
+  const git = (...args) => execFileSync('git', args, { cwd: workspace, encoding: 'utf8' }).trim()
+  const remoteGit = (...args) => git('--git-dir=' + remote, ...args)
+  const artifactTag = (version) => 'refs/tags/inkcre-mf/inkcre/mail/v' + version
 
   try {
-    const pagesBase = 'http://127.0.0.1:' + server.address().port + '/'
+    git('init', '-q')
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.test',
+      'commit',
+      '--allow-empty',
+      '-qm',
+      'Source'
+    )
+    const sourceRevision = git('rev-parse', 'HEAD')
+    git('init', '--bare', '-q', remote)
     const core = path.join(workspace, 'packages/core')
     await mkdir(core, { recursive: true })
     await writeJson(path.join(core, 'package.json'), { version: '0.4.3' })
-    await mkdir(path.join(build, '.vite'), { recursive: true })
-    await writeFile(path.join(build, '.vite/manifest.json'), 'unused Vite build metadata')
+    await mkdir(path.join(build, 'assets'), { recursive: true })
+    await writeFile(path.join(build, 'assets/async.js'), 'export default "async chunk"')
     await writeJson(path.join(build, 'mf-manifest.json'), {
       metaData: { publicPath: './', remoteEntry: { name: 'remoteEntry.js' } },
       shared: [{ name: '@inkcre/core', requiredVersion: '^0.4.0' }],
-      exposes: [],
+      exposes: [{ assets: { js: { async: ['assets/async.js'] } } }],
     })
-    const packageVersion = (version) =>
-      writeJson(path.join(extension, 'package.json'), {
+
+    const requests = []
+    const fetchImplementation = async (url) => {
+      const apiPath = /^\/gh\/InKCre\/impl-ts@([a-f0-9]{40})\/(.+)$/.exec(url.pathname)
+      assert.equal(url.origin, 'https://cdn.jsdelivr.net')
+      assert.ok(apiPath)
+      const [, commit, file] = apiPath
+      assert.ok(remoteGit('tag', '--points-at', commit).startsWith('inkcre-mf/'))
+      requests.push(url.href)
+      return new Response(
+        execFileSync('git', ['--git-dir=' + remote, 'show', commit + ':' + file]),
+        {
+          headers: {
+            'access-control-allow-origin': '*',
+            'content-type': file.endsWith('.json') ? 'application/json' : 'text/javascript',
+          },
+        }
+      )
+    }
+
+    async function saveVersion(version, previousVersion, servedVersion = version) {
+      const deliveryDirectory = await mkdtemp(path.join(workspace, 'candidate-'))
+      await writeJson(path.join(extension, 'package.json'), {
         name: '@inkcre/ext-mail',
         version,
         inkcre: {
@@ -70,91 +88,83 @@ void test('a new Pages deployment keeps historical Releases and uses the saved c
           module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '^0.4.0' },
         },
       })
-
-    const previousDirectory = path.join(workspace, 'previous')
-    await packageVersion('0.4.0')
-    await writeFile(path.join(build, 'remoteEntry.js'), 'export default "previous"')
-    const previous = await captureCandidates({
-      workspace,
-      pagesBase,
-      provenance: { source_revision: 'first-commit', run_id: 'first-run' },
-      deliveryDirectory: previousDirectory,
-      previousVersion: () => '0.3.0',
-    })
-
-    await packageVersion('0.4.1')
-    await writeFile(path.join(build, 'remoteEntry.js'), 'export default "current"')
-    const options = {
-      workspace,
-      pagesBase,
-      provenance: { source_revision: 'second-commit', run_id: 'second-run' },
-      deliveryDirectory: path.join(workspace, 'current'),
-      siteDirectory,
+      await writeFile(path.join(build, 'remoteEntry.js'), 'export default "' + servedVersion + '"')
+      const plan = await captureCandidates({
+        workspace,
+        repository,
+        provenance: { source_revision: sourceRevision, run_id: 'fixture-run' },
+        deliveryDirectory,
+        previousVersion: () => previousVersion,
+      })
+      return {
+        workspace,
+        deliveryDirectory,
+        repository,
+        sourceRevision,
+        remote,
+        fetchImplementation,
+        candidate: plan.candidates[0],
+      }
     }
-    const current = await captureCandidates({ ...options, previousVersion: () => '0.4.0' })
-    const candidate = current.candidates[0]
-    const releaseMetadata = JSON.parse(candidate.body.split('\n')[1])
+
+    const previous = await saveVersion('0.4.0', '0.3.0')
+    await publishArtifact(previous)
+    const previousCommit = remoteGit('rev-parse', artifactTag('0.4.0'))
+    assert.equal(previousCommit, previous.candidate.artifact_commit)
+    assert.equal(remoteGit('rev-list', '--count', previousCommit), '1')
+
+    const current = await saveVersion('0.4.1', '0.4.0')
+    const candidate = current.candidate
+    const archive = path.join(current.deliveryDirectory, 'mail', ARCHIVE_NAME)
+    const descriptor = JSON.parse(candidate.body.split('\n')[1])
     assert.equal(
-      releaseMetadata.manifest_url,
-      pagesBase + 'extensions/inkcre/mail/0.4.1/mf-manifest.json'
+      descriptor.manifest_url,
+      'https://cdn.jsdelivr.net/gh/InKCre/impl-ts@' +
+        candidate.artifact_commit +
+        '/mf-manifest.json'
     )
-    assert.equal(releaseMetadata.source_path, 'extensions/mail')
-    const archive = path.join(options.deliveryDirectory, 'mail', ARCHIVE_NAME)
-    const historicalTag = 'inkcre-ext/inkcre/mail/module_federation/v0.4.0'
-    const releases = [
-      { tag_name: 'web-v0.4.0', assets: [] },
-      { tag_name: 'inkcre-ext/inkcre/mail/module_federation/v0.4.2', draft: true, assets: [] },
-      {
-        tag_name: historicalTag,
-        draft: false,
-        assets: [{ name: ARCHIVE_NAME, digest: previous.candidates[0].digest }],
-      },
-    ]
-    const download = async (tag, destination) => {
-      assert.equal(tag, historicalTag)
-      await cp(path.join(previousDirectory, 'mail', ARCHIVE_NAME), destination)
-    }
-    await writeFile(path.join(build, 'remoteEntry.js'), 'export default "changed after capture"')
-    assert.deepEqual(await stageCandidates({ ...options, releases, download }), current)
+    assert.equal(descriptor.source_path, 'extensions/mail')
+    await writeFile(path.join(build, 'remoteEntry.js'), 'source build changed after capture')
+
+    await publishArtifact(current)
+    await publishArtifact(current)
+    const currentCommit = remoteGit('rev-parse', artifactTag('0.4.1'))
+    assert.equal(currentCommit, candidate.artifact_commit)
+    assert.equal(remoteGit('rev-parse', artifactTag('0.4.0')), previousCommit)
+    assert.equal(remoteGit('show', previousCommit + ':remoteEntry.js'), 'export default "0.4.0"')
+    assert.equal(remoteGit('show', currentCommit + ':remoteEntry.js'), 'export default "0.4.1"')
     assert.equal(
-      await readFile(
-        path.join(siteDirectory, 'extensions/inkcre/mail/0.4.0/remoteEntry.js'),
-        'utf8'
-      ),
-      'export default "previous"'
+      JSON.parse(remoteGit('show', currentCommit + ':mf-manifest.json')).metaData.publicPath,
+      'auto'
     )
     assert.equal(
-      await readFile(
-        path.join(siteDirectory, 'extensions/inkcre/mail/0.4.1/remoteEntry.js'),
-        'utf8'
-      ),
-      'export default "current"'
+      remoteGit('show', currentCommit + ':assets/async.js'),
+      'export default "async chunk"'
     )
+    assert.equal(requests.length, 6)
+    assert.equal(git('diff', '--cached'), '')
+
     await assert.rejects(
-      readFile(path.join(siteDirectory, 'extensions/inkcre/mail/0.4.1/.vite/manifest.json')),
-      { code: 'ENOENT' }
+      publishArtifact({
+        ...current,
+        fetchImplementation: async (url) => {
+          const response = await fetchImplementation(url)
+          return url.pathname.endsWith('/remoteEntry.js')
+            ? new Response('wrong bytes', { headers: response.headers })
+            : response
+        },
+      }),
+      /CDN bytes differ/
     )
-    await verifyHostedCandidates(current, siteDirectory)
-    await assert.rejects(
-      verifyHostedCandidates(current, siteDirectory, (url, request) =>
-        url.pathname.endsWith('/remoteEntry.js')
-          ? new Response('wrong', {
-              headers: {
-                'access-control-allow-origin': '*',
-                'content-type': 'text/javascript',
-              },
-            })
-          : fetch(url, request)
-      ),
-      /Pages bytes differ/
-    )
+    const bytes = await readFile(archive)
     await writeFile(archive, 'incorrect archive')
-    await assert.rejects(
-      stageCandidates({ ...options, releases, download }),
-      /saved ZIP digest differs/
-    )
+    await assert.rejects(publishArtifact(current), /saved ZIP digest differs/)
+    await writeFile(archive, bytes)
+
+    const conflict = await saveVersion('0.4.1', '0.4.0', 'different-candidate')
+    await assert.rejects(publishArtifact(conflict), /failed to push some refs/)
+    assert.equal(remoteGit('rev-parse', artifactTag('0.4.1')), currentCommit)
   } finally {
-    server.close()
     await rm(workspace, { recursive: true, force: true })
   }
 })

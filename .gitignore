@@ -21,7 +21,6 @@ coverage
 playwright-report/
 test-results/
 /.extension-delivery/
-/.extension-site/
 /.core-sdk-delivery/
 /.webext-delivery/
 

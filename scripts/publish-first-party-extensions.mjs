@@ -5,18 +5,16 @@ import { appendFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'no
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { valid as validSemVer } from 'semver'
 import {
   ARCHIVE_NAME,
-  extensionSitePath,
+  artifactManifestUrl,
+  buildArtifactCommit,
   prepareRepositoryExtension,
   repositoryReleaseBody,
 } from './prepare-repository-extension.mjs'
 import { inspectNativeModuleFederation } from './verify-native-extension-distribution.mjs'
 
 const ARTIFACT_NAME = 'first-party-extension-candidate'
-const PAGES_BASE = 'https://inkcre.github.io/impl-ts/'
-const MF_TAG = /^inkcre-ext\/([a-z0-9-]+\/[a-z0-9-]+)\/module_federation\/v([^/]+)$/
 const digest = (bytes) => 'sha256:' + createHash('sha256').update(bytes).digest('hex')
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
 const tagFor = (name, version) => 'inkcre-ext/' + name + '/module_federation/v' + version
@@ -37,7 +35,7 @@ export function selectSavedCandidate(artifacts, runAttempt) {
 export async function captureCandidates({
   workspace,
   deliveryDirectory,
-  pagesBase,
+  repository,
   provenance,
   previousVersion,
   publishedTags = new Set(),
@@ -64,121 +62,99 @@ export async function captureCandidates({
 
     build(directory)
     const output = path.join(deliveryDirectory, directory)
-    const { body, archive } = await prepareRepositoryExtension({
+    const { body, archive, artifactCommit } = await prepareRepositoryExtension({
       workspace,
       directory,
       output,
-      pagesBase,
+      repository,
+      sourceRevision: provenance.source_revision,
     })
-    // Save only the archive used by GitHub Release and Pages, plus the release plan.
+    // The ZIP is the sole saved artifact. The exact Git commit can be rebuilt from it.
     await rm(path.join(output, 'site'), { recursive: true })
-    candidates.push({ directory, name, version, body, digest: digest(await readFile(archive)) })
+    candidates.push({
+      directory,
+      name,
+      version,
+      body,
+      artifact_commit: artifactCommit,
+      digest: digest(await readFile(archive)),
+    })
   }
-  const plan = { ...provenance, pages_base: pagesBase, candidates }
+  const plan = { ...provenance, repository, candidates }
   await writeFile(path.join(deliveryDirectory, 'plan.json'), JSON.stringify(plan) + '\n', {
     flag: 'wx',
   })
   return plan
 }
 
-export async function stageCandidates({
+export async function publishArtifact({
   workspace,
   deliveryDirectory,
-  siteDirectory,
-  pagesBase,
-  provenance,
-  releases = [],
-  download,
+  repository,
+  sourceRevision,
+  candidate,
+  remote = 'origin',
+  fetchImplementation = fetch,
 }) {
-  const plan = await readJson(path.join(deliveryDirectory, 'plan.json'))
-  assert.deepEqual(
-    { source_revision: plan.source_revision, run_id: plan.run_id, pages_base: plan.pages_base },
-    { ...provenance, pages_base: pagesBase },
-    'saved candidate belongs to a different source revision, workflow run or Pages site'
-  )
-  if (!plan.candidates.length) return plan
-  const selectedTags = new Set()
-  for (const candidate of plan.candidates) {
-    const tag = tagFor(candidate.name, candidate.version)
-    assert.ok(!selectedTags.has(tag), 'duplicate saved Release ' + tag)
-    selectedTags.add(tag)
-    const release = releases.find((item) => item.tag_name === tag && !item.draft)
-    if (release) assert.equal(releaseAsset(release).digest, candidate.digest)
-    const relativePath = extensionSitePath(candidate.name, candidate.version)
-    const publicPath = new URL(relativePath, pagesBase).href
-    const unpacked = path.join(siteDirectory, relativePath)
-    const archive = path.join(deliveryDirectory, candidate.directory, ARCHIVE_NAME)
-    assert.equal(digest(await readFile(archive)), candidate.digest, 'saved ZIP digest differs')
-    await unpack(archive, unpacked)
+  const archive = path.join(deliveryDirectory, candidate.directory, ARCHIVE_NAME)
+  assert.equal(digest(await readFile(archive)), candidate.digest, 'saved ZIP digest differs')
+  const tree = await mkdtemp(path.join(os.tmpdir(), 'inkcre-release-tree-'))
+  try {
+    execFileSync('unzip', ['-q', archive, '-d', tree])
     const local = await inspectNativeModuleFederation({
       packagePath: path.join(workspace, 'extensions', candidate.directory, 'package.json'),
       corePackagePath: path.join(workspace, 'packages/core/package.json'),
-      artifactDirectory: unpacked,
-      publicPath,
+      artifactDirectory: tree,
+      publicPath: 'auto',
     })
     assert.equal(local.name, candidate.name)
     assert.equal(local.version, candidate.version)
-    assert.equal(candidate.body, repositoryReleaseBody(candidate.directory, local, publicPath))
-  }
-  const temporary = await mkdtemp(path.join(os.tmpdir(), 'inkcre-released-extension-'))
-  try {
-    for (const release of releases) {
-      const identity = release.tag_name.match(MF_TAG)
-      if (!identity || release.draft || selectedTags.has(release.tag_name)) continue
-      const [, name, version] = identity
-      assert.equal(validSemVer(version), version)
-      const archive = path.join(temporary, ARCHIVE_NAME)
-      await download(release.tag_name, archive)
-      assert.equal(digest(await readFile(archive)), releaseAsset(release).digest)
-      await unpack(archive, path.join(siteDirectory, extensionSitePath(name, version)))
-      await rm(archive)
-    }
+    const commit = await buildArtifactCommit({ workspace, tree, sourceRevision, ...local })
+    assert.equal(
+      commit,
+      candidate.artifact_commit,
+      'saved ZIP rebuilds a different artifact commit'
+    )
+    const manifestUrl = artifactManifestUrl(repository, commit)
+    assert.equal(candidate.body, repositoryReleaseBody(candidate.directory, local, manifestUrl))
+
+    const artifactRef = 'refs/tags/inkcre-mf/' + candidate.name + '/v' + candidate.version
+    // No force push: a retry can recreate the exact ref but cannot change a published version.
+    execFileSync('git', ['push', remote, commit + ':' + artifactRef], { cwd: workspace })
+    await verifyHostedArtifact(manifestUrl, tree, local.remote_entry, fetchImplementation)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await rm(tree, { recursive: true, force: true })
   }
-  return plan
 }
 
-async function unpack(archive, destination) {
-  await mkdir(destination, { recursive: true })
-  execFileSync('unzip', ['-q', archive, '-d', destination])
+async function verifyHostedArtifact(manifestUrl, tree, remoteEntry, fetchImplementation) {
+  for (const file of ['mf-manifest.json', remoteEntry]) {
+    const url = new URL(file, manifestUrl)
+    const response = await fetchImplementation(url, {
+      headers: { Origin: 'https://app.inkcre.dev' },
+      signal: AbortSignal.timeout(30_000),
+    })
+    assert.ok(response.ok, url.href + ' returned HTTP ' + response.status)
+    assert.equal(
+      response.headers.get('access-control-allow-origin'),
+      '*',
+      'CDN CORS verification failed'
+    )
+    const contentType = response.headers.get('content-type')?.split(';')[0]
+    if (file === 'mf-manifest.json') assert.equal(contentType, 'application/json')
+    else assert.ok(['application/javascript', 'text/javascript'].includes(contentType))
+    const [remote, local] = await Promise.all([
+      response.arrayBuffer().then((buffer) => Buffer.from(buffer)),
+      readFile(path.join(tree, file)),
+    ])
+    assert.ok(remote.equals(local), 'CDN bytes differ: ' + url.href)
+  }
 }
 
 function releaseAsset(release) {
   const asset = release.assets.find((item) => item.name === ARCHIVE_NAME)
   assert.ok(asset, 'Release is missing ' + ARCHIVE_NAME + ': ' + release.tag_name)
   return asset
-}
-
-export async function verifyHostedCandidates(plan, siteDirectory, fetchImplementation = fetch) {
-  for (const candidate of plan.candidates) {
-    const relativePath = extensionSitePath(candidate.name, candidate.version)
-    const publicPath = new URL(relativePath, plan.pages_base)
-    const localDirectory = path.join(siteDirectory, relativePath)
-    const manifest = await readJson(path.join(localDirectory, 'mf-manifest.json'))
-    const { name, path: entryPath = '' } = manifest.metaData.remoteEntry
-    for (const file of ['mf-manifest.json', path.posix.join(entryPath, name)]) {
-      const url = new URL(file, publicPath)
-      const response = await fetchImplementation(url, {
-        headers: { Origin: 'https://app.inkcre.dev' },
-        signal: AbortSignal.timeout(30_000),
-      })
-      assert.ok(response.ok, url.href + ' returned HTTP ' + response.status)
-      assert.equal(
-        response.headers.get('access-control-allow-origin'),
-        '*',
-        'Pages CORS verification failed'
-      )
-      const contentType = response.headers.get('content-type')?.split(';')[0]
-      if (file === 'mf-manifest.json') assert.equal(contentType, 'application/json')
-      else assert.ok(['application/javascript', 'text/javascript'].includes(contentType))
-      const [remote, local] = await Promise.all([
-        response.arrayBuffer().then((buffer) => Buffer.from(buffer)),
-        readFile(path.join(localDirectory, file)),
-      ])
-      assert.ok(remote.equals(local), 'Pages bytes differ: ' + url.href)
-    }
-  }
 }
 
 function gh(args) {
@@ -193,8 +169,8 @@ function listReleases(repository) {
   return api('repos/' + repository + '/releases?per_page=100', ['--paginate', '--slurp']).flat()
 }
 
-async function publishCandidates({ repository, plan, deliveryDirectory, siteDirectory }) {
-  await verifyHostedCandidates(plan, siteDirectory)
+async function publishCandidates({ repository, plan, deliveryDirectory, workspace }) {
+  if (!plan.candidates.length) return
   const base = 'repos/' + repository + '/releases'
   const releases = listReleases(repository)
   for (const candidate of plan.candidates) {
@@ -205,6 +181,13 @@ async function publishCandidates({ repository, plan, deliveryDirectory, siteDire
       (item) => item.ref === 'refs/tags/' + tag
     )
     if (existingTag) assert.equal(existingTag.object.sha, plan.source_revision)
+    await publishArtifact({
+      workspace,
+      deliveryDirectory,
+      repository,
+      sourceRevision: plan.source_revision,
+      candidate,
+    })
     let release =
       releases.find((item) => item.tag_name === tag) ??
       api(base, [
@@ -284,8 +267,7 @@ async function main() {
   const options = {
     workspace,
     deliveryDirectory: path.resolve('.extension-delivery'),
-    siteDirectory: path.resolve('.extension-site'),
-    pagesBase: PAGES_BASE,
+    repository,
     provenance: { source_revision: revision, run_id: runId },
   }
   if (command === 'capture') {
@@ -336,27 +318,14 @@ async function main() {
     } finally {
       await rm(temporary, { recursive: true, force: true })
     }
-  } else if (command === 'stage') {
-    const plan = await stageCandidates({
-      ...options,
-      releases: listReleases(repository),
-      download: (tag, destination) =>
-        gh([
-          'release',
-          'download',
-          tag,
-          '--repo',
-          repository,
-          '--pattern',
-          ARCHIVE_NAME,
-          '--output',
-          destination,
-        ]),
-    })
-    await appendFile(output, 'selected=' + Boolean(plan.candidates.length) + '\n')
   } else if (command === 'publish') {
     const plan = await readJson(path.join(options.deliveryDirectory, 'plan.json'))
-    await publishCandidates({ ...options, repository, plan })
+    assert.deepEqual(
+      { source_revision: plan.source_revision, run_id: plan.run_id, repository: plan.repository },
+      { ...options.provenance, repository },
+      'saved candidate belongs to a different source revision, workflow run or repository'
+    )
+    await publishCandidates({ ...options, plan })
   } else {
     throw new Error('unsupported command: ' + command)
   }

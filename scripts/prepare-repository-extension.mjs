@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -9,36 +10,79 @@ import {
 
 export const ARCHIVE_NAME = 'module-federation.zip'
 
-export function extensionSitePath(name, version) {
-  return `extensions/${name}/${version}/`
+export function artifactManifestUrl(repository, commit) {
+  return 'https://cdn.jsdelivr.net/gh/' + repository + '@' + commit + '/mf-manifest.json'
 }
 
-export function repositoryReleaseBody(directory, local, publicPath) {
+export function repositoryReleaseBody(directory, local, manifestUrl) {
   return [
     '<!-- inkcre-release',
     JSON.stringify({
       schema_version: 1,
-      source_path: `extensions/${directory}`,
+      source_path: 'extensions/' + directory,
       ...local.module_federation,
-      manifest_url: new URL('mf-manifest.json', publicPath).href,
+      manifest_url: manifestUrl,
     }),
     '-->',
   ].join('\n')
 }
 
-export async function prepareRepositoryExtension({ workspace, directory, output, pagesBase }) {
+function git(workspace, args) {
+  return execFileSync('git', args, { cwd: workspace, encoding: 'utf8' }).trim()
+}
+
+export async function buildArtifactCommit({ workspace, tree, sourceRevision, name, version }) {
+  const gitDir = git(workspace, ['rev-parse', '--absolute-git-dir'])
+  const sourceTime = git(workspace, ['show', '-s', '--format=%ct', sourceRevision])
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'inkcre-release-index-'))
+  const env = {
+    ...process.env,
+    GIT_INDEX_FILE: path.join(temporary, 'index'),
+    GIT_AUTHOR_NAME: 'InKCre',
+    GIT_AUTHOR_EMAIL: 'release@inkcre.dev',
+    GIT_AUTHOR_DATE: sourceTime + ' +0000',
+    GIT_COMMITTER_NAME: 'InKCre',
+    GIT_COMMITTER_EMAIL: 'release@inkcre.dev',
+    GIT_COMMITTER_DATE: sourceTime + ' +0000',
+  }
+  const payloadGit = (...args) =>
+    execFileSync(
+      'git',
+      ['--git-dir=' + gitDir, '--work-tree=' + tree, '-c', 'core.autocrlf=false', ...args],
+      { cwd: tree, encoding: 'utf8', env }
+    ).trim()
+  try {
+    // A fresh index and normalized file modes make the commit reproducible from the saved ZIP.
+    payloadGit('add', '--force', '--all', '--chmod=-x', '--', '.')
+    const treeId = payloadGit('write-tree')
+    return payloadGit(
+      'commit-tree',
+      treeId,
+      '--no-gpg-sign',
+      '-m',
+      name + ' ' + version + '\n\nSource: ' + sourceRevision
+    )
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+}
+
+export async function prepareRepositoryExtension({
+  workspace,
+  directory,
+  output,
+  repository,
+  sourceRevision = git(workspace, ['rev-parse', 'HEAD']),
+}) {
   const project = path.join(workspace, 'extensions', directory)
   const artifactDirectory = path.join(project, 'dist/web')
-  const local = await inspectNativeModuleFederation({
+  const association = {
     packagePath: path.join(project, 'package.json'),
     corePackagePath: path.join(workspace, 'packages/core/package.json'),
-    artifactDirectory,
-  })
+  }
+  const local = await inspectNativeModuleFederation({ ...association, artifactDirectory })
   await listSnapshotFiles(artifactDirectory)
-  const relativePath = extensionSitePath(local.name, local.version)
-  const publicPath = new URL(relativePath, pagesBase).href
-  const tree = path.join(output, 'site', relativePath)
-  await mkdir(path.dirname(tree), { recursive: true })
+  const tree = path.join(output, 'site')
   await cp(artifactDirectory, tree, {
     recursive: true,
     force: false,
@@ -47,28 +91,32 @@ export async function prepareRepositoryExtension({ workspace, directory, output,
   })
   const manifestPath = path.join(tree, 'mf-manifest.json')
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  manifest.metaData.publicPath = publicPath
+  manifest.metaData.publicPath = 'auto'
   await writeFile(manifestPath, JSON.stringify(manifest) + '\n')
   await inspectNativeModuleFederation({
-    packagePath: path.join(project, 'package.json'),
-    corePackagePath: path.join(workspace, 'packages/core/package.json'),
+    ...association,
     artifactDirectory: tree,
-    publicPath,
+    publicPath: 'auto',
   })
 
-  const body = repositoryReleaseBody(directory, local, publicPath)
+  const artifactCommit = await buildArtifactCommit({ workspace, tree, sourceRevision, ...local })
+  const body = repositoryReleaseBody(
+    directory,
+    local,
+    artifactManifestUrl(repository, artifactCommit)
+  )
   const archive = path.join(output, ARCHIVE_NAME)
   execFileSync('zip', ['-q', '-r', archive, '.'], { cwd: tree })
-  return { archive, body }
+  return { archive, artifactCommit, body }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [, , directory, output, pagesBase] = process.argv
+  const [, , directory, output, repository] = process.argv
   const { body } = await prepareRepositoryExtension({
     workspace: process.cwd(),
     directory,
     output: path.resolve(output),
-    pagesBase,
+    repository,
   })
   console.log(body)
 }
