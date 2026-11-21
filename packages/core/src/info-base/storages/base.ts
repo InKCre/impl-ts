@@ -42,6 +42,7 @@ export interface IStorageBlock {
 export class StorageType extends Z.class({
   id: StorageTypeRefZ,
   description: z.string().optional(),
+  writable: z.boolean().default(false),
   config_schema: z.record(z.string(), z.unknown()).optional().default({}),
 }) {
   static dbApi: DBAPIClient<'storage_types', StorageType> = new DBAPIClient<

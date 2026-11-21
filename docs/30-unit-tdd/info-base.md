@@ -45,6 +45,9 @@ or solved meaning.
 - `PostgreSQLBinaryStorage` provides browser-peer create/read/update/delete for raw bytes. Its
   storage-owned pointer is exactly `{ "blob_id": "..." }`; create/read use byte RPCs and
   update/delete address the exact UUID row. Storage operations never query or rewrite Blocks.
+- `s3` 与 `webdav` 使用存储实例地址下的 UUID 对象，和 Python Peer 共享指针格式。浏览器直接向
+  存储域发请求，沿用该实例的 SigV4 或 Basic 凭据。`@inkcre/core/sdk` 提供独立字节操作，
+  Vue 入口把同一实现接到 Block hydration 及现有 PDF 存储选择。
 - `rawPostgrestFetch()` reuses browser origin and JWT authority while preserving a byte-capable
   response rather than forcing the JSON client abstraction.
 

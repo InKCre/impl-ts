@@ -690,6 +690,9 @@ importers:
       '@supabase/postgrest-js':
         specifier: ^2.118.0
         version: 2.118.0
+      aws4fetch:
+        specifier: 1.0.20
+        version: 1.0.20
       dayjs:
         specifier: ^1.11.23
         version: 1.11.23
@@ -3478,6 +3481,9 @@ packages:
 
   atomically@2.1.1:
     resolution: {integrity: sha512-P4w9o2dqARji6P7MHprklbfiArZAWvo07yW7qs3pdljb3BWr12FIB7W+p0zJiuiVsUpRO0iZn1kFFcpPegg0tQ==}
+
+  aws4fetch@1.0.20:
+    resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
 
   axe-core@4.14.0:
     resolution: {integrity: sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ==}
@@ -8691,6 +8697,8 @@ snapshots:
     dependencies:
       stubborn-fs: 2.0.0
       when-exit: 2.1.5
+
+  aws4fetch@1.0.20: {}
 
   axe-core@4.14.0: {}
 
