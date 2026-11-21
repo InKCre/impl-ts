@@ -1,4 +1,7 @@
 import { Storage, type IStorageBlock } from './base'
+import { readResponseBytes } from './http-body'
+
+export { StorageContentTooLargeError } from './http-body'
 
 export type HttpStorageConfig = {
   timeout?: number
@@ -8,13 +11,6 @@ export type HttpStorageConfig = {
 
 const DEFAULT_TIMEOUT_SECONDS = 30
 const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024
-
-export class StorageContentTooLargeError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'StorageContentTooLargeError'
-  }
-}
 
 function positiveNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
@@ -44,36 +40,7 @@ export class HttpStorage extends Storage<Uint8Array> {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const declaredLength = Number(response.headers.get('content-length'))
-      if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
-        throw new StorageContentTooLargeError(
-          `HTTP response declares ${declaredLength} bytes; limit is ${maximumBytes}`
-        )
-      }
-
-      if (!response.body) return new Uint8Array(await response.arrayBuffer())
-
-      const reader = response.body.getReader()
-      const chunks: Uint8Array[] = []
-      let received = 0
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        received += value.byteLength
-        if (received > maximumBytes) {
-          await reader.cancel()
-          throw new StorageContentTooLargeError(`HTTP response exceeded ${maximumBytes} bytes`)
-        }
-        chunks.push(value)
-      }
-
-      const content = new Uint8Array(received)
-      let offset = 0
-      for (const chunk of chunks) {
-        content.set(chunk, offset)
-        offset += chunk.byteLength
-      }
-      return content
+      return await readResponseBytes(response, maximumBytes)
     } finally {
       clearTimeout(timeoutId)
     }

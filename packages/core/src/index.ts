@@ -222,6 +222,10 @@ export {
   HttpStorage,
   StorageContentTooLargeError,
   PostgreSQLBinaryStorage,
+  S3BlobStorage,
+  WebDAVBlobStorage,
+  type S3StorageConfig,
+  type WebDAVStorageConfig,
   type HttpStorageConfig,
   type PostgreSQLBlobPointer,
 } from './info-base'
