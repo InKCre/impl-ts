@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { satisfies, subset, valid as validSemVer, validRange } from 'semver'
+import {
+  satisfies,
+  subset,
+  validSemVer,
+  validRange,
+} from '../.github/actions/publish-extension/dependencies.mjs'
 
 const PRODUCTION_BROWSER_ORIGIN = 'https://app.inkcre.dev'
 const EXTENSION_NAME_PATTERN =
@@ -58,10 +63,10 @@ function assetReferences(items, collectionName) {
   return references
 }
 
-export function manifestClosure(manifest) {
+export function manifestClosure(manifest, publicPath = './') {
   assert.ok(manifest && typeof manifest === 'object', 'mf-manifest.json must contain an object')
   assert.ok(manifest.metaData && typeof manifest.metaData === 'object', 'metaData is required')
-  assert.equal(manifest.metaData.publicPath, './', "metaData.publicPath must be './'")
+  assert.equal(manifest.metaData.publicPath, publicPath, 'unexpected Module Federation publicPath')
 
   /** @type {Set<string>} */
   const references = new Set([remoteEntryPath(manifest.metaData)])
@@ -74,15 +79,16 @@ export function manifestClosure(manifest) {
   return [...references].sort()
 }
 
-function readAssociation(extensionPackage, corePackage) {
+export function readAssociation(extensionPackage, corePackage) {
   const association = extensionPackage.inkcre
   assert.ok(
     association && typeof association === 'object',
     'package.json inkcre metadata is required'
   )
   assert.match(association.name, EXTENSION_NAME_PATTERN, 'invalid canonical Extension Name')
-  assert.equal(typeof association.nickname, 'string', 'Extension Nickname is required')
-  assert.ok(association.nickname.length > 0, 'Extension Nickname is required')
+  const nickname = corePackage ? association.nickname : (association.nickname ?? association.name)
+  assert.equal(typeof nickname, 'string', 'Extension Nickname is required')
+  assert.ok(nickname.length > 0, 'Extension Nickname is required')
   assert.equal(
     validSemVer(extensionPackage.version),
     extensionPackage.version,
@@ -95,13 +101,13 @@ function readAssociation(extensionPackage, corePackage) {
   const hostRange = distribution.host_sdk_version?.replaceAll(',', ' ')
   assert.ok(validRange(hostRange), 'Host SDK version must be a valid SemVer range')
   assert.ok(
-    satisfies(corePackage.version, hostRange),
-    `@inkcre/core ${corePackage.version} does not satisfy ${distribution.host_sdk_version}`
+    !corePackage || satisfies(corePackage.version, hostRange),
+    `@inkcre/core ${corePackage?.version} does not satisfy ${distribution.host_sdk_version}`
   )
 
   return {
     name: association.name,
-    nickname: association.nickname,
+    nickname,
     version: extensionPackage.version,
     module_federation: {
       host_sdk: distribution.host_sdk,
@@ -114,14 +120,15 @@ export async function inspectNativeModuleFederation({
   packagePath,
   corePackagePath,
   artifactDirectory,
+  publicPath,
 }) {
   const [extensionPackage, corePackage, manifest] = await Promise.all([
     readJson(packagePath),
-    readJson(corePackagePath),
+    corePackagePath ? readJson(corePackagePath) : null,
     readJson(path.join(artifactDirectory, 'mf-manifest.json')),
   ])
   const association = readAssociation(extensionPackage, corePackage)
-  const closure = manifestClosure(manifest)
+  const closure = manifestClosure(manifest, publicPath)
 
   for (const relativePath of closure) {
     const absolutePath = path.join(artifactDirectory, ...relativePath.split('/'))
@@ -150,8 +157,8 @@ export async function inspectNativeModuleFederation({
     'manifest @inkcre/core range must match the Registry Host SDK range'
   )
   assert.ok(
-    satisfies(corePackage.version, sharedRange),
-    `manifest shared range does not accept @inkcre/core ${corePackage.version}`
+    !corePackage || satisfies(corePackage.version, sharedRange),
+    `manifest shared range does not accept @inkcre/core ${corePackage?.version}`
   )
 
   return {

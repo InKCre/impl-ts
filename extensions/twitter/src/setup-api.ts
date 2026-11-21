@@ -6,6 +6,7 @@ import {
   readExtensionPeerStatus,
 } from '@inkcre/extension-runtime-web'
 import {
+  configStore,
   ExtensionParticipationModel,
   ExtensionRegistryOriginResolver,
   Cron,
@@ -22,6 +23,7 @@ import {
   type ExtensionRuntimeStatus,
   type JsonValue,
 } from '@inkcre/core'
+import * as core from '@inkcre/core'
 import { z } from 'zod'
 
 const EXTENSION_NAME = 'inkcre/twitter'
@@ -135,7 +137,25 @@ export class TwitterSetupAPI {
 
   async enableCore(signal?: AbortSignal): Promise<ExtensionRuntimeStatus> {
     const existing = await ExtensionParticipationModel.get(this.peer.id, EXTENSION_NAME)
-    if (!existing) {
+    if (!existing) await this.selectCore()
+    signal?.throwIfAborted()
+    return manageExtensionOnPeer(this.peer.id, { action: 'enable', extension: EXTENSION_NAME })
+  }
+
+  private async selectCore(): Promise<void> {
+    const release = await core.getGitHubPythonSetupRelease?.(
+      EXTENSION_NAME,
+      configStore.metaConfig.INKCRE_PEER_ID
+    )
+    if (release) {
+      await manageExtensionOnPeer(this.peer.id, {
+        action: 'select',
+        extension: EXTENSION_NAME,
+        distribution: 'python',
+        version: release.version,
+        source_repository: release.repository,
+      })
+    } else {
       const peerConfig = PeerConfigSchema.parse(this.peer.config)
       const origin = await new ExtensionRegistryOriginResolver(
         () => peerConfig.extension_registry_url
@@ -154,8 +174,6 @@ export class TwitterSetupAPI {
         version: release.version,
       })
     }
-    signal?.throwIfAborted()
-    return manageExtensionOnPeer(this.peer.id, { action: 'enable', extension: EXTENSION_NAME })
   }
 
   status(signal?: AbortSignal): Promise<TwitterSetupStatus> {

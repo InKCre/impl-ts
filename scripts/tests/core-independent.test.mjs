@@ -109,3 +109,88 @@ void test('packed SDK works without UI, source aliases, startup or selected App 
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+void test('GitHub discovery and exact lookup resolve both Web release entry formats', async (t) => {
+  const { getGitHubExtensionRelease, listGitHubExtensionReleases, supportsGitHubExtensionSdk } =
+    await import('../../packages/core/dist/index.js')
+  const repository = 'https://github.com/InKCre/example'
+  const api = 'https://api.github.com/repos/InKCre/example/releases'
+  const tag = 'inkcre-ext/example/mail/module_federation/v0.5.0'
+  const pythonTag = 'inkcre-ext/example/mail/python/v0.4.0'
+  const manifestTag = 'inkcre-ext/example/mail/module_federation/v0.4.0'
+  const asset_name = 'remoteEntry.js'
+  const global_name = 'inkcre_example_mail_0_5_0'
+  const assetUrl = `https://github.com/inkcre/Example/releases/download/${encodeURIComponent(tag)}/${asset_name}`
+  const manifest_url = 'https://assets.example/mail/0.4.0/mf-manifest.json'
+  const descriptor = {
+    schema_version: 1,
+    source_path: 'plugins/mail',
+    host_sdk: '@inkcre/core',
+    host_sdk_version: '>=0.4.0 <0.5.0',
+  }
+  const script = { asset_name, global_name }
+  const makeRelease = (tag_name, metadata, assets = []) => ({
+    draft: false,
+    tag_name,
+    body: `<!-- inkcre-release\n${JSON.stringify({ ...descriptor, ...metadata })}\n-->`,
+    assets,
+  })
+  const assets = [{ name: asset_name, browser_download_url: assetUrl }]
+  const manifest = makeRelease(manifestTag, { manifest_url })
+  const python = makeRelease(pythonTag, { host_sdk: 'core-py' })
+  let exact = makeRelease(tag, { script }, assets)
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url === `${api}?per_page=100`) return Response.json([manifest, python, exact])
+    assert.equal(url, `${api}/tags/${encodeURIComponent(tag)}`)
+    return Response.json(exact)
+  })
+
+  const [scriptRelease, manifestRelease, pythonRelease] =
+    await listGitHubExtensionReleases(repository)
+  assert.deepEqual(scriptRelease.webEntry, { script: { url: assetUrl, global_name } })
+  assert.deepEqual(manifestRelease.webEntry, { manifest_url })
+  assert.equal(pythonRelease.distribution, 'python')
+  assert.equal(pythonRelease.webEntry, undefined)
+  assert.deepEqual(
+    await getGitHubExtensionRelease(repository, 'example/mail', 'module_federation', '0.5.0'),
+    scriptRelease
+  )
+  assert.equal(supportsGitHubExtensionSdk(scriptRelease, '@inkcre/core', '0.4.5'), true)
+  assert.equal(supportsGitHubExtensionSdk(scriptRelease, '@inkcre/core', '0.5.0'), false)
+
+  for (const [label, release] of [
+    ['both entry formats', makeRelease(tag, { script, manifest_url }, assets)],
+    ['no entry format', makeRelease(tag, {})],
+    [
+      'invalid global',
+      makeRelease(tag, { script: { ...script, global_name: 'inkcre.mail' } }, assets),
+    ],
+    [
+      'no matching attachment',
+      makeRelease(tag, { script }, [{ ...assets[0], name: 'different.js' }]),
+    ],
+    ['duplicate attachment', makeRelease(tag, { script }, [...assets, ...assets])],
+    [
+      'attachment without .js suffix',
+      makeRelease(tag, { script: { ...script, asset_name: 'remoteEntry.zip' } }, [
+        { name: 'remoteEntry.zip', browser_download_url: assetUrl.replace(/\.js$/, '.zip') },
+      ]),
+    ],
+    ...[
+      assetUrl.replace('inkcre/Example', 'someone/Example'),
+      assetUrl.replace('v0.5.0', 'v0.5.1'),
+      assetUrl.replace('github.com', 'release-assets.githubusercontent.com'),
+    ].map((browser_download_url) => [
+      browser_download_url,
+      makeRelease(tag, { script }, [{ name: asset_name, browser_download_url }]),
+    ]),
+  ]) {
+    exact = release
+    await assert.rejects(
+      () => getGitHubExtensionRelease(repository, 'example/mail', 'module_federation', '0.5.0'),
+      /no matching InKCre release description/,
+      label
+    )
+    assert.equal((await listGitHubExtensionReleases(repository)).length, 2, label)
+  }
+})

@@ -1,6 +1,6 @@
 # Native Extension Runtime Unit
 
-Runtime 的新导入名、精确旧包来源与已发布 ABI 兼容边界见 [App 命名与兼容身份](../40-deployment/web-delivery.md#app-命名与兼容身份)。
+Runtime 的包来源见 [App 命名与兼容身份](../40-deployment/web-delivery.md#app-命名与兼容身份)。
 
 ## Boundary
 
@@ -14,11 +14,11 @@ Resolver/content producer semantics belong to [Info-Base](info-base.md). Registr
 artifact delivery belong to
 [First-party Extension Delivery](../40-deployment/native-extension-delivery.md).
 
-The browser supports the Module Federation native distribution. Registry v2 resolves an exact
-`(name, module_federation, version)` release; other Peers independently select their native distributions. `@inkcre/extension-runtime-web`, maintained in
-ext-reg, owns the Web Host and Registry consumers. `@inkcre/core` owns the shared models, Peer
-transport, and browser configuration. There is no generic target matcher or cross-format artifact
-manifest.
+The browser supports the Module Federation native distribution. It resolves an exact
+`(name, module_federation, version)` from the selected source: the GitHub repository or the
+existing Registry for a selection with no repository. Other Peers independently select their native
+distributions. `@inkcre/extension-runtime-web` owns the Web Host and Registry reader.
+`@inkcre/core` owns shared models, GitHub Release lookups, Peer transport, and browser configuration.
 
 ## Producer and Host Contract
 
@@ -48,16 +48,18 @@ Before fetching executable bytes, the Host reads the exact Release, requires an 
 Federation distribution, requires `host_sdk === '@inkcre/core'`, and verifies that its strict local
 SDK version satisfies the Release range. Installation requires a published Release; an already
 installed exact yanked Release may start with a warning, while other non-executable states fail.
-The Registry reader resolves the association to a trusted Registry-hosted URL, which the Host
-passes directly to the current native Module Federation implementation.
+The Host passes a native manifest URL directly to Module Federation. A repository Release can
+instead select one classic script attachment. The App resolves its URL from the exact Release's
+attachments and supplies the declared global container name to the same runtime. Both formats
+use the same SDK check, lifecycle, and Peer participation.
 
 ## Durable State and Peer Intent
 
 The shared `ExtensionModel` owns one deployment identity, display name and configuration. Business
 state remains deployment-scoped and is never cleared by native version changes. The
-`ExtensionParticipationModel` owns each `(name, peer_id)` selection: exact distribution/version,
-enabled intent and configuration schema from that exact selection. No global package version or
-shared enabled array remains writable.
+`ExtensionParticipationModel` owns each `(name, peer_id)` selection, including exact distribution,
+version, optional `source_repository`, enabled intent, and configuration schema. Version changes
+from an Extension card choose releases from the Peer's selected source.
 
 The Extension card displays a single plugin with a row for each Peer. Installation and version
 changes explicitly target that row. The current browser uses its local Host; an online remote Peer
@@ -72,11 +74,13 @@ The consumer sends each mutation once to its exact target and preserves unknown 
 not retry mutations on another Peer. Configuration forms identify the selected Peer/distribution/
 version that provided their schema; shared configuration has no global last-started schema.
 
-Registry installation links carry `name`, `distribution` and exact `version`. Opening a link only
-reads the release and presents the target Peer choice; confirmation persists that exact target's
-selection without enabling it. Startup reads only current-Peer enabled selections and never follows
-latest. Legacy records with unresolved distribution retain their exact version until the upgraded
-Host resolves its own native format. A missing release requires an explicit replacement selection.
+The Extensions view finds marked GitHub releases from a repository URL, topic search, or the
+first-party repositories. Discovery groups distributions by Extension name. Installation links
+carry an Extension name, distribution, and exact version. GitHub installation links also carry
+`source_repository`. The App verifies the exact release before presenting the Peer choice and
+persists the selection on confirmation. Startup reads current-Peer enabled selections by exact
+source, distribution, and version. Legacy records with unresolved distribution retain their exact
+version until the upgraded Host resolves its own native format.
 
 Removing a participation requires it to be disabled and does not remove the plugin's shared identity,
 configuration, authorization state, Sources or info-base content. Another Peer's selection is unchanged.
@@ -84,9 +88,11 @@ configuration, authorization state, Sources or info-base content. Another Peer's
 ## Documentation and Connection Setup
 
 `inkcre/caldav` 的 Web setup contribution 按选定 Python Peer 的实际运行状态准备连接。
-没有选择时才从该 Peer 自己的 Registry 选择发行版；安装返回重启状态后停止后续写入，
+首次选择 Python 发行且 Web 发行来自 GitHub 时，按同一插件名从对应仓库选择 Python 发行。
+官方 Web 发行匹配 `InKCre/impl-py`。旧 Registry 安装继续使用该 Peer 的 Registry。
+安装返回重启状态后停止后续写入，
 要求刷新观察原目标。已有密码保持不变，缺失时才使用浏览器密码学随机数生成专用密码。
-首次发现发行版只接受目标 Peer override 或共享部署 Registry。Python override 可以是
+Registry 路径只接受目标 Peer override 或共享部署 Registry。Python override 可以是
 `null`，不能按 Web Peer 的完整配置 schema 校验；两处均未配置时要求明确设置目标地址，
 因为浏览器无法读取远程进程的环境默认，不能用自己的产品默认替代。下载期间阻止再次
 安装；`failed` 优先于待重启标志，恢复失败的 Peer 后才能继续。
@@ -102,11 +108,10 @@ iCalendar/vCard 为只读内存投影；calendar 同时承载 VEVENT 与 VTODO�
 解析失败保留原文；dispose 只注销当前模块自己注册的 resolver 类。
 
 Extension cards discover documentation independently of executable preflight or enablement.
-They resolve the existing Registry origin and read documentation for the exact installed name and
-version through the Runtime's `getExtensionDocumentation`. Only returned global, python, and
-module-federation links appear. Missing documents and temporarily unavailable discovery are
-different states; neither prevents Extension operations. Links open without credentials or an
-opener, and the application does not fetch or embed document bodies.
+GitHub selections link to the distribution's `docs/user` directory at the exact Release tag's
+commit. Registry selections read the existing documentation association by installed name,
+distribution, and version. Missing documents and lookup errors appear independently of Extension
+operations. Links open without credentials or an opener.
 
 The Memos setup contribution owns connection preparation. An explicit action reuses a saved PAT or
 generates one with browser cryptographic randomness, saves it through `patch_config`, and enables

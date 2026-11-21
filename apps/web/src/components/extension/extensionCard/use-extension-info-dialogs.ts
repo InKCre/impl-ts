@@ -1,6 +1,12 @@
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ExtensionModel, ExtensionRegistryOriginResolver, configStore } from '@inkcre/core'
+import {
+  ExtensionModel,
+  ExtensionRegistryOriginResolver,
+  configStore,
+  getGitHubExtensionDocumentation,
+  getGitHubExtensionRelease,
+} from '@inkcre/core'
 import {
   getExtensionDocumentation,
   type ExtensionDocumentationLink,
@@ -48,6 +54,23 @@ export function useExtensionInfoDialogs(options: {
       return
     }
     try {
+      if (pin.source_repository) {
+        const release = await getGitHubExtensionRelease(
+          pin.source_repository,
+          data.extension.name,
+          pin.distribution,
+          pin.version
+        )
+        const url = await getGitHubExtensionDocumentation(release)
+        if (request === documentationRequest && url)
+          documentation.value = [
+            {
+              entry_url: url,
+              scope: pin.distribution === 'python' ? 'python' : 'module-federation',
+            },
+          ]
+        return
+      }
       const origin = await new ExtensionRegistryOriginResolver(
         () => configStore.peerConfig.extension_registry_url
       ).resolve()

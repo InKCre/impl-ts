@@ -1,0 +1,40 @@
+name: Publish an InKCre Web extension
+description: Publish a Module Federation manifest or classic script to this repository
+
+inputs:
+  package:
+    description: Path to the producer package.json relative to the repository
+    required: true
+  artifact-directory:
+    description: Path to the built Module Federation directory relative to the repository
+    required: true
+  format:
+    description: manifest or script
+    required: false
+    default: manifest
+  token:
+    description: The caller repository's token with contents write permission
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install the pinned publisher dependencies
+      shell: bash
+      run: cd "$GITHUB_ACTION_PATH" && npm ci --ignore-scripts
+
+    - name: Publish this repository's extension
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        ARTIFACT_DIRECTORY: ${{ inputs.artifact-directory }}
+        RELEASE_FORMAT: ${{ inputs.format }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        if [ "$RELEASE_FORMAT" = manifest ]; then
+          gh auth setup-git --hostname github.com
+        fi
+        node "$GITHUB_ACTION_PATH/cli.mjs" \
+          --package "$PACKAGE" \
+          --artifact-directory "$ARTIFACT_DIRECTORY" \
+          --format "$RELEASE_FORMAT"

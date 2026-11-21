@@ -50,10 +50,8 @@ const participations = ref<ExtensionParticipation[]>([])
 const enabled = computed(() =>
   participations.value.some((row) => row.peer_id === selected.value && row.enabled)
 )
-const localVersion = computed(
-  () =>
-    participations.value.find((row) => row.peer_id === configStore.metaConfig.INKCRE_PEER_ID)
-      ?.version
+const localSelection = computed(() =>
+  participations.value.find((row) => row.peer_id === configStore.metaConfig.INKCRE_PEER_ID)
 )
 const ready = computed(() => loaded.value && address.value && savedToken.value && enabled.value)
 const options = computed(() =>
@@ -63,16 +61,16 @@ const options = computed(() =>
   }))
 )
 
-async function loadHelp(version: string) {
+async function loadHelp(selection: ExtensionParticipation) {
   helpUrl.value = null
   helpStatus.value = 'loading'
   try {
-    const url = await readHelpUrl(version)
-    if (!mounted || localVersion.value !== version) return
+    const url = await readHelpUrl(selection)
+    if (!mounted || localSelection.value !== selection) return
     helpUrl.value = url
     helpStatus.value = url ? 'available' : 'missing'
   } catch {
-    if (mounted && localVersion.value === version) helpStatus.value = 'unavailable'
+    if (mounted && localSelection.value === selection) helpStatus.value = 'unavailable'
   }
 }
 
@@ -109,7 +107,7 @@ async function refresh() {
     participations.value = (await ExtensionParticipationModel.list()).filter(
       (row) => row.name === extensionName
     )
-    if (localVersion.value) void loadHelp(localVersion.value)
+    if (localSelection.value) void loadHelp(localSelection.value)
     else helpStatus.value = 'missing'
     peers.value = current.peers
     if (!selected.value && current.peers.length === 1) selected.value = current.peers[0]!.id

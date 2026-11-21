@@ -1,18 +1,17 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { once } from 'node:events'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { verifyPublicModuleFederation } from './verify-native-extension-distribution.mjs'
+import { captureCandidates, selectSavedCandidate } from './publish-first-party-extensions.mjs'
+import { publishArtifact, publishExtension } from './extension-release/publish.mjs'
 import {
-  captureCandidates,
-  checkCandidates,
-  publishCandidates,
-  selectSavedCandidate,
-} from './publish-first-party-extensions.mjs'
+  ARCHIVE_NAME,
+  artifactDigest,
+  releaseTransport,
+  repositoryReleaseBody,
+} from './prepare-repository-extension.mjs'
 
 void test('a rerun cannot replace a missing or expired release candidate', () => {
   const candidate = { id: 42, name: 'first-party-extension-candidate', expired: false }
@@ -25,197 +24,233 @@ void test('a rerun cannot replace a missing or expired release candidate', () =>
   assert.throws(() => selectSavedCandidate([], undefined), /current GitHub run attempt/)
 })
 
-// A real HTTP fault-injection boundary for the publisher, not a replacement Registry implementation.
-void test('an unknown MF-only upload resumes the saved ZIP and verifies even an existing association', async () => {
+void test('the saved ZIP recreates its artifact commit and later publishes preserve older artifact tags', async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-publication-test-'))
-  let registryUrl = 'https://registry.example.test'
-  const prefix = '/extensions/test/source/1.0.0/module-federation/'
-  const build = path.join(workspace, 'extensions/source/dist/web')
-  const uploaded = path.join(workspace, 'uploaded')
-  let prepared
-  let published = false
-  let uploads = 0
-  let publishes = 0
-  let writes = 0
-  let corrupt = false
-  let forceConflict = false
-  const server = createServer(async (req, res) => {
-    try {
-      res.setHeader('Access-Control-Allow-Origin', '*')
-      const json = (status, body) => {
-        res.writeHead(status, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify(body))
-      }
-      const record = () => ({
-        name: 'test/source',
-        nickname: 'Source',
-        version: '1.0.0',
-        state: 'published',
-        distribution: 'module_federation',
-        module_federation: {
-          host_sdk: '@inkcre/core',
-          host_sdk_version: '>=0.2.0 <0.4.0',
-          manifest_url: `${prefix}mf-manifest.json`,
-        },
-      })
-      if (req.method === 'POST') {
-        writes++
-        assert.equal(req.headers.authorization, 'Bearer test-only')
-        const chunks = []
-        for await (const chunk of req) chunks.push(chunk)
-        const body = Buffer.concat(chunks)
-        if (req.url.endsWith('/releases')) {
-          if (forceConflict)
-            return json(409, { detail: 'Module Federation association is immutable' })
-          const value = JSON.parse(body)
-          if (prepared) assert.deepEqual(value, prepared)
-          prepared = value
-          return json(200, { state: 'preparing' })
-        }
-        if (req.url.endsWith('/module-federation')) {
-          uploads++
-          const form = await new Response(body, {
-            headers: { 'Content-Type': req.headers['content-type'] },
-          }).formData()
-          const zip = path.join(workspace, 'received.zip')
-          await writeFile(zip, Buffer.from(await form.get('content').arrayBuffer()))
-          execFileSync('unzip', ['-q', zip, '-d', uploaded])
-          // Heroku can return H12 while the server keeps processing this exact archive.
-          return json(503, { detail: 'H12 request timeout' })
-        }
-        if (req.url.endsWith('/publish')) {
-          publishes++
-          if (publishes === 1)
-            return json(409, {
-              detail: 'Release native Distribution objects are not completely available',
-            })
-          published = true
-          return json(200, record())
-        }
-      }
-      if (req.url.startsWith('/v2/'))
-        return json(published ? 200 : 404, published ? record() : { detail: 'not found' })
-      if (!published) return json(404, { detail: 'not found' })
-      const relativePath = req.url.slice(prefix.length)
-      let bytes = await readFile(path.join(uploaded, relativePath))
-      if (relativePath === 'mf-manifest.json') {
-        const manifest = JSON.parse(bytes)
-        manifest.metaData.publicPath = `${registryUrl}${prefix}`
-        bytes = Buffer.from(JSON.stringify(manifest))
-      }
-      if (corrupt && relativePath === 'transitive.js') bytes = Buffer.from('changed')
-      res.writeHead(200, { 'Cache-Control': 'public, no-cache', ETag: '"snapshot"' })
-      res.end(bytes)
-    } catch (error) {
-      res.writeHead(500)
-      res.end(error.message)
-    }
-  })
+  const remote = path.join(workspace, 'remote.git')
+  const repository = 'InKCre/impl-ts'
+  const extension = path.join(workspace, 'extensions/mail')
+  const build = path.join(extension, 'dist/web')
+  const writeJson = (file, object) => writeFile(file, JSON.stringify(object))
+  const git = (...args) => execFileSync('git', args, { cwd: workspace, encoding: 'utf8' }).trim()
+  const remoteGit = (...args) => git('--git-dir=' + remote, ...args)
+  const artifactTag = (version) => 'refs/tags/inkcre-mf/inkcre/mail/v' + version
+
   try {
-    await mkdir(path.join(build, '.vite'), { recursive: true })
-    await mkdir(path.join(workspace, 'extensions/.agents'))
-    await mkdir(path.join(workspace, 'extensions/guidance'))
-    await mkdir(path.join(workspace, 'packages/core'), { recursive: true })
-    await writeFile(
-      path.join(workspace, 'packages/core/package.json'),
-      JSON.stringify({ version: '0.3.0' })
+    git('init', '-q')
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.test',
+      'commit',
+      '--allow-empty',
+      '-qm',
+      'Source'
     )
-    await writeFile(
-      path.join(workspace, 'extensions/source/package.json'),
-      JSON.stringify({
-        version: '1.0.0',
+    const sourceRevision = git('rev-parse', 'HEAD')
+    git('init', '--bare', '-q', remote)
+    const core = path.join(workspace, 'packages/core')
+    await mkdir(core, { recursive: true })
+    await writeJson(path.join(core, 'package.json'), { version: '0.4.3' })
+    await mkdir(path.join(build, 'assets'), { recursive: true })
+    await writeFile(path.join(build, 'assets/async.js'), 'export default "async chunk"')
+    await writeJson(path.join(build, 'mf-manifest.json'), {
+      metaData: { publicPath: './', remoteEntry: { name: 'remoteEntry.js' } },
+      shared: [{ name: '@inkcre/core', requiredVersion: '^0.4.0' }],
+      exposes: [{ assets: { js: { async: ['assets/async.js'] } } }],
+    })
+
+    const requests = []
+    const fetchImplementation = async (url) => {
+      const apiPath = /^\/gh\/InKCre\/impl-ts@([a-f0-9]{40})\/(.+)$/.exec(url.pathname)
+      assert.equal(url.origin, 'https://cdn.jsdelivr.net')
+      assert.ok(apiPath)
+      const [, commit, file] = apiPath
+      assert.ok(remoteGit('tag', '--points-at', commit).startsWith('inkcre-mf/'))
+      requests.push(url.href)
+      return new Response(
+        execFileSync('git', ['--git-dir=' + remote, 'show', commit + ':' + file]),
+        {
+          headers: {
+            'access-control-allow-origin': '*',
+            'content-type': file.endsWith('.json') ? 'application/json' : 'text/javascript',
+          },
+        }
+      )
+    }
+
+    async function saveVersion(version, previousVersion, servedVersion = version) {
+      const deliveryDirectory = await mkdtemp(path.join(workspace, 'candidate-'))
+      await writeJson(path.join(extension, 'package.json'), {
+        name: '@inkcre/ext-mail',
+        version,
         inkcre: {
-          name: 'test/source',
-          nickname: 'Source',
-          module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.2.0 <0.4.0' },
+          name: 'inkcre/mail',
+          nickname: 'Mail',
+          module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '^0.4.0' },
         },
       })
+      await writeFile(path.join(build, 'remoteEntry.js'), 'export default "' + servedVersion + '"')
+      const plan = await captureCandidates({
+        workspace,
+        repository,
+        provenance: { source_revision: sourceRevision, run_id: 'fixture-run' },
+        deliveryDirectory,
+        previousVersion: () => previousVersion,
+      })
+      return {
+        workspace,
+        deliveryDirectory,
+        repository,
+        sourceRevision,
+        remote,
+        fetchImplementation,
+        candidate: plan.candidates[0],
+        asset: path.join(deliveryDirectory, 'mail', ARCHIVE_NAME),
+      }
+    }
+
+    const previous = await saveVersion('0.4.0', '0.3.0')
+    await publishArtifact(previous)
+    const previousCommit = remoteGit('rev-parse', artifactTag('0.4.0'))
+    assert.equal(previousCommit, previous.candidate.artifact_commit)
+    assert.equal(remoteGit('rev-list', '--count', previousCommit), '1')
+
+    const current = await saveVersion('0.4.1', '0.4.0')
+    const candidate = current.candidate
+    const archive = path.join(current.deliveryDirectory, 'mail', ARCHIVE_NAME)
+    const descriptor = JSON.parse(candidate.body.split('\n')[1])
+    assert.equal(
+      descriptor.manifest_url,
+      'https://cdn.jsdelivr.net/gh/InKCre/impl-ts@' +
+        candidate.artifact_commit +
+        '/mf-manifest.json'
     )
+    assert.equal(descriptor.source_path, 'extensions/mail')
+    await writeFile(path.join(build, 'remoteEntry.js'), 'source build changed after capture')
+
+    await publishArtifact(current)
+    await publishArtifact(current)
+    const currentCommit = remoteGit('rev-parse', artifactTag('0.4.1'))
+    assert.equal(currentCommit, candidate.artifact_commit)
+    assert.equal(remoteGit('rev-parse', artifactTag('0.4.0')), previousCommit)
+    assert.equal(remoteGit('show', previousCommit + ':remoteEntry.js'), 'export default "0.4.0"')
+    assert.equal(remoteGit('show', currentCommit + ':remoteEntry.js'), 'export default "0.4.1"')
+    assert.equal(
+      JSON.parse(remoteGit('show', currentCommit + ':mf-manifest.json')).metaData.publicPath,
+      'auto'
+    )
+    assert.equal(
+      remoteGit('show', currentCommit + ':assets/async.js'),
+      'export default "async chunk"'
+    )
+    assert.equal(requests.length, 6)
+    assert.equal(git('diff', '--cached'), '')
+
+    await assert.rejects(
+      publishArtifact({
+        ...current,
+        fetchImplementation: async (url) => {
+          const response = await fetchImplementation(url)
+          return url.pathname.endsWith('/remoteEntry.js')
+            ? new Response('wrong bytes', { headers: response.headers })
+            : response
+        },
+      }),
+      /CDN bytes differ/
+    )
+    const bytes = await readFile(archive)
+    await writeFile(archive, 'incorrect archive')
+    await assert.rejects(publishArtifact(current), /saved artifact digest differs/)
+    await writeFile(archive, bytes)
+
+    const conflict = await saveVersion('0.4.1', '0.4.0', 'different-candidate')
+    await assert.rejects(publishArtifact(conflict), /failed to push some refs/)
+    assert.equal(remoteGit('rev-parse', artifactTag('0.4.1')), currentCommit)
+  } finally {
+    await rm(workspace, { recursive: true, force: true })
+  }
+})
+
+void test('a publisher script release uploads one JavaScript asset without pushing a separate Git tag', async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-classic-publication-'))
+  const repository = 'external/extension'
+  const sourceRevision = 'a'.repeat(40)
+  const sdk = { host_sdk: '@inkcre/core', host_sdk_version: '^0.4.0' }
+  const candidate = {
+    name: 'external/fixture',
+    version: '1.0.0',
+    source_path: '.',
+    format: 'script',
+  }
+  const base = 'repos/' + repository + '/releases'
+  const tag = 'inkcre-ext/external/fixture/module_federation/v1.0.0'
+  const tagSuffix = '/tags/' + encodeURIComponent(tag)
+  const release = {
+    id: 1,
+    tag_name: tag,
+    draft: true,
+    target_commitish: sourceRevision,
+    assets: [],
+  }
+  const writes = []
+  try {
     await writeFile(
-      path.join(build, 'mf-manifest.json'),
+      path.join(workspace, 'package.json'),
       JSON.stringify({
-        name: 'source',
-        metaData: { publicPath: './', remoteEntry: { name: 'remoteEntry.js' } },
-        shared: [{ name: '@inkcre/core', requiredVersion: '>=0.2.0 <0.4.0' }],
-        exposes: [],
+        version: candidate.version,
+        inkcre: { name: candidate.name, module_federation: sdk },
       })
     )
-    await writeFile(path.join(build, 'remoteEntry.js'), 'import "./transitive.js"')
-    await writeFile(path.join(build, 'transitive.js'), 'export default 42')
-    await writeFile(path.join(build, '.vite/manifest.json'), '{}')
-    server.listen(0, '127.0.0.1')
-    await once(server, 'listening')
-    const origin = `http://127.0.0.1:${server.address().port}`
-    registryUrl = origin
-    const options = {
-      workspace,
-      registryUrl,
-      deliveryDirectory: path.join(workspace, 'candidate'),
-      token: 'test-only',
-      provenance: {
-        source_repository: 'https://github.com/InKCre/impl-ts',
-        source_revision: 'exact-source',
-        build_id: 'same-run',
-      },
-      fetchImplementation: (url, init) => fetch(new URL(new URL(url).pathname, origin), init),
+    const transport = await releaseTransport({ repository, ...candidate })
+    candidate.asset_name = transport.script.asset_name
+    candidate.body = repositoryReleaseBody('.', { module_federation: sdk }, transport)
+    const asset = path.join(workspace, candidate.asset_name)
+    await writeFile(asset, 'var ' + transport.script.global_name + ' = { init() {}, get() {} };')
+    candidate.digest = await artifactDigest(asset)
+
+    function api(endpoint, args = []) {
+      switch (endpoint) {
+        case 'repos/' + repository + '/git/matching-refs' + tagSuffix:
+          return []
+        case 'repos/' + repository + '/git/ref' + tagSuffix:
+          return { object: { sha: sourceRevision } }
+        case base + tagSuffix:
+          return release
+        case base:
+          assert.ok(args.includes('target_commitish=' + sourceRevision))
+          assert.ok(args.includes('draft=true'))
+          assert.ok(args.includes('tag_name=' + tag))
+          release.body = args.find((arg) => arg.startsWith('body=')).slice(5)
+          writes.push('draft')
+          return release
+        case 'https://uploads.github.com/' + base + '/1/assets?name=module-federation.js':
+          assert.ok(args.includes('Content-Type: text/javascript'))
+          assert.equal(args[args.indexOf('--input') + 1], asset)
+          release.assets.push({ name: candidate.asset_name, digest: candidate.digest })
+          writes.push('attach')
+          return release.assets[0]
+        case base + '/1':
+          if (args.includes('draft=false')) {
+            release.draft = false
+            writes.push('publish')
+          }
+          return release
+        default:
+          throw new Error('unexpected GitHub API path ' + endpoint)
+      }
     }
-    await assert.rejects(
-      verifyPublicModuleFederation({
-        registryUrl: 'http://registry.example.test',
-        packagePath: path.join(workspace, 'extensions/source/package.json'),
-        corePackagePath: path.join(workspace, 'packages/core/package.json'),
-        artifactDirectory: build,
-      }),
-      /HTTPS or loopback HTTP/
-    )
-    await captureCandidates(options)
-    assert.equal(writes, 0, 'capturing a candidate must not mutate the Registry')
-    // A rebuild could produce other bytes; publication must still use the retained ZIP.
-    await writeFile(path.join(build, 'transitive.js'), 'export default "different build"')
-    await publishCandidates(options)
-    assert.equal(uploads, 1)
-    assert.equal(
-      publishes,
-      2,
-      'MF-only preparation must progress through publish, not public GET alone'
-    )
-    await publishCandidates(options)
-    assert.equal(uploads, 1, 'a ready candidate is verified without uploading it again')
-    corrupt = true
-    await assert.rejects(publishCandidates(options), /public asset bytes differ: transitive.js/)
-    corrupt = false
-    forceConflict = true
-    const beforeConflict = writes
-    await assert.rejects(publishCandidates(options), /association is immutable/)
-    assert.equal(writes, beforeConflict + 1, 'immutable conflicts must not retry')
-    forceConflict = false
-    const beforeInvalid = writes
-    await assert.rejects(
-      checkCandidates({ ...options, provenance: { ...options.provenance, build_id: 'new-run' } }),
-      /saved candidate must belong/
-    )
-    await writeFile(path.join(options.deliveryDirectory, 'source/snapshot.zip'), 'corrupt')
-    await assert.rejects(publishCandidates(options), /saved ZIP digest differs/)
-    assert.equal(writes, beforeInvalid, 'invalid saved candidates must fail before Registry writes')
-    await rm(build, { recursive: true })
-    const historical = await captureCandidates({
-      ...options,
-      deliveryDirectory: path.join(workspace, 'later-run'),
-    })
-    assert.deepEqual(
-      historical.candidates,
-      [],
-      'unrelated builds must not claim to verify historical releases'
-    )
-    await writeFile(path.join(workspace, 'extensions/guidance/package.json'), '{invalid')
-    await assert.rejects(
-      captureCandidates({ ...options, deliveryDirectory: path.join(workspace, 'invalid-run') }),
-      SyntaxError,
-      'only absent package metadata may be skipped, not invalid package metadata'
-    )
+
+    const options = { workspace, repository, sourceRevision, candidate, asset, api, releases: [] }
+    assert.equal(await publishExtension(options), tag)
+    const metadata = JSON.parse(release.body.split('\n')[1])
+    assert.equal(metadata.source_path, '.')
+    assert.deepEqual(metadata.script, transport.script)
+    assert.equal(metadata.manifest_url, undefined)
+    assert.equal(release.assets.length, 1)
+    assert.equal(await publishExtension({ ...options, releases: [release] }), tag)
+    assert.deepEqual(writes, ['draft', 'attach', 'publish'])
   } finally {
-    server.closeAllConnections()
-    await new Promise((resolve) => server.close(resolve))
-    await rm(workspace, { recursive: true })
+    await rm(workspace, { recursive: true, force: true })
   }
 })

@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import {
   configStore,
   ExtensionParticipationModel,
+  listGitHubExtensionReleases,
   PeerOutcomeUnknown,
   type NativeDistribution,
   type Peer,
@@ -11,9 +12,8 @@ import {
   preferredPublishedRelease,
   RegistryReleaseError,
   sortPublishedReleases,
-  type ReleaseRecord,
 } from '@inkcre/extension-runtime-web'
-import { getExtensionHost, getExtensionRegistry } from '@/core'
+import { getExtensionHost, getExtensionRegistry, isCompatibleWithCurrentWebSdk } from '@/core'
 import { selectExtensionPeerVersion } from '@/extension-peer-control'
 import type { ExtensionCardData, useExtensionPeerRuntime } from './use-extension-peer-runtime'
 
@@ -38,6 +38,7 @@ export function useExtensionVersionDialog(options: {
   const distributionModel = ref<NativeDistribution>('module_federation')
   const versionOptions = ref<{ label: string; value: string }[]>([])
   const versionError = ref('')
+  const selectionSource = ref<string | null>(null)
   const distributionOptions = computed(() =>
     selectedPeer.value
       ? runtime.supportedFormats(selectedPeer.value).map((format) => ({
@@ -67,6 +68,9 @@ export function useExtensionVersionDialog(options: {
     const request = ++versionRequest
     const distribution = distributionModel.value
     const peerId = selectedPeer.value?.id
+    const previous = data.participations.find((row) => row.peer_id === peerId)
+    const source = previous?.source_repository ?? null
+    selectionSource.value = source
     versionLoading.value = true
     versionOptions.value = []
     versionError.value = ''
@@ -75,9 +79,7 @@ export function useExtensionVersionDialog(options: {
       versionLoading.value = false
       return
     }
-    const readPublished = async (
-      format: 'python' | 'module_federation'
-    ): Promise<ReleaseRecord[]> => {
+    const readPublished = async (format: 'python' | 'module_federation') => {
       try {
         const catalog = await getExtensionRegistry().getExtension(data.extension.name, format)
         const releases = sortPublishedReleases(catalog.releases ?? [])
@@ -93,18 +95,33 @@ export function useExtensionVersionDialog(options: {
       }
     }
     try {
+      if (source) {
+        const releases = (await listGitHubExtensionReleases(source)).filter(
+          (release) =>
+            release.name === data.extension.name &&
+            release.distribution === distribution &&
+            (peerId !== data.currentPeerId || isCompatibleWithCurrentWebSdk(release))
+        )
+        if (request !== versionRequest) return
+        versionOptions.value = releases.map(({ version }) => ({ label: version, value: version }))
+        const preferred =
+          releases.find(({ version }) => version === previous?.version) ??
+          releases.find(({ version }) => !version.includes('-')) ??
+          releases[0]
+        versionModel.value = preferred?.version ?? ''
+        return
+      }
       const releases = await readPublished(distribution)
       if (request !== versionRequest) return
       versionOptions.value = releases.map((release) => ({
         label: release.version,
         value: release.version,
       }))
-      const previous = data.participations.find(
-        (row) => row.peer_id === peerId && row.distribution === distribution
-      )
-      versionModel.value = versionOptions.value.some((option) => option.value === previous?.version)
-        ? previous!.version
-        : (preferredPublishedRelease(releases)?.version ?? '')
+      versionModel.value =
+        previous?.distribution === distribution &&
+        versionOptions.value.some((option) => option.value === previous.version)
+          ? previous!.version
+          : (preferredPublishedRelease(releases)?.version ?? '')
       if (!releases.length) {
         // On explicit install, show another published native format without implying this Peer supports it.
         const other = distribution === 'python' ? 'module_federation' : 'python'
@@ -123,6 +140,7 @@ export function useExtensionVersionDialog(options: {
     if (!peer || !versionModel.value || versionLoading.value || runtime.busyPeer.value) return
     const distribution = distributionModel.value
     const version = versionModel.value
+    const sourceRepository = selectionSource.value
     const name = data.extension.name
     const meta = { ...configStore.metaConfig }
     const host = getExtensionHost()
@@ -141,6 +159,7 @@ export function useExtensionVersionDialog(options: {
         nickname: data.extension.nickname ?? data.extension.name,
         releases: getExtensionRegistry(),
         version,
+        sourceRepository: sourceRepository ?? undefined,
         distribution,
         peer,
         currentPeerId: data.currentPeerId,
@@ -158,7 +177,8 @@ export function useExtensionVersionDialog(options: {
         if (
           ownsSelection() &&
           observed?.distribution === distribution &&
-          observed.version === version
+          observed.version === version &&
+          (observed.source_repository ?? null) === sourceRepository
         ) {
           versionOpen.value = false
         }
