@@ -1,0 +1,8 @@
+{
+  "name": "inkcre-publish-extension-action",
+  "private": true,
+  "dependencies": {
+    "semver": "7.8.5",
+    "webpack": "5.113.0"
+  }
+}

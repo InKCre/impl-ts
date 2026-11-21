@@ -32,8 +32,8 @@ commit or PR scope is not a substitute for selecting it in the Changeset.
   时，正式流程等其版本提交后再发布。
 - 候选只选择此次 push 新增或升版、且 GitHub 尚无公开 Release 的 MF producer。
   手动恢复的 source SHA 必须是当时的 `main`，候选选择与其父提交比较。
-- 构建选中的包和 Core SDK，校验 MF manifest 与资源。工作流保存原始
-  `module-federation.zip`、SHA-256 和发布计划，由 ZIP 生成同仓的产物提交。
+- 构建选中的包和 Core SDK，校验 MF manifest 与资源。工作流保存该版本的
+  ZIP 或 JS 附件、SHA-256 和发布计划。
 
 The repository must enable **Allow GitHub Actions to create and approve pull requests** for
 Changesets to create its Version PR. GitHub combines these capabilities in one setting; this
@@ -108,19 +108,22 @@ canonical artifact lane publishes it; a local or preview image is qualification 
 be entered as that canonical candidate. Omitting the entry continues to use stable. This admission
 does not move stable, deploy Core or migrate a production database.
 
-## 静态分发与公开 Release
+## 公开 Release
 
-发布工作流在受保护的 `production` 环境执行。它只发布本次候选，从保存的 ZIP 生成
-独立的产物提交，并用同仓的 `inkcre-mf/<namespace>/<name>/v<version>` 标签保留该提交。
-GitHub Release 原有的版本标签仍指向源码提交，可由此查看 producer 的 `docs/user`。
+工作流在受保护的 `production` 环境执行，只发布本次候选。producer 可在
+`package.json` 的 `inkcre.module_federation.format` 选择下列一种形式。
 
-InKCre 官方发行的 `manifest_url` 使用 jsDelivr 按完整 Git commit SHA 提供的静态地址。
-Manifest 的 `publicPath` 使用 `auto`，入口和异步资源从该发行的目录加载。
-流程验证公开 manifest 和入口的跨源响应及字节，再公开同一份 ZIP 和 Release 正文。
-每次只追加本次产物，过去的发行保留自己的精确 URL。其他发布者由自己的仓库发行，
-并自行选择满足[共享契约](../_shared/20-product-tdd/extension-release-and-installation.md)的静态托管。
+- `manifest` 是默认值。从保存的 ZIP 生成独立的产物提交，以同仓
+  `inkcre-mf/<namespace>/<name>/v<version>` 标签保留提交。jsDelivr 按完整 SHA
+  提供静态文件。Manifest 的 `publicPath` 使用 `auto`，由宿主按需加载该目录里的资源。
+- `script` 把原生 MF 容器及构建资源打进 `module-federation.js`。发布者仓库、插件名
+  和版本决定该附件注册的全局名。宿主按 Release 描述加载这一个附件。
 
-首次启用仓库发现时给两个发布者仓库添加 `inkcre-extension` Topic。
+两种形式的 Release tag 都指向源码提交，用户文档位于 producer 的 `docs/user/`。
+发布工具在公开发行前核对附件摘要，多文件路径还会验证静态 manifest 与入口。
+
+独立仓库使用同一组打包和发布逻辑，入口见 [Publish a Web Extension](https://inkcre.dev/developer/ecosystem/publish-web-extension)。
+开启搜索发现时为各发布者仓库添加 `inkcre-extension` Topic。
 
 失败时在原 run 上使用 **Re-run failed jobs**，从同一个 GitHub Actions 附件恢复候选。
 候选保留 90 天。公开后的修订需要 producer 升版。

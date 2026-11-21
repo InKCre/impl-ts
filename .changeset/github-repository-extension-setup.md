@@ -8,3 +8,5 @@
 ---
 
 Resolve repository-backed Extension selections, use the matching Python repository during first-party setup, and publish Mail with its repository-based documentation.
+
+Support both manifest and single-script Module Federation releases from a publisher repository.

@@ -135,10 +135,14 @@ jobs:
       - name: 验证 B 站收藏采集规则
         run: pnpm --filter @inkcre/ext-bilibili test
 
+      - name: Install the locked Extension publishing tools
+        run: npm ci --prefix .github/actions/publish-extension --ignore-scripts
+
       - name: Verify independent MF publication
         run: >-
           node --test scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs
           scripts/tests/independent-extension-release.test.mjs
+          scripts/extension-release/pack-classic.test.mjs
           scripts/tests/release-checkout.test.mjs
           scripts/tests/core-sdk-compatibility.test.mjs
           scripts/tests/pages-preview.test.mjs

@@ -19,6 +19,7 @@ const GitHubReleaseSchema = z.object({
   tag_name: z.string(),
   body: z.string().nullable().optional(),
   draft: z.boolean(),
+  assets: z.unknown().optional(),
 })
 
 const GitHubDescriptorSchema = z.object({
@@ -33,6 +34,20 @@ const GitHubDescriptorSchema = z.object({
   host_sdk_version: z.string().refine((range) => validRange(range) !== null),
   manifest_url: z.url({ protocol: /^https?$/ }).optional(),
 })
+const GitHubWebDescriptorSchema = GitHubDescriptorSchema.extend({
+  script: z
+    .object({
+      asset_name: z.string().regex(/^[^/\\\r\n]+\.js$/),
+      global_name: z.string().regex(/^[A-Za-z_$][A-Za-z0-9_$]*$/),
+    })
+    .optional(),
+})
+const GitHubReleaseAssetSchema = z.object({
+  name: z.string(),
+  browser_download_url: z.string(),
+})
+
+type GitHubWebEntry = { manifest_url: string } | { script: { url: string; global_name: string } }
 
 export type GitHubExtensionDistribution = 'python' | 'module_federation'
 export interface GitHubExtensionRelease {
@@ -42,6 +57,7 @@ export interface GitHubExtensionRelease {
   version: string
   distribution: GitHubExtensionDistribution
   descriptor: z.infer<typeof GitHubDescriptorSchema>
+  webEntry?: GitHubWebEntry
 }
 
 function repositoryApi(repository: string): string {
@@ -57,6 +73,37 @@ async function githubRequest(url: string): Promise<Response> {
   return response
 }
 
+function readWebEntry(
+  repository: string,
+  release: z.infer<typeof GitHubReleaseSchema>,
+  descriptor: z.infer<typeof GitHubWebDescriptorSchema>
+): GitHubWebEntry | null {
+  const { manifest_url, script } = descriptor
+  if (manifest_url) return script ? null : { manifest_url }
+  if (!script) return null
+
+  const assets = GitHubReleaseAssetSchema.array().optional().parse(release.assets)
+  const [asset, duplicate] = assets?.filter(({ name }) => name === script.asset_name) ?? []
+  if (!asset || duplicate) return null
+
+  const source = new URL(repository)
+  const url = new URL(asset.browser_download_url)
+  const pathname = decodeURIComponent(url.pathname)
+  if (
+    url.origin !== source.origin ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    pathname.slice(0, source.pathname.length).toLowerCase() !== source.pathname.toLowerCase() ||
+    pathname.slice(source.pathname.length) !==
+      `/releases/download/${release.tag_name}/${script.asset_name}`
+  )
+    return null
+
+  return { script: { url: url.href, global_name: script.global_name } }
+}
+
 function readRelease(
   repository: string,
   release: z.infer<typeof GitHubReleaseSchema>
@@ -66,22 +113,23 @@ function readRelease(
   if (release.draft || !coordinate || !content) return null
 
   try {
-    const descriptor = GitHubDescriptorSchema.parse(JSON.parse(content))
     const distribution = coordinate[2] as GitHubExtensionDistribution
-    const host = distribution === 'python' ? 'core-py' : '@inkcre/core'
-    if (
-      descriptor.host_sdk !== host ||
-      (distribution === 'module_federation' && !descriptor.manifest_url)
-    )
-      return null
-    return {
+    const rawDescriptor: unknown = JSON.parse(content)
+    const selection = {
       repository,
       tag: release.tag_name,
       name: ExtensionNameSchema.parse(coordinate[1]),
       version: ExtensionVersionSchema.parse(coordinate[3]),
       distribution,
-      descriptor,
     }
+    if (distribution === 'module_federation') {
+      const descriptor = GitHubWebDescriptorSchema.parse(rawDescriptor)
+      if (descriptor.host_sdk !== '@inkcre/core') return null
+      const webEntry = readWebEntry(repository, release, descriptor)
+      return webEntry ? { ...selection, descriptor, webEntry } : null
+    }
+    const descriptor = GitHubDescriptorSchema.parse(rawDescriptor)
+    return descriptor.host_sdk === 'core-py' ? { ...selection, descriptor } : null
   } catch {
     return null
   }

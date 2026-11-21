@@ -196,7 +196,7 @@ export function initializeExtensionHost(): AppExtensionManager {
           'module_federation',
           version
         )
-        if (!release.descriptor.manifest_url || !isCompatibleWithCurrentWebSdk(release))
+        if (!release.webEntry || !isCompatibleWithCurrentWebSdk(release))
           throw new HostSdkCompatibilityError(
             `Release ${name}@${version} does not support this Web Host SDK.`
           )
@@ -209,7 +209,7 @@ export function initializeExtensionHost(): AppExtensionManager {
           module_federation: {
             host_sdk: '@inkcre/core',
             host_sdk_version: release.descriptor.host_sdk_version,
-            manifest_url: release.descriptor.manifest_url,
+            ...release.webEntry,
           },
         }
       },

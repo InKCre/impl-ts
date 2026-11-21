@@ -4,12 +4,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
+import { captureCandidates, selectSavedCandidate } from './publish-first-party-extensions.mjs'
+import { publishArtifact, publishExtension } from './extension-release/publish.mjs'
 import {
-  captureCandidates,
-  publishArtifact,
-  selectSavedCandidate,
-} from './publish-first-party-extensions.mjs'
-import { ARCHIVE_NAME } from './prepare-repository-extension.mjs'
+  ARCHIVE_NAME,
+  artifactDigest,
+  releaseTransport,
+  repositoryReleaseBody,
+} from './prepare-repository-extension.mjs'
 
 void test('a rerun cannot replace a missing or expired release candidate', () => {
   const candidate = { id: 42, name: 'first-party-extension-candidate', expired: false }
@@ -104,6 +106,7 @@ void test('the saved ZIP recreates its artifact commit and later publishes prese
         remote,
         fetchImplementation,
         candidate: plan.candidates[0],
+        asset: path.join(deliveryDirectory, 'mail', ARCHIVE_NAME),
       }
     }
 
@@ -158,12 +161,95 @@ void test('the saved ZIP recreates its artifact commit and later publishes prese
     )
     const bytes = await readFile(archive)
     await writeFile(archive, 'incorrect archive')
-    await assert.rejects(publishArtifact(current), /saved ZIP digest differs/)
+    await assert.rejects(publishArtifact(current), /saved artifact digest differs/)
     await writeFile(archive, bytes)
 
     const conflict = await saveVersion('0.4.1', '0.4.0', 'different-candidate')
     await assert.rejects(publishArtifact(conflict), /failed to push some refs/)
     assert.equal(remoteGit('rev-parse', artifactTag('0.4.1')), currentCommit)
+  } finally {
+    await rm(workspace, { recursive: true, force: true })
+  }
+})
+
+void test('a publisher script release uploads one JavaScript asset without pushing a separate Git tag', async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-classic-publication-'))
+  const repository = 'external/extension'
+  const sourceRevision = 'a'.repeat(40)
+  const sdk = { host_sdk: '@inkcre/core', host_sdk_version: '^0.4.0' }
+  const candidate = {
+    name: 'external/fixture',
+    version: '1.0.0',
+    source_path: '.',
+    format: 'script',
+  }
+  const base = 'repos/' + repository + '/releases'
+  const tag = 'inkcre-ext/external/fixture/module_federation/v1.0.0'
+  const tagSuffix = '/tags/' + encodeURIComponent(tag)
+  const release = {
+    id: 1,
+    tag_name: tag,
+    draft: true,
+    target_commitish: sourceRevision,
+    assets: [],
+  }
+  const writes = []
+  try {
+    await writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        version: candidate.version,
+        inkcre: { name: candidate.name, module_federation: sdk },
+      })
+    )
+    const transport = await releaseTransport({ repository, ...candidate })
+    candidate.asset_name = transport.script.asset_name
+    candidate.body = repositoryReleaseBody('.', { module_federation: sdk }, transport)
+    const asset = path.join(workspace, candidate.asset_name)
+    await writeFile(asset, 'var ' + transport.script.global_name + ' = { init() {}, get() {} };')
+    candidate.digest = await artifactDigest(asset)
+
+    function api(endpoint, args = []) {
+      switch (endpoint) {
+        case 'repos/' + repository + '/git/matching-refs' + tagSuffix:
+          return []
+        case 'repos/' + repository + '/git/ref' + tagSuffix:
+          return { object: { sha: sourceRevision } }
+        case base + tagSuffix:
+          return release
+        case base:
+          assert.ok(args.includes('target_commitish=' + sourceRevision))
+          assert.ok(args.includes('draft=true'))
+          assert.ok(args.includes('tag_name=' + tag))
+          release.body = args.find((arg) => arg.startsWith('body=')).slice(5)
+          writes.push('draft')
+          return release
+        case 'https://uploads.github.com/' + base + '/1/assets?name=module-federation.js':
+          assert.ok(args.includes('Content-Type: text/javascript'))
+          assert.equal(args[args.indexOf('--input') + 1], asset)
+          release.assets.push({ name: candidate.asset_name, digest: candidate.digest })
+          writes.push('attach')
+          return release.assets[0]
+        case base + '/1':
+          if (args.includes('draft=false')) {
+            release.draft = false
+            writes.push('publish')
+          }
+          return release
+        default:
+          throw new Error('unexpected GitHub API path ' + endpoint)
+      }
+    }
+
+    const options = { workspace, repository, sourceRevision, candidate, asset, api, releases: [] }
+    assert.equal(await publishExtension(options), tag)
+    const metadata = JSON.parse(release.body.split('\n')[1])
+    assert.equal(metadata.source_path, '.')
+    assert.deepEqual(metadata.script, transport.script)
+    assert.equal(metadata.manifest_url, undefined)
+    assert.equal(release.assets.length, 1)
+    assert.equal(await publishExtension({ ...options, releases: [release] }), tag)
+    assert.deepEqual(writes, ['draft', 'attach', 'publish'])
   } finally {
     await rm(workspace, { recursive: true, force: true })
   }

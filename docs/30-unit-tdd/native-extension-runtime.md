@@ -48,8 +48,10 @@ Before fetching executable bytes, the Host reads the exact Release, requires an 
 Federation distribution, requires `host_sdk === '@inkcre/core'`, and verifies that its strict local
 SDK version satisfies the Release range. Installation requires a published Release; an already
 installed exact yanked Release may start with a warning, while other non-executable states fail.
-The Host passes the native manifest URL from the GitHub Release description or Registry association
-directly to the Module Federation implementation.
+The Host passes a native manifest URL directly to Module Federation. A repository Release can
+instead select one classic script attachment. The App resolves its URL from the exact Release's
+attachments and supplies the declared global container name to the same runtime. Both formats
+use the same SDK check, lifecycle, and Peer participation.
 
 ## Durable State and Peer Intent
 
