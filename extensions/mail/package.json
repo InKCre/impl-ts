@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@inkcre/core": "workspace:*",
-    "dompurify": "^3.4.17"
+    "dompurify": "^3.4.18"
   },
   "devDependencies": {
     "@inkcre/ext-dev-utils": "workspace:*",
