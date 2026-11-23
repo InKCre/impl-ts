@@ -13,7 +13,7 @@ const GITHUB_REPOSITORY_PATTERN =
 export function normalizeExtensionSourceRepository(value: string): string {
   const match = GITHUB_REPOSITORY_PATTERN.exec(value.trim())
   if (!match || match[2] === '.' || match[2] === '..')
-    throw new Error('Enter a GitHub repository URL such as https://github.com/InKCre/impl-ts.')
+    throw new Error('Enter a GitHub repository URL such as https://github.com/owner/repository.')
   return `https://github.com/${match[1]}/${match[2]}`
 }
 

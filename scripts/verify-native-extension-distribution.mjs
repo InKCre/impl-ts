@@ -12,6 +12,17 @@ import {
 const PRODUCTION_BROWSER_ORIGIN = 'https://app.inkcre.dev'
 const EXTENSION_NAME_PATTERN =
   /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
+const GITHUB_REPOSITORY_PATTERN =
+  /^https:\/\/github\.com\/([a-z0-9][a-z0-9-]*)\/([a-z0-9_.-]+?)(?:\.git)?\/?$/i
+
+function normalizePythonRepository(value) {
+  const match = typeof value === 'string' && GITHUB_REPOSITORY_PATTERN.exec(value.trim())
+  assert.ok(
+    match && match[2] !== '.' && match[2] !== '..',
+    'python_repository must be an HTTPS GitHub repository URL'
+  )
+  return `https://github.com/${match[1]}/${match[2]}`
+}
 
 function assertSafeRelativePath(value, label) {
   assert.equal(typeof value, 'string', `${label} must be a string`)
@@ -113,6 +124,9 @@ export function readAssociation(extensionPackage, corePackage) {
       host_sdk: distribution.host_sdk,
       host_sdk_version: distribution.host_sdk_version,
     },
+    ...(distribution.python_repository === undefined
+      ? {}
+      : { python_repository: normalizePythonRepository(distribution.python_repository) }),
   }
 }
 

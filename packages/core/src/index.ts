@@ -38,7 +38,6 @@ export {
   type ExtensionModelInstallInput,
   ExtensionRegistryOriginResolver,
   DEFAULT_EXTENSION_REGISTRY_ORIGIN,
-  FIRST_PARTY_EXTENSION_REPOSITORIES,
   getGitHubExtensionDocumentation,
   getGitHubExtensionRelease,
   getGitHubPythonSetupRelease,

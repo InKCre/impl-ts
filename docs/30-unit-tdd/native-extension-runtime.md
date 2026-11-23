@@ -74,8 +74,8 @@ The consumer sends each mutation once to its exact target and preserves unknown 
 not retry mutations on another Peer. Configuration forms identify the selected Peer/distribution/
 version that provided their schema; shared configuration has no global last-started schema.
 
-The Extensions view finds marked GitHub releases from a repository URL, topic search, or the
-first-party repositories. Discovery groups distributions by Extension name. Installation links
+The Extensions view finds GitHub releases through topic search and a repository URL. Within a
+repository, discovery groups distributions by Extension name. Installation links
 carry an Extension name, distribution, and exact version. GitHub installation links also carry
 `source_repository`. The App verifies the exact release before presenting the Peer choice and
 persists the selection on confirmation. Startup reads current-Peer enabled selections by exact
@@ -88,8 +88,9 @@ configuration, authorization state, Sources or info-base content. Another Peer's
 ## Documentation and Connection Setup
 
 `inkcre/caldav` 的 Web setup contribution 按选定 Python Peer 的实际运行状态准备连接。
-首次选择 Python 发行且 Web 发行来自 GitHub 时，按同一插件名从对应仓库选择 Python 发行。
-官方 Web 发行匹配 `InKCre/impl-py`。旧 Registry 安装继续使用该 Peer 的 Registry。
+首次选择 Python 发行且 Web 发行来自 GitHub 时，读取已选 Web Release 的 `python_repository`，
+缺省用该 Web Release 所在仓库。在对应仓库按同一插件名选择公开的 Python 发行。
+旧 Registry 安装继续使用该 Peer 的 Registry。
 安装返回重启状态后停止后续写入，
 要求刷新观察原目标。已有密码保持不变，缺失时才使用浏览器密码学随机数生成专用密码。
 Registry 路径只接受目标 Peer override 或共享部署 Registry。Python override 可以是

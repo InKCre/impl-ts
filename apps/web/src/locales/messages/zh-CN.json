@@ -197,7 +197,6 @@
     "repositoryUrl": "仓库 URL",
     "repository": "仓库",
     "loadReleases": "读取发行版本",
-    "officialRepositories": "官方扩展",
     "searchRepositories": "按 GitHub 主题发现",
     "noRepositories": "未找到标记了 inkcre-extension 主题的仓库。",
     "noRepositoryReleases": "未找到 InKCre 扩展发行版本。",

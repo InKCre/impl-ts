@@ -121,6 +121,8 @@ does not move stable, deploy Core or migrate a production database.
 
 两种形式的 Release tag 都指向源码提交，用户文档位于 producer 的 `docs/user/`。
 发布工具在公开发行前核对附件摘要，多文件路径还会验证静态 manifest 与入口。
+Web 设置需要安装异仓的 Python 分发时，producer 通过 `inkcre.module_federation.python_repository`
+在 Release 中声明目标仓库。要让设置入口首次上线即可使用，先发布兼容的 Python 分发。
 
 独立仓库使用同一组打包和发布逻辑，入口见 [Publish a Web Extension](https://inkcre.dev/developer/ecosystem/publish-web-extension)。
 开启搜索发现时为各发布者仓库添加 `inkcre-extension` Topic。

@@ -28,7 +28,6 @@ export {
 } from './registry-origin'
 
 export {
-  FIRST_PARTY_EXTENSION_REPOSITORIES,
   getGitHubExtensionDocumentation,
   getGitHubExtensionRelease,
   getGitHubPythonSetupRelease,

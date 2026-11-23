@@ -10,10 +10,6 @@ import {
 const releaseTag = /^inkcre-ext\/([^/]+\/[^/]+)\/(python|module_federation)\/v([^/]+)$/
 const descriptorComment = /<!-- inkcre-release\r?\n([\s\S]*?)\r?\n-->/
 const apiOrigin = 'https://api.github.com'
-export const FIRST_PARTY_EXTENSION_REPOSITORIES = {
-  python: 'https://github.com/InKCre/impl-py',
-  module_federation: 'https://github.com/InKCre/impl-ts',
-} as const
 
 const GitHubReleaseSchema = z.object({
   tag_name: z.string(),
@@ -35,6 +31,7 @@ const GitHubDescriptorSchema = z.object({
   manifest_url: z.url({ protocol: /^https?$/ }).optional(),
 })
 const GitHubWebDescriptorSchema = GitHubDescriptorSchema.extend({
+  python_repository: z.string().transform(normalizeExtensionSourceRepository).optional(),
   script: z
     .object({
       asset_name: z.string().regex(/^[^/\\\r\n]+\.js$/),
@@ -56,7 +53,7 @@ export interface GitHubExtensionRelease {
   name: string
   version: string
   distribution: GitHubExtensionDistribution
-  descriptor: z.infer<typeof GitHubDescriptorSchema>
+  descriptor: z.infer<typeof GitHubWebDescriptorSchema>
   webEntry?: GitHubWebEntry
 }
 
@@ -168,18 +165,20 @@ export async function getGitHubPythonSetupRelease(
   webPeerId: string
 ): Promise<GitHubExtensionRelease | null> {
   const webSelection = await ExtensionParticipationModel.get(webPeerId, name)
-  const source = webSelection?.source_repository
-  if (!source) return null
-  const firstParty =
-    source.toLowerCase() === FIRST_PARTY_EXTENSION_REPOSITORIES.module_federation.toLowerCase()
-  const repository = firstParty ? FIRST_PARTY_EXTENSION_REPOSITORIES.python : source
+  if (!webSelection?.source_repository) return null
+  const source = webSelection.source_repository
+  const webRelease = await getGitHubExtensionRelease(
+    source,
+    name,
+    'module_federation',
+    webSelection.version
+  )
+  const repository = webRelease.descriptor.python_repository ?? source
   const release = (await listGitHubExtensionReleases(repository)).find(
     (candidate) => candidate.name === name && candidate.distribution === 'python'
   )
-  // First-party Python and Web producers may publish at different times during the Registry transition.
-  if (!release && !firstParty)
-    throw new Error(`No published Python release for ${name} in ${repository}.`)
-  return release ?? null
+  if (!release) throw new Error(`No published Python release for ${name} in ${repository}.`)
+  return release
 }
 
 export async function getGitHubExtensionRelease(

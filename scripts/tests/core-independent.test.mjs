@@ -110,6 +110,74 @@ void test('packed SDK works without UI, source aliases, startup or selected App 
   }
 })
 
+void test('Python setup follows the selected Web release and the same rule for any publisher', async (t) => {
+  const { ExtensionParticipationModel, getGitHubPythonSetupRelease } =
+    await import('../../packages/core/dist/index.js')
+  const name = 'example/mail'
+  const version = '0.5.0'
+  const peer = 'web-peer'
+  const webRepository = 'https://github.com/example/mail-web'
+  const pythonRepository = 'https://github.com/another-owner/mail-python'
+  const webTag = `inkcre-ext/${name}/module_federation/v${version}`
+  const webEndpoint = `https://api.github.com/repos/example/mail-web/releases/tags/${encodeURIComponent(webTag)}`
+  const pythonEndpoint =
+    'https://api.github.com/repos/another-owner/mail-python/releases?per_page=100'
+  const sameRepoEndpoint = 'https://api.github.com/repos/example/mail-web/releases?per_page=100'
+  const makeRelease = (tag_name, host_sdk, metadata = {}) => ({
+    draft: false,
+    tag_name,
+    body: `<!-- inkcre-release\n${JSON.stringify({
+      schema_version: 1,
+      source_path: '.',
+      host_sdk,
+      host_sdk_version: '^0.4.0',
+      ...metadata,
+    })}\n-->`,
+  })
+  const pythonRelease = makeRelease(`inkcre-ext/${name}/python/v0.4.0`, 'core-py')
+  const unrelatedRelease = makeRelease('inkcre-ext/example/other/python/v0.9.0', 'core-py')
+  const calls = []
+  let sourceRepository = webRepository
+  let declaredRepository = pythonRepository
+  let hasCounterpart = true
+  t.mock.method(ExtensionParticipationModel, 'get', async (peerId, extensionName) => {
+    assert.equal(peerId, peer)
+    assert.equal(extensionName, name)
+    return { version, source_repository: sourceRepository }
+  })
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(url)
+    if (url === webEndpoint) {
+      return Response.json(
+        makeRelease(webTag, '@inkcre/core', {
+          manifest_url: 'https://assets.example/mail/mf-manifest.json',
+          python_repository: declaredRepository,
+        })
+      )
+    }
+    assert.ok([pythonEndpoint, sameRepoEndpoint].includes(url), url)
+    return Response.json(hasCounterpart ? [unrelatedRelease, pythonRelease] : [unrelatedRelease])
+  })
+
+  const external = await getGitHubPythonSetupRelease(name, peer)
+  assert.equal(external.repository, pythonRepository)
+  assert.equal(external.name, name)
+  assert.equal(external.version, '0.4.0')
+  assert.deepEqual(calls.splice(0), [webEndpoint, pythonEndpoint])
+
+  declaredRepository = undefined
+  assert.equal((await getGitHubPythonSetupRelease(name, peer)).repository, webRepository)
+  assert.deepEqual(calls.splice(0), [webEndpoint, sameRepoEndpoint])
+
+  hasCounterpart = false
+  await assert.rejects(() => getGitHubPythonSetupRelease(name, peer), /No published Python release/)
+  assert.deepEqual(calls.splice(0), [webEndpoint, sameRepoEndpoint])
+
+  sourceRepository = null
+  assert.equal(await getGitHubPythonSetupRelease(name, peer), null)
+  assert.deepEqual(calls, [])
+})
+
 void test('GitHub discovery and exact lookup resolve both Web release entry formats', async (t) => {
   const { getGitHubExtensionRelease, listGitHubExtensionReleases, supportsGitHubExtensionSdk } =
     await import('../../packages/core/dist/index.js')

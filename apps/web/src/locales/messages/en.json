@@ -197,7 +197,6 @@
     "repositoryUrl": "Repository URL",
     "repository": "Repository",
     "loadReleases": "Load releases",
-    "officialRepositories": "First-party extensions",
     "searchRepositories": "Find via GitHub topic",
     "noRepositories": "No repositories found with the inkcre-extension topic.",
     "noRepositoryReleases": "No InKCre extension releases found.",

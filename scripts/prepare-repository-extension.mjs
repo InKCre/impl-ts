@@ -34,6 +34,7 @@ export function repositoryReleaseBody(sourcePath, local, transport) {
       schema_version: 1,
       source_path: sourcePath,
       ...local.module_federation,
+      python_repository: local.python_repository,
       ...transport,
     }),
     '-->',

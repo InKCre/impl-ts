@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { InkButton, InkDropdown, InkForm, InkInput } from '@inkcre/ui-web'
 import {
-  FIRST_PARTY_EXTENSION_REPOSITORIES,
   listGitHubExtensionReleases,
   searchGitHubExtensionRepositories,
   type GitHubExtensionRelease,
@@ -12,7 +11,6 @@ import {
 
 const { t } = useI18n()
 const router = useRouter()
-const officialRepositories = Object.values(FIRST_PARTY_EXTENSION_REPOSITORIES)
 const repositoryUrl = ref('')
 const repositories = ref<string[]>([])
 const repositoryOptions = computed(() =>
@@ -32,16 +30,12 @@ const extensionReleases = computed(() =>
 const releaseOptions = computed(() =>
   extensionReleases.value.map((release) => ({
     label: `v${release.version} · ${t(release.distribution === 'python' ? 'extension.hostCore' : 'extension.hostWeb')}`,
-    value: idFor(release),
+    value: release.tag,
   }))
 )
 const pending = ref(false)
 const message = ref('')
 const error = ref('')
-
-function idFor(release: GitHubExtensionRelease): string {
-  return `${release.repository}/${release.tag}`
-}
 
 async function browse(request: () => Promise<void>): Promise<void> {
   if (pending.value) return
@@ -60,9 +54,9 @@ async function browse(request: () => Promise<void>): Promise<void> {
   }
 }
 
-async function listReleases(sources: string[]): Promise<void> {
+async function listReleases(repository: string): Promise<void> {
   await browse(async () => {
-    releases.value = (await Promise.all(sources.map(listGitHubExtensionReleases))).flat()
+    releases.value = await listGitHubExtensionReleases(repository)
     chooseExtension(extensionOptions.value[0]?.value ?? '')
     if (!releases.value.length) message.value = t('extension.noRepositoryReleases')
   })
@@ -81,16 +75,16 @@ function chooseExtension(name: string | number): void {
   const preferred =
     extensionReleases.value.find(({ version }) => !version.includes('-')) ??
     extensionReleases.value[0]
-  releaseId.value = preferred ? idFor(preferred) : ''
+  releaseId.value = preferred?.tag ?? ''
 }
 
 async function chooseRepository(value: string | number): Promise<void> {
   repositoryUrl.value = String(value)
-  await listReleases([repositoryUrl.value])
+  await listReleases(repositoryUrl.value)
 }
 
 function continueToInstall(): void {
-  const release = releases.value.find((item) => idFor(item) === releaseId.value)
+  const release = releases.value.find((item) => item.tag === releaseId.value)
   if (!release) return
   void router.push({
     path: '/extensions',
@@ -106,7 +100,7 @@ function continueToInstall(): void {
 
 <template>
   <h2>{{ t('extension.browseRepositories') }}</h2>
-  <InkForm layout="col" @submit="listReleases([repositoryUrl])">
+  <InkForm layout="col" @submit="listReleases(repositoryUrl)">
     <InkInput
       v-model="repositoryUrl"
       :label="t('extension.repositoryUrl')"
@@ -118,11 +112,6 @@ function continueToInstall(): void {
         native-type="submit"
         :text="t('extension.loadReleases')"
         :disabled="pending || !repositoryUrl.trim()"
-      />
-      <InkButton
-        :text="t('extension.officialRepositories')"
-        :disabled="pending"
-        @click="listReleases(officialRepositories)"
       />
       <InkButton
         :text="t('extension.searchRepositories')"

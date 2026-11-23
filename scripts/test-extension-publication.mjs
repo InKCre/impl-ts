@@ -6,12 +6,12 @@ import path from 'node:path'
 import { test } from 'node:test'
 import { captureCandidates, selectSavedCandidate } from './publish-first-party-extensions.mjs'
 import { publishArtifact, publishExtension } from './extension-release/publish.mjs'
+import { ARCHIVE_NAME, prepareExtension } from './prepare-repository-extension.mjs'
 import {
-  ARCHIVE_NAME,
-  artifactDigest,
-  releaseTransport,
-  repositoryReleaseBody,
-} from './prepare-repository-extension.mjs'
+  prepareBody,
+  previewRelease,
+  readAssociation,
+} from './verify-native-extension-distribution.mjs'
 
 void test('a rerun cannot replace a missing or expired release candidate', () => {
   const candidate = { id: 42, name: 'first-party-extension-candidate', expired: false }
@@ -79,7 +79,11 @@ void test('the saved ZIP recreates its artifact commit and later publishes prese
       )
     }
 
-    async function saveVersion(version, previousVersion, servedVersion = version) {
+    async function saveVersion(
+      version,
+      previousVersion,
+      { servedVersion = version, pythonRepository } = {}
+    ) {
       const deliveryDirectory = await mkdtemp(path.join(workspace, 'candidate-'))
       await writeJson(path.join(extension, 'package.json'), {
         name: '@inkcre/ext-mail',
@@ -87,7 +91,11 @@ void test('the saved ZIP recreates its artifact commit and later publishes prese
         inkcre: {
           name: 'inkcre/mail',
           nickname: 'Mail',
-          module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '^0.4.0' },
+          module_federation: {
+            host_sdk: '@inkcre/core',
+            host_sdk_version: '^0.4.0',
+            python_repository: pythonRepository,
+          },
         },
       })
       await writeFile(path.join(build, 'remoteEntry.js'), 'export default "' + servedVersion + '"')
@@ -111,12 +119,16 @@ void test('the saved ZIP recreates its artifact commit and later publishes prese
     }
 
     const previous = await saveVersion('0.4.0', '0.3.0')
+    assert.ok(
+      !Object.hasOwn(JSON.parse(previous.candidate.body.split('\n')[1]), 'python_repository')
+    )
     await publishArtifact(previous)
     const previousCommit = remoteGit('rev-parse', artifactTag('0.4.0'))
     assert.equal(previousCommit, previous.candidate.artifact_commit)
     assert.equal(remoteGit('rev-list', '--count', previousCommit), '1')
 
-    const current = await saveVersion('0.4.1', '0.4.0')
+    const pythonRepository = ' HTTPS://GITHUB.COM/PartnerOrg/PythonKit.git/ '
+    const current = await saveVersion('0.4.1', '0.4.0', { pythonRepository })
     const candidate = current.candidate
     const archive = path.join(current.deliveryDirectory, 'mail', ARCHIVE_NAME)
     const descriptor = JSON.parse(candidate.body.split('\n')[1])
@@ -127,6 +139,7 @@ void test('the saved ZIP recreates its artifact commit and later publishes prese
         '/mf-manifest.json'
     )
     assert.equal(descriptor.source_path, 'extensions/mail')
+    assert.equal(descriptor.python_repository, 'https://github.com/PartnerOrg/PythonKit')
     await writeFile(path.join(build, 'remoteEntry.js'), 'source build changed after capture')
 
     await publishArtifact(current)
@@ -164,7 +177,10 @@ void test('the saved ZIP recreates its artifact commit and later publishes prese
     await assert.rejects(publishArtifact(current), /saved artifact digest differs/)
     await writeFile(archive, bytes)
 
-    const conflict = await saveVersion('0.4.1', '0.4.0', 'different-candidate')
+    const conflict = await saveVersion('0.4.1', '0.4.0', {
+      servedVersion: 'different-candidate',
+      pythonRepository,
+    })
     await assert.rejects(publishArtifact(conflict), /failed to push some refs/)
     assert.equal(remoteGit('rev-parse', artifactTag('0.4.1')), currentCommit)
   } finally {
@@ -176,12 +192,17 @@ void test('a publisher script release uploads one JavaScript asset without pushi
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-classic-publication-'))
   const repository = 'external/extension'
   const sourceRevision = 'a'.repeat(40)
-  const sdk = { host_sdk: '@inkcre/core', host_sdk_version: '^0.4.0' }
-  const candidate = {
-    name: 'external/fixture',
+  const pythonRepository = 'https://github.com/external/python'
+  const extensionPackage = {
     version: '1.0.0',
-    source_path: '.',
-    format: 'script',
+    inkcre: {
+      name: 'external/fixture',
+      module_federation: {
+        host_sdk: '@inkcre/core',
+        host_sdk_version: '^0.4.0',
+        python_repository: pythonRepository,
+      },
+    },
   }
   const base = 'repos/' + repository + '/releases'
   const tag = 'inkcre-ext/external/fixture/module_federation/v1.0.0'
@@ -195,19 +216,39 @@ void test('a publisher script release uploads one JavaScript asset without pushi
   }
   const writes = []
   try {
+    const packagePath = path.join(workspace, 'package.json')
+    const artifactDirectory = path.join(workspace, 'build')
+    await mkdir(artifactDirectory)
+    await writeFile(packagePath, JSON.stringify(extensionPackage))
     await writeFile(
-      path.join(workspace, 'package.json'),
+      path.join(artifactDirectory, 'mf-manifest.json'),
       JSON.stringify({
-        version: candidate.version,
-        inkcre: { name: candidate.name, module_federation: sdk },
+        metaData: { publicPath: './', remoteEntry: { type: 'module', name: 'remoteEntry.js' } },
+        shared: [{ name: '@inkcre/core', requiredVersion: '^0.4.0' }],
       })
     )
-    const transport = await releaseTransport({ repository, ...candidate })
-    candidate.asset_name = transport.script.asset_name
-    candidate.body = repositoryReleaseBody('.', { module_federation: sdk }, transport)
-    const asset = path.join(workspace, candidate.asset_name)
-    await writeFile(asset, 'var ' + transport.script.global_name + ' = { init() {}, get() {} };')
-    candidate.digest = await artifactDigest(asset)
+    await writeFile(
+      path.join(artifactDirectory, 'remoteEntry.js'),
+      'export function init() {} export function get() { return () => 42; }'
+    )
+    const { candidate, asset } = await prepareExtension({
+      workspace,
+      packagePath,
+      artifactDirectory,
+      output: path.join(workspace, 'output'),
+      repository,
+      sourceRevision,
+      format: 'script',
+    })
+    const association = readAssociation(extensionPackage)
+    assert.equal(previewRelease(association).module_federation.python_repository, undefined)
+    assert.equal(
+      prepareBody(association, {
+        source_repository: 'https://github.com/' + repository,
+        source_revision: sourceRevision,
+      }).module_federation.python_repository,
+      undefined
+    )
 
     function api(endpoint, args = []) {
       switch (endpoint) {
@@ -245,7 +286,9 @@ void test('a publisher script release uploads one JavaScript asset without pushi
     assert.equal(await publishExtension(options), tag)
     const metadata = JSON.parse(release.body.split('\n')[1])
     assert.equal(metadata.source_path, '.')
-    assert.deepEqual(metadata.script, transport.script)
+    assert.equal(metadata.python_repository, pythonRepository)
+    assert.equal(metadata.script.asset_name, 'module-federation.js')
+    assert.match(metadata.script.global_name, /^inkcre_mf_[a-f0-9]+$/)
     assert.equal(metadata.manifest_url, undefined)
     assert.equal(release.assets.length, 1)
     assert.equal(await publishExtension({ ...options, releases: [release] }), tag)
