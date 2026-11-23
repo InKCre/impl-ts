@@ -179,8 +179,12 @@ void test('Python setup follows the selected Web release and the same rule for a
 })
 
 void test('GitHub discovery and exact lookup resolve both Web release entry formats', async (t) => {
-  const { getGitHubExtensionRelease, listGitHubExtensionReleases, supportsGitHubExtensionSdk } =
-    await import('../../packages/core/dist/index.js')
+  const {
+    getGitHubExtensionDocumentation,
+    getGitHubExtensionRelease,
+    listGitHubExtensionReleases,
+    supportsGitHubExtensionSdk,
+  } = await import('../../packages/core/dist/index.js')
   const repository = 'https://github.com/InKCre/example'
   const api = 'https://api.github.com/repos/InKCre/example/releases'
   const tag = 'inkcre-ext/example/mail/module_federation/v0.5.0'
@@ -188,8 +192,11 @@ void test('GitHub discovery and exact lookup resolve both Web release entry form
   const manifestTag = 'inkcre-ext/example/mail/module_federation/v0.4.0'
   const asset_name = 'remoteEntry.js'
   const global_name = 'inkcre_example_mail_0_5_0'
-  const assetUrl = `https://github.com/inkcre/Example/releases/download/${encodeURIComponent(tag)}/${asset_name}`
+  const assetUrl = `https://github.com/inkcre/Renamed/releases/download/${encodeURIComponent(tag)}/${asset_name}`
   const manifest_url = 'https://assets.example/mail/0.4.0/mf-manifest.json'
+  const docsRef = `refs/tags/${tag}`
+  const docsPath = 'plugins/mail/docs/user'
+  const docsEndpoint = `https://api.github.com/repos/InKCre/example/contents/${docsPath}?ref=${encodeURIComponent(docsRef)}`
   const descriptor = {
     schema_version: 1,
     source_path: 'plugins/mail',
@@ -207,8 +214,10 @@ void test('GitHub discovery and exact lookup resolve both Web release entry form
   const manifest = makeRelease(manifestTag, { manifest_url })
   const python = makeRelease(pythonTag, { host_sdk: 'core-py' })
   let exact = makeRelease(tag, { script }, assets)
+  let docsExist = true
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url === `${api}?per_page=100`) return Response.json([manifest, python, exact])
+    if (url === docsEndpoint) return new Response(null, { status: docsExist ? 200 : 404 })
     assert.equal(url, `${api}/tags/${encodeURIComponent(tag)}`)
     return Response.json(exact)
   })
@@ -225,6 +234,12 @@ void test('GitHub discovery and exact lookup resolve both Web release entry form
   )
   assert.equal(supportsGitHubExtensionSdk(scriptRelease, '@inkcre/core', '0.4.5'), true)
   assert.equal(supportsGitHubExtensionSdk(scriptRelease, '@inkcre/core', '0.5.0'), false)
+  assert.equal(
+    await getGitHubExtensionDocumentation(scriptRelease),
+    `${repository}/tree/${docsRef}/${docsPath}`
+  )
+  docsExist = false
+  assert.equal(await getGitHubExtensionDocumentation(scriptRelease), null)
 
   for (const [label, release] of [
     ['both entry formats', makeRelease(tag, { script, manifest_url }, assets)],
@@ -237,21 +252,18 @@ void test('GitHub discovery and exact lookup resolve both Web release entry form
       'no matching attachment',
       makeRelease(tag, { script }, [{ ...assets[0], name: 'different.js' }]),
     ],
-    ['duplicate attachment', makeRelease(tag, { script }, [...assets, ...assets])],
     [
       'attachment without .js suffix',
       makeRelease(tag, { script: { ...script, asset_name: 'remoteEntry.zip' } }, [
         { name: 'remoteEntry.zip', browser_download_url: assetUrl.replace(/\.js$/, '.zip') },
       ]),
     ],
-    ...[
-      assetUrl.replace('inkcre/Example', 'someone/Example'),
-      assetUrl.replace('v0.5.0', 'v0.5.1'),
-      assetUrl.replace('github.com', 'release-assets.githubusercontent.com'),
-    ].map((browser_download_url) => [
-      browser_download_url,
-      makeRelease(tag, { script }, [{ name: asset_name, browser_download_url }]),
-    ]),
+    [
+      'attachment without HTTPS',
+      makeRelease(tag, { script }, [
+        { name: asset_name, browser_download_url: assetUrl.replace('https:', 'http:') },
+      ]),
+    ],
   ]) {
     exact = release
     await assert.rejects(

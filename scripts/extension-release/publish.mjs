@@ -99,6 +99,15 @@ export function listReleases(repository, api = githubApi) {
   return api('repos/' + repository + '/releases?per_page=100', ['--paginate', '--slurp']).flat()
 }
 
+function verifyPublishedRelease(release, candidate) {
+  assert.equal(release.draft, false)
+  assert.equal(release.body, candidate.body)
+  assert.equal(
+    release.assets.find((item) => item.name === candidate.asset_name)?.digest,
+    candidate.digest
+  )
+}
+
 export async function publishExtension(options) {
   const { candidate, repository, sourceRevision, asset, api = githubApi } = options
   const releases = options.releases ?? listReleases(repository, api)
@@ -106,6 +115,13 @@ export async function publishExtension(options) {
   const tag = tagFor(candidate.name, candidate.version)
   const tagPath = '/tags/' + encodeURIComponent(tag)
   const git = 'repos/' + repository + '/git/'
+  const existingRelease = releases.find((item) => item.tag_name === tag)
+  if (existingRelease?.draft === false) {
+    assert.equal(api(git + 'ref' + tagPath).object.sha, sourceRevision)
+    verifyPublishedRelease(existingRelease, candidate)
+    return tag
+  }
+
   const existingTag = api(git + 'matching-refs' + tagPath).find(
     (item) => item.ref === 'refs/tags/' + tag
   )
@@ -113,7 +129,7 @@ export async function publishExtension(options) {
 
   await publishArtifact(options)
   let release =
-    releases.find((item) => item.tag_name === tag) ??
+    existingRelease ??
     api(base, [
       '--method',
       'POST',
@@ -150,9 +166,6 @@ export async function publishExtension(options) {
     ])
   }
   assert.equal(api(git + 'ref' + tagPath).object.sha, sourceRevision)
-  const published = api(base + tagPath)
-  assert.equal(published.draft, false)
-  assert.equal(published.body, candidate.body)
-  assert.equal(published.assets.find((item) => item.name === assetName)?.digest, candidate.digest)
+  verifyPublishedRelease(api(base + tagPath), candidate)
   return tag
 }

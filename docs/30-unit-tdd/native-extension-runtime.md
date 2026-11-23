@@ -109,8 +109,8 @@ iCalendar/vCard 为只读内存投影；calendar 同时承载 VEVENT 与 VTODO�
 解析失败保留原文；dispose 只注销当前模块自己注册的 resolver 类。
 
 Extension cards discover documentation independently of executable preflight or enablement.
-GitHub selections link to the distribution's `docs/user` directory at the exact Release tag's
-commit. Registry selections read the existing documentation association by installed name,
+GitHub selections link to the distribution's `docs/user` directory under the selected Release tag.
+Registry selections read the existing documentation association by installed name,
 distribution, and version. Missing documents and lookup errors appear independently of Extension
 operations. Links open without credentials or an opener.
 

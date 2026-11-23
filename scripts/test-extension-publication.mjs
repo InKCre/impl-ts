@@ -157,6 +157,32 @@ void test('the saved ZIP recreates its artifact commit and later publishes prese
       remoteGit('show', currentCommit + ':assets/async.js'),
       'export default "async chunk"'
     )
+
+    const tag = 'inkcre-ext/inkcre/mail/module_federation/v0.4.1'
+    const published = {
+      tag_name: tag,
+      draft: false,
+      body: candidate.body,
+      assets: [{ name: candidate.asset_name, digest: candidate.digest }],
+    }
+    const retry = {
+      ...current,
+      workspace: path.join(workspace, 'unavailable-checkout'),
+      asset: path.join(workspace, 'unavailable.zip'),
+      fetchImplementation: () => assert.fail('a public retry must not read the CDN'),
+      releases: [published],
+      api: (endpoint) => {
+        assert.equal(endpoint, 'repos/' + repository + '/git/ref/tags/' + encodeURIComponent(tag))
+        return { object: { sha: sourceRevision } }
+      },
+    }
+    assert.equal(await publishExtension(retry), tag)
+    await assert.rejects(publishExtension({ ...retry, sourceRevision: '0'.repeat(40) }))
+    await assert.rejects(
+      publishExtension({ ...retry, releases: [{ ...published, body: 'changed descriptor' }] })
+    )
+    await assert.rejects(publishExtension({ ...retry, releases: [{ ...published, assets: [] }] }))
+
     assert.equal(requests.length, 6)
     assert.equal(git('diff', '--cached'), '')
 
@@ -255,6 +281,7 @@ void test('a publisher script release uploads one JavaScript asset without pushi
         case 'repos/' + repository + '/git/matching-refs' + tagSuffix:
           return []
         case 'repos/' + repository + '/git/ref' + tagSuffix:
+          assert.equal(release.draft, false)
           return { object: { sha: sourceRevision } }
         case base + tagSuffix:
           return release

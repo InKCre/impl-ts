@@ -130,14 +130,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Restore the original release candidate
-        if: steps.saved.outputs.artifact_id != ''
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          artifact-ids: ${{ steps.saved.outputs.artifact_id }}
-          path: .extension-delivery
-          merge-multiple: true
-
       - name: Build and capture new first-party MF versions
         if: steps.saved.outputs.artifact_id == ''
         env:

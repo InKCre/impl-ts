@@ -41,7 +41,7 @@ const GitHubWebDescriptorSchema = GitHubDescriptorSchema.extend({
 })
 const GitHubReleaseAssetSchema = z.object({
   name: z.string(),
-  browser_download_url: z.string(),
+  browser_download_url: z.url({ protocol: /^https$/ }),
 })
 
 type GitHubWebEntry = { manifest_url: string } | { script: { url: string; global_name: string } }
@@ -71,7 +71,6 @@ async function githubRequest(url: string): Promise<Response> {
 }
 
 function readWebEntry(
-  repository: string,
   release: z.infer<typeof GitHubReleaseSchema>,
   descriptor: z.infer<typeof GitHubWebDescriptorSchema>
 ): GitHubWebEntry | null {
@@ -80,25 +79,10 @@ function readWebEntry(
   if (!script) return null
 
   const assets = GitHubReleaseAssetSchema.array().optional().parse(release.assets)
-  const [asset, duplicate] = assets?.filter(({ name }) => name === script.asset_name) ?? []
-  if (!asset || duplicate) return null
-
-  const source = new URL(repository)
-  const url = new URL(asset.browser_download_url)
-  const pathname = decodeURIComponent(url.pathname)
-  if (
-    url.origin !== source.origin ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    pathname.slice(0, source.pathname.length).toLowerCase() !== source.pathname.toLowerCase() ||
-    pathname.slice(source.pathname.length) !==
-      `/releases/download/${release.tag_name}/${script.asset_name}`
-  )
-    return null
-
-  return { script: { url: url.href, global_name: script.global_name } }
+  const asset = assets?.find(({ name }) => name === script.asset_name)
+  return asset
+    ? { script: { url: asset.browser_download_url, global_name: script.global_name } }
+    : null
 }
 
 function readRelease(
@@ -122,7 +106,7 @@ function readRelease(
     if (distribution === 'module_federation') {
       const descriptor = GitHubWebDescriptorSchema.parse(rawDescriptor)
       if (descriptor.host_sdk !== '@inkcre/core') return null
-      const webEntry = readWebEntry(repository, release, descriptor)
+      const webEntry = readWebEntry(release, descriptor)
       return webEntry ? { ...selection, descriptor, webEntry } : null
     }
     const descriptor = GitHubDescriptorSchema.parse(rawDescriptor)
@@ -212,16 +196,15 @@ export async function getGitHubExtensionDocumentation(
   release: GitHubExtensionRelease
 ): Promise<string | null> {
   const api = repositoryApi(release.repository)
-  const commitResponse = await githubRequest(`${api}/commits/${encodeURIComponent(release.tag)}`)
-  const { sha } = z.object({ sha: z.string() }).parse(await commitResponse.json())
+  const ref = `refs/tags/${release.tag}`
   const prefix = release.descriptor.source_path === '.' ? '' : `${release.descriptor.source_path}/`
   const path = `${prefix}docs/user`.split('/').map(encodeURIComponent).join('/')
-  const contents = await fetch(`${api}/contents/${path}?ref=${encodeURIComponent(sha)}`, {
+  const contents = await fetch(`${api}/contents/${path}?ref=${encodeURIComponent(ref)}`, {
     headers: { Accept: 'application/vnd.github+json' },
     signal: AbortSignal.timeout(15_000),
   })
   if (contents.status === 404) return null
   if (!contents.ok)
     throw new Error(`GitHub documentation request failed with HTTP ${contents.status}.`)
-  return `${release.repository}/tree/${encodeURIComponent(sha)}/${path}`
+  return `${release.repository}/tree/${ref}/${path}`
 }
