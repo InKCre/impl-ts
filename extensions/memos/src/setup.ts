@@ -7,8 +7,10 @@ import {
   PeerManager,
   PeerProtocolResponseSchema,
   type InstalledExtension,
+  type ExtensionParticipation,
   type Peer,
 } from '@inkcre/core'
+import * as core from '@inkcre/core'
 import {
   getExtensionDocumentation,
   RegistryReleaseReader,
@@ -54,6 +56,20 @@ export async function readSetup(): Promise<{ extension: ExtensionModel; peers: P
 /** An explicit connection-preparation action may create a native selection, never background restore. */
 export async function ensureMemosParticipation(peerId: string): Promise<void> {
   if (await ExtensionParticipationModel.get(peerId, extensionName)) return
+  const release = await core.getGitHubPythonSetupRelease?.(
+    extensionName,
+    configStore.metaConfig.INKCRE_PEER_ID
+  )
+  if (release) {
+    await manageExtensionOnPeer(peerId, {
+      action: 'select',
+      extension: extensionName,
+      distribution: 'python',
+      version: release.version,
+      source_repository: release.repository,
+    })
+    return
+  }
   const origin = await new ExtensionRegistryOriginResolver(
     () => configStore.peerConfig.extension_registry_url
   ).resolve()
@@ -62,13 +78,13 @@ export async function ensureMemosParticipation(peerId: string): Promise<void> {
     hostSdk: { name: '@inkcre/core', version: corePackage.version },
   })
   const catalog = await reader.getExtension(extensionName, 'python')
-  const release = sortPublishedReleases(catalog.releases ?? [])[0]
-  if (!release) throw new Error('Memos has no published Python distribution.')
+  const legacy = sortPublishedReleases(catalog.releases ?? [])[0]
+  if (!legacy) throw new Error('Memos has no published Python distribution.')
   await manageExtensionOnPeer(peerId, {
     action: 'select',
     extension: extensionName,
     distribution: 'python',
-    version: release.version,
+    version: legacy.version,
   })
 }
 
@@ -102,14 +118,25 @@ export async function readServerUrl(peerId: string): Promise<string> {
   return url.href
 }
 
-export async function readHelpUrl(version: string): Promise<string | null> {
+export async function readHelpUrl(
+  selection: Pick<ExtensionParticipation, 'source_repository' | 'version'>
+): Promise<string | null> {
+  if (selection.source_repository) {
+    const release = await core.getGitHubExtensionRelease(
+      selection.source_repository,
+      extensionName,
+      'module_federation',
+      selection.version
+    )
+    return core.getGitHubExtensionDocumentation(release)
+  }
   const origin = await new ExtensionRegistryOriginResolver(
     () => configStore.peerConfig.extension_registry_url
   ).resolve()
   const documentation = await getExtensionDocumentation(
     origin,
     extensionName,
-    version,
+    selection.version,
     'module_federation'
   )
   const entry = documentation?.find((link) => link.scope === 'module-federation')

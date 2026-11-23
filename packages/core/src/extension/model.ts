@@ -7,6 +7,15 @@ import { signDatabaseToken } from '../auth'
 
 const EXTENSION_NAME_PATTERN =
   /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
+const GITHUB_REPOSITORY_PATTERN =
+  /^https:\/\/github\.com\/([a-z0-9][a-z0-9-]*)\/([a-z0-9_.-]+?)(?:\.git)?\/?$/i
+
+export function normalizeExtensionSourceRepository(value: string): string {
+  const match = GITHUB_REPOSITORY_PATTERN.exec(value.trim())
+  if (!match || match[2] === '.' || match[2] === '..')
+    throw new Error('Enter a GitHub repository URL such as https://github.com/owner/repository.')
+  return `https://github.com/${match[1]}/${match[2]}`
+}
 
 export const ExtensionNameSchema = z
   .string()
@@ -47,6 +56,7 @@ export const ExtensionParticipationSchema = z.object({
   peer_id: z.uuid(),
   distribution: NativeDistributionSchema.nullable(),
   version: ExtensionVersionSchema,
+  source_repository: z.string().nullable().optional(),
   enabled: z.boolean(),
   config_schema: z.record(z.string(), z.unknown()).nullable(),
 })
@@ -65,7 +75,8 @@ export const ExtensionRuntimeStatusSchema = ExtensionParticipationSchema.omit({
 export type ExtensionRuntimeStatus = z.infer<typeof ExtensionRuntimeStatusSchema>
 
 const EXTENSION_PROJECTION = 'name,nickname,config' as const
-const PARTICIPATION_PROJECTION = 'name,peer_id,distribution,version,enabled,config_schema' as const
+// Older deployments omit the additive source column from their participation rows.
+const PARTICIPATION_PROJECTION = '*' as const
 
 export class ExtensionPersistenceError extends Error {
   constructor(operation: string, cause?: unknown) {
@@ -165,6 +176,7 @@ export class ExtensionParticipationModel implements ExtensionParticipation {
   readonly peer_id: string
   readonly distribution: NativeDistribution | null
   readonly version: string
+  readonly source_repository?: string | null
   readonly enabled: boolean
   readonly config_schema: Record<string, unknown> | null
 
@@ -174,6 +186,7 @@ export class ExtensionParticipationModel implements ExtensionParticipation {
     this.peer_id = parsed.peer_id
     this.distribution = parsed.distribution
     this.version = parsed.version
+    this.source_repository = parsed.source_repository
     this.enabled = parsed.enabled
     this.config_schema = parsed.config_schema
   }
@@ -229,6 +242,8 @@ export class ExtensionParticipationModel implements ExtensionParticipation {
     distribution: NativeDistribution
     version: string
     expectedVersion?: string
+    expectedSourceRepository?: string | null
+    sourceRepository?: string | null
   }): Promise<ExtensionParticipationModel> {
     const exact = ExtensionParticipationSchema.parse({
       name: input.name,
@@ -239,27 +254,54 @@ export class ExtensionParticipationModel implements ExtensionParticipation {
       config_schema: null,
     })
     const existing = await this.get(exact.peer_id, exact.name)
+    const sourceRepository =
+      typeof input.sourceRepository === 'string'
+        ? normalizeExtensionSourceRepository(input.sourceRepository)
+        : input.sourceRepository === null
+          ? null
+          : existing?.source_repository
     if (!existing) {
-      if (input.expectedVersion !== undefined)
+      if (input.expectedVersion !== undefined || input.expectedSourceRepository !== undefined)
         throw new ExtensionPersistenceError(
           'select version',
           new Error('The previous selection no longer exists.')
         )
-      const response = await this.#dbApi.insert(exact).select(PARTICIPATION_PROJECTION).single()
+      const values = {
+        ...exact,
+        ...(sourceRepository ? { source_repository: sourceRepository } : {}),
+      }
+      const response = await this.#dbApi.insert(values).select(PARTICIPATION_PROJECTION).single()
       assertSuccess(response, 'select version')
       return this.fromRow(response.data)
     }
-    if (input.expectedVersion !== undefined && existing.version !== input.expectedVersion) {
+    if (
+      (input.expectedVersion !== undefined && existing.version !== input.expectedVersion) ||
+      (input.expectedSourceRepository !== undefined &&
+        (existing.source_repository ?? null) !== input.expectedSourceRepository)
+    ) {
       throw new ExtensionPersistenceError(
         'select version',
         new Error('The Peer selection changed; refresh and retry.')
       )
     }
-    if (existing.distribution === exact.distribution && existing.version === exact.version)
+    if (
+      existing.distribution === exact.distribution &&
+      existing.version === exact.version &&
+      (existing.source_repository ?? null) === (sourceRepository ?? null)
+    )
       return existing
     const expected = input.expectedVersion ?? existing.version
+    const updates = {
+      distribution: exact.distribution,
+      version: exact.version,
+      config_schema: null,
+      ...(sourceRepository !== undefined &&
+        (sourceRepository !== null || existing.source_repository !== undefined) && {
+          source_repository: sourceRepository,
+        }),
+    }
     let query = this.#dbApi
-      .update({ distribution: exact.distribution, version: exact.version, config_schema: null })
+      .update(updates)
       .eq('peer_id', exact.peer_id)
       .eq('name', exact.name)
       .eq('version', expected)
@@ -268,6 +310,7 @@ export class ExtensionParticipationModel implements ExtensionParticipation {
       existing.distribution === null
         ? query.is('distribution', null)
         : query.eq('distribution', existing.distribution)
+    matchSourceRepository(query, existing.source_repository)
     const response = await query.select(PARTICIPATION_PROJECTION).maybeSingle()
     assertSuccess(response, 'select version')
     if (!response.data)
@@ -289,14 +332,15 @@ export class ExtensionParticipationModel implements ExtensionParticipation {
   }
 
   async remove(): Promise<void> {
-    const response = await ExtensionParticipationModel.#dbApi
+    const query = ExtensionParticipationModel.#dbApi
       .from()
       .delete()
       .eq('peer_id', this.peer_id)
       .eq('name', this.name)
       .eq('enabled', false)
       .eq('version', this.version)
-      .select('name')
+    matchSourceRepository(query, this.source_repository)
+    const response = await query.select('name')
     assertSuccess(response, 'remove participation')
     if (response.data?.length !== 1)
       throw new ExtensionPersistenceError(
@@ -318,6 +362,7 @@ export class ExtensionParticipationModel implements ExtensionParticipation {
       this.distribution === null
         ? query.is('distribution', null)
         : query.eq('distribution', this.distribution)
+    matchSourceRepository(query, this.source_repository)
     const response = await query.select(PARTICIPATION_PROJECTION).maybeSingle()
     assertSuccess(response, operation)
     if (!response.data)
@@ -331,6 +376,14 @@ export class ExtensionParticipationModel implements ExtensionParticipation {
   private static fromRow(this: void, row: unknown): ExtensionParticipationModel {
     return new ExtensionParticipationModel(ExtensionParticipationSchema.parse(row))
   }
+}
+
+function matchSourceRepository(
+  query: { filter(column: string, operator: string, value: unknown): unknown },
+  sourceRepository: string | null | undefined
+): void {
+  if (sourceRepository !== undefined)
+    query.filter('source_repository', sourceRepository === null ? 'is' : 'eq', sourceRepository)
 }
 
 function assertSuccess(response: { error?: { message: string } | null }, operation: string): void {

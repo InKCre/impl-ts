@@ -38,6 +38,15 @@ export {
   type ExtensionModelInstallInput,
   ExtensionRegistryOriginResolver,
   DEFAULT_EXTENSION_REGISTRY_ORIGIN,
+  getGitHubExtensionDocumentation,
+  getGitHubExtensionRelease,
+  getGitHubPythonSetupRelease,
+  listGitHubExtensionReleases,
+  normalizeExtensionSourceRepository,
+  searchGitHubExtensionRepositories,
+  supportsGitHubExtensionSdk,
+  type GitHubExtensionDistribution,
+  type GitHubExtensionRelease,
 } from './extension'
 
 // Peer discovery and delegation

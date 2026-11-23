@@ -10,16 +10,20 @@ import {
   Peer,
   PeerManager,
   ExtensionParticipationModel,
+  getGitHubExtensionRelease,
+  type GitHubExtensionRelease,
   type ExtensionParticipation,
   type InstalledExtension,
 } from '@inkcre/core'
 import type { ReleaseRecord } from '@inkcre/extension-runtime-web'
 import { observeExtensionPeer, selectExtensionPeerVersion } from '@/extension-peer-control'
 import extensionCard from '@/components/extension/extensionCard/extensionCard.vue'
+import RepositoryBrowser from './repositoryBrowser.vue'
 import {
   getExtensionHost,
   getExtensionRegistry,
   getExtensionRegistryOrigin,
+  isCompatibleWithCurrentWebSdk,
   WEB_PEER_IDENTITY,
 } from '@/core'
 
@@ -45,6 +49,7 @@ const extensionError = ref<string | null>(null)
 const peerError = ref<string | null>(null)
 const browseUrl = ref<string | null>(null)
 const browseError = ref<string | null>(null)
+const showRepositories = ref(false)
 
 // Helper to format user-friendly error messages
 function formatErrorMessage(error: unknown, fallbackKey: string): string {
@@ -69,7 +74,10 @@ function formatErrorMessage(error: unknown, fallbackKey: string): string {
 const installRequested = computed(
   () => route.query.install !== undefined || route.query.version !== undefined
 )
-const installRelease = ref<ReleaseRecord | null>(null)
+type InstallRelease = Pick<ReleaseRecord, 'name' | 'nickname' | 'version' | 'distribution'> & {
+  sourceRepository?: string
+}
+const installRelease = ref<InstallRelease | null>(null)
 usePageObjectTitle(
   computed(() =>
     installRequested.value && installRelease.value
@@ -180,32 +188,48 @@ async function loadBrowseUrl(): Promise<void> {
 async function loadInstallRelease(): Promise<void> {
   const request = ++releaseRequest
   installRelease.value = null
+  installPeers.value = []
   installError.value = null
   installLoading.value = false
   if (!installRequested.value) return
   const name = route.query.install
   const version = route.query.version
+  const sourceRepository = route.query.source_repository
+  const distribution = installDistribution.value
   if (
     typeof name !== 'string' ||
     typeof version !== 'string' ||
-    !['python', 'module_federation'].includes(String(route.query.distribution))
+    !['python', 'module_federation'].includes(String(route.query.distribution)) ||
+    (sourceRepository !== undefined && typeof sourceRepository !== 'string')
   ) {
     installError.value = t('extension.invalidInstallLink')
     return
   }
   installLoading.value = true
   try {
-    const release = await getExtensionRegistry().getRelease(
-      name,
-      version,
-      true,
-      installDistribution.value
-    )
+    let repoRelease: GitHubExtensionRelease | undefined
+    let release: InstallRelease
+    if (sourceRepository !== undefined) {
+      repoRelease = await getGitHubExtensionRelease(sourceRepository, name, distribution, version)
+      release = {
+        ...repoRelease,
+        nickname: repoRelease.name,
+        sourceRepository: repoRelease.repository,
+      }
+    } else {
+      release = await getExtensionRegistry().getRelease(name, version, true, distribution)
+    }
     if (request === releaseRequest) {
       installRelease.value = release
       await refreshPeers()
       const observations = await Promise.all(
         availablePeers.value.map(async (peer) => {
+          if (
+            peer.id === currentPeerId &&
+            repoRelease &&
+            !isCompatibleWithCurrentWebSdk(repoRelease)
+          )
+            return null
           try {
             const result = await observeExtensionPeer({
               name,
@@ -214,14 +238,17 @@ async function loadInstallRelease(): Promise<void> {
               livePeerIds: livePeerIds.value,
               manager: getExtensionHost(),
             })
-            return result.supported_distributions.includes(installDistribution.value) ? peer : null
+            return result.supported_distributions.includes(distribution) ? peer : null
           } catch {
             return null
           }
         })
       )
-      if (request === releaseRequest)
+      if (request === releaseRequest) {
         installPeers.value = observations.filter((peer): peer is Peer => peer !== null)
+        if (!installPeers.value.some((peer) => peer.id === installPeerId.value))
+          installPeerId.value = installPeers.value[0]?.id ?? currentPeerId
+      }
     }
   } catch (error) {
     if (request === releaseRequest) {
@@ -245,7 +272,14 @@ async function installReleaseInDeployment(): Promise<void> {
       nickname: release.nickname,
       releases: getExtensionRegistry(),
       version: release.version,
-      distribution: installDistribution.value,
+      distribution: release.distribution,
+      sourceRepository:
+        release.sourceRepository ??
+        (participations.value.some(
+          (pin) => pin.name === release.name && pin.peer_id === peer.id && pin.source_repository
+        )
+          ? null
+          : undefined),
       peer,
       currentPeerId,
       livePeerIds: livePeerIds.value,
@@ -253,6 +287,7 @@ async function installReleaseInDeployment(): Promise<void> {
     })
     await refreshExtensions()
     toast.success(t('extension.installSuccess'))
+    showRepositories.value = false
     await router.replace('/extensions')
   } catch (error) {
     installError.value = error instanceof Error ? error.message : String(error)
@@ -269,7 +304,12 @@ function updateExtension(updated: InstalledExtension): void {
 }
 
 watch(
-  () => [route.query.install, route.query.version, route.query.distribution],
+  () => [
+    route.query.install,
+    route.query.version,
+    route.query.distribution,
+    route.query.source_repository,
+  ],
   loadInstallRelease,
   { immediate: true }
 )
@@ -294,6 +334,13 @@ onMounted(() => {
   <main class="extensions-view" :aria-label="t('extension.title')">
     <h1 class="sr-only">{{ t('extension.title') }}</h1>
     <div class="extensions-view__actions">
+      <InkButton
+        v-if="!installRequested"
+        :text="t('extension.browseRepositories')"
+        :aria-expanded="showRepositories"
+        size="sm"
+        @click="showRepositories = !showRepositories"
+      />
       <a v-if="browseUrl" :href="browseUrl" class="extensions-view__browse-link">
         {{ t('extension.browseRegistry') }} ↗
       </a>
@@ -309,6 +356,10 @@ onMounted(() => {
     <p v-if="browseError" role="alert" class="extensions-view__error">
       {{ t('extension.registryUnavailable') }}: {{ browseError }}
     </p>
+
+    <section v-if="showRepositories && !installRequested" class="extensions-view__install">
+      <RepositoryBrowser />
+    </section>
 
     <section v-if="installRequested" class="extensions-view__install">
       <div
@@ -338,14 +389,19 @@ onMounted(() => {
         </p>
         <p class="extensions-view__install-hosts">
           {{
-            [
-              installRelease.python ? t('extension.hostCore') : null,
-              installRelease.module_federation ? t('extension.hostWeb') : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')
+            installRelease.distribution === 'python'
+              ? t('extension.hostCore')
+              : t('extension.hostWeb')
           }}
         </p>
+        <a
+          v-if="installRelease.sourceRepository"
+          :href="installRelease.sourceRepository"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ installRelease.sourceRepository.replace('https://github.com/', '') }} ↗
+        </a>
         <InkDropdown
           v-if="connected"
           v-model="installPeerId"
@@ -431,11 +487,7 @@ onMounted(() => {
           v-else-if="extensions.length === 0 && !extensionsLoading"
           :title="t('extension.noneInstalled')"
           :description="t('extension.noneInstalledDescription')"
-        >
-          <template #actions>
-            <a v-if="browseUrl" :href="browseUrl">{{ t('extension.browseRegistry') }} ↗</a>
-          </template>
-        </InkPlaceholder>
+        />
         <extensionCard
           v-for="extension in extensions"
           :key="extension.name"
