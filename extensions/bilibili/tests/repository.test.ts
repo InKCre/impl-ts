@@ -331,11 +331,13 @@ void test('a lost create response is not replayed and a later execution reuses t
   savedGraph(database, value)
 })
 
-void test('failure of the final Source update reuses the already saved graph and unbound Source anchor on the next execution', async (context) => {
+void test('failure of the final Source update reuses the saved graph and an unbound Source anchor beyond the service row cap', async (context) => {
   const database = new Database()
   attach(context, database)
   const value = source()
   database.rows.sources.push(structuredClone(value) as unknown as Row)
+  for (let id = 1; id <= database.pageLimit; id++)
+    database.rows.blocks.push(block(id, 'core.source.v1', { id: 1000 + id }))
   database.failBefore = (query) => query.table === 'sources' && query.action === 'update'
   await assert.rejects(
     new BilibiliRepository().reconcilePage(value, favoriteGraph(account, page()), next(value)),
@@ -346,13 +348,20 @@ void test('failure of the final Source update reuses the already saved graph and
   const ids = database.rows.blocks.map((row) => row.id)
   const relations = structuredClone(database.rows.relations)
   database.failBefore = null
-  await new BilibiliRepository().reconcilePage(value, favoriteGraph(account, page()), next(value))
+  const resumed = structuredClone(database.rows.sources[0]) as unknown as Source
+  await new BilibiliRepository().reconcilePage(
+    resumed,
+    favoriteGraph(account, page()),
+    next(resumed)
+  )
   assert.deepEqual(
     database.rows.blocks.map((row) => row.id),
     ids
   )
   assert.deepEqual(database.rows.relations, relations)
-  savedGraph(database, value)
+  assert.equal(database.rows.sources[0]!.block, resumed.block)
+  assert.ok(Object.hasOwn(database.rows.sources[0]!.state as object, 'bilibili'))
+  savedGraph(database, resumed)
 })
 
 void test('normal paginated graph reads find existing objects beyond the service row cap', async (context) => {

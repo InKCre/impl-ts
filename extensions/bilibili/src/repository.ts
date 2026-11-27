@@ -158,13 +158,25 @@ export class BilibiliRepository {
         .throwOnError()
       anchor = result.data
     } else {
-      const result = await Block.dbApi
-        .from()
-        .select()
-        .eq('resolver', 'core.source.v1')
-        .order('id', { ascending: true })
-        .throwOnError()
-      anchor = result.data?.find((row) => objectContent(row.content)?.id === source.id)
+      let offset = 0
+      while (true) {
+        const result = await Block.dbApi
+          .from()
+          .select('*', { count: 'exact' })
+          .eq('resolver', 'core.source.v1')
+          .order('id', { ascending: true })
+          .range(offset, offset + 999)
+          .throwOnError()
+        const rows = result.data ?? []
+        anchor = rows.find((row) => objectContent(row.content)?.id === source.id)
+        offset += rows.length
+        if (
+          anchor ||
+          !rows.length ||
+          (result.count !== null ? offset >= result.count : rows.length < 1000)
+        )
+          break
+      }
     }
     if (
       anchor &&
