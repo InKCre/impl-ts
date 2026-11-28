@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
-import { jwtVerify, SignJWT } from 'jose'
+import { jwtVerify } from 'jose'
+import { connectMailHost, mailDatabaseToken } from './mail-connection'
 
 type BlockRow = { id: number; resolver: string; content: string; storage: number | null }
 type RelationRow = { id: number; from_: number; to_: number; content: string }
@@ -33,13 +34,7 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
       manifest_url: `${assetBase}mf-manifest.json`,
     },
   }
-  const authorization = await new SignJWT({ role: 'authenticated' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .setIssuer('inkcre-peer')
-    .setAudience('inkcre-api')
-    .sign(new TextEncoder().encode(jwtSecret))
+  const authorization = await mailDatabaseToken(jwtSecret)
   const headers = { Authorization: `Bearer ${authorization}`, 'Content-Type': 'application/json' }
   async function database(path: string, options: RequestInit = {}): Promise<Response> {
     const requestHeaders = new Headers(headers)
@@ -119,25 +114,7 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
     trackerRequests.push(route.request().url())
     await route.abort()
   })
-  await page.addInitScript(
-    ({ postgrestUrl, jwtSecret, browserPeer }) => {
-      try {
-        const previous = JSON.parse(localStorage.getItem('inkcre_app_config') ?? '{}')
-        if (previous.INKCRE_PEER_ID === browserPeer) return
-        localStorage.setItem(
-          'inkcre_app_config',
-          JSON.stringify({
-            INKCRE_PGREST_URL: postgrestUrl,
-            INKCRE_JWT_SECRET: jwtSecret,
-            INKCRE_PEER_ID: browserPeer,
-          })
-        )
-      } catch {
-        // Original email frames intentionally have no localStorage access.
-      }
-    },
-    { postgrestUrl, jwtSecret, browserPeer }
-  )
+  await connectMailHost(page, { postgrestUrl, jwtSecret, browserPeer })
   let materializations = 0
   let materialized: BlockRow | undefined
   const imageBase64 =

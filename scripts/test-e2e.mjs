@@ -73,7 +73,7 @@ await runIsolatedDatabaseTest('web', async (state, credentials) => {
     const args = process.argv.slice(2)
     const projects = args.some((arg) => arg === '--project' || arg.startsWith('--project='))
       ? []
-      : ['--project', 'web-database', '--project', 'accessibility', '--project', 'mail-info-base']
+      : ['--project', 'web-database', '--project', 'accessibility', '--project', 'mail-host']
     run('pnpm', ['exec', 'playwright', 'test', ...projects, ...args], {
       // Playwright owns its suite deadline so reporters and teardown can finish.
       timeout: 0,

@@ -31,6 +31,8 @@
 
 两个数据库 E2E 共享实例准备、就绪、失败证据和清理 owner，但各自持有独立实例。CI 两个浏览器 job 使用同次解析的不可变 Core 镜像。本机 `local` 与 `ssh` provider 沿用运行时配置；选择 `external` 时，E2E 转用 `INKCRE_E2E_DATABASE_PROVIDER`（缺省 `ssh`），拒绝继续附着共享外部数据库。失败输出在 `test-results/database/<lane>/`，浏览器输出在 `test-results/playwright/`；清理失败保留 descriptor 并以非零退出，不能当作通过。
 
+跨 Peer 的 Mail 专项保留在 `pnpm exec playwright test --project mail-info-base`。准备独占 Web / PostgREST / Python Core 部署，设置 `INKCRE_E2E_WEB_URL`、`INKCRE_E2E_POSTGREST_URL`、`INKCRE_E2E_CORE_URL` 和 `INKCRE_E2E_JWT_SECRET`。为该 Web Peer 启用 Mail MF，Python Mail 需持有可访问的邮箱与材化能力。用 impl-py 的 `current-reply.eml` 采集一份尚未下载内嵌 PNG 的邮件。专项点击 Download，检验真实 Python HTTP 回包、写入的关系及 Host 图片解码；每次运行消耗一个未下载的部件。默认沿用验收 Peer `00000000-0000-4000-8000-000000000001`，其他已启用的验收 Peer 可通过 `INKCRE_E2E_MAIL_PEER_ID` 指定。CI 的独占数据库只运行 `mail-host`，通过受控 Peer 验证 Host。
+
 聚焦复验可传 Playwright 参数，例如 `pnpm test:e2e:web --project accessibility` 或 `pnpm test:e2e:webext --grep "browser restart"`。显式 `--project` 替换 Web 默认项目集合；App 的 `test:a11y` 转发到同一个隔离入口，不启动日常 SVC/Portless 环境。根配置在 CI 拒绝 `test.only`。直接调用 Playwright 的专项/子集结果不代替上述完整入口。
 
 测试主要归属于产生承诺的 owner：SDK 打包与请求字节、Job 执行资格、采集检查点、格式兼容、浏览器存储与跨进程恢复、产物分发各保留独立风险。故障注入需要到达目标检查并核对具体诊断；读取恢复必须消费生产代码写下的状态。新增用例应说明已有证明漏掉的可信回归；删除或合并前先确认剩余 keeper。静态配置、慢速、负向或测试接缝本身不是删除理由。

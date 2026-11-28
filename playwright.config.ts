@@ -32,11 +32,18 @@ export default defineConfig({
       },
     },
     {
-      name: 'mail-info-base',
+      name: 'mail-host',
       testMatch: 'mail-info-base.spec.ts',
       use: {
         baseURL: process.env.INKCRE_E2E_WEB_URL,
       },
+    },
+    {
+      // Explicit cross-Peer acceptance against the prepared Python Mail corpus.
+      name: 'mail-info-base',
+      testMatch: 'mail-provider.spec.ts',
+      retries: 0,
+      use: { baseURL: process.env.INKCRE_E2E_WEB_URL, trace: 'off' },
     },
     {
       name: 'browser-extension',
