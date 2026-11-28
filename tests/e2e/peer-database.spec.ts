@@ -716,6 +716,161 @@ test('disabling participation drains a dispatched claim before saving configurat
   }
 })
 
+test('Job execution distinguishes denied or competing claims, a conflicting close, and a lost close reply', async ({
+  page,
+}) => {
+  const authorization = `Bearer ${await token()}`
+  const headers = { Authorization: authorization, 'Content-Type': 'application/json' }
+  const type = `e2e.job-outcomes.${crypto.randomUUID()}`
+  const createdType = await fetch(`${postgrestUrl}job_types`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      id: type,
+      description: 'Job transport outcomes',
+      parameters_schema: {},
+      default_timeout_seconds: 3600,
+    }),
+  })
+  expect(createdType.status).toBe(201)
+  try {
+    await page.goto('/sources')
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(
+      page.getByText(
+        'Connecting this Web Peer; database pages are available, local jobs are not running yet.'
+      )
+    ).toHaveCount(0)
+
+    await page.evaluate(async (type) => {
+      type Sdk = typeof import('../../packages/core/src/index')
+      const globals = globalThis as typeof globalThis & {
+        __FEDERATION__: {
+          __INSTANCES__: Array<{
+            options: { name: string }
+            loadShare(name: string): Promise<() => Sdk>
+          }>
+        }
+        runJobForTransportTest(id: number): Promise<{ accepted?: boolean; error?: string }>
+      }
+      const host = globals.__FEDERATION__.__INSTANCES__.find(
+        (instance) => instance.options.name === 'host'
+      )!
+      const { JobManager, MetaConfigSchema } = (await host.loadShare('@inkcre/core'))()
+      JobManager.startWorker(3_600_000)
+      JobManager.registerHandler(type, {
+        parameters: MetaConfigSchema,
+        canHandle: () => true,
+        handle: async (job) => {
+          job.state = { handlerCompleted: true }
+        },
+      })
+      globals.runJobForTransportTest = async (id) => {
+        try {
+          return { accepted: await JobManager.run(id) }
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : String(error) }
+        }
+      }
+    }, type)
+
+    for (const scenario of ['denied', 'competing', 'close-conflict', 'lost-reply'] as const) {
+      const created = await fetch(`${postgrestUrl}jobs`, {
+        method: 'POST',
+        headers: { ...headers, Prefer: 'return=representation' },
+        body: JSON.stringify({ type, parameters: {}, timeout_seconds: 3600 }),
+      })
+      expect(created.status).toBe(201)
+      const [{ id }] = (await created.json()) as Array<{ id: number }>
+      const jobUrl = `${postgrestUrl}jobs?id=eq.${id}`
+      const writes: string[] = []
+      const routePattern = '**/jobs?**'
+      await page.route(routePattern, async (route) => {
+        const request = route.request()
+        if (
+          request.method() !== 'PATCH' ||
+          new URL(request.url()).searchParams.get('id') !== `eq.${id}`
+        ) {
+          await route.continue()
+          return
+        }
+        const { status } = request.postDataJSON() as { status: string }
+        writes.push(status)
+        if (scenario === 'denied') {
+          const response = await route.fetch({
+            headers: { ...request.headers(), authorization: 'Bearer invalid-fixture' },
+          })
+          expect(response.status()).toBe(401)
+          await route.fulfill({ response })
+        } else if (scenario === 'competing') {
+          const winner = await fetch(jobUrl, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ status: 'running' }),
+          })
+          expect(winner.ok).toBe(true)
+          await route.continue()
+        } else if (scenario === 'close-conflict' && status === 'finished') {
+          const winner = await fetch(`${jobUrl}&status=eq.running`, {
+            method: 'PATCH',
+            headers: { ...headers, Prefer: 'return=representation' },
+            body: JSON.stringify({ status: 'timed_out' }),
+          })
+          expect(winner.ok).toBe(true)
+          expect(await winner.json()).toMatchObject([{ status: 'timed_out' }])
+          const conflict = await route.fetch()
+          expect(conflict.status()).toBe(200)
+          expect(await conflict.json()).toEqual([])
+          await route.fulfill({ response: conflict })
+        } else if (scenario === 'lost-reply' && status === 'finished') {
+          const committed = await route.fetch()
+          expect(committed.ok()).toBe(true)
+          await route.abort('failed')
+        } else {
+          await route.continue()
+        }
+      })
+      try {
+        const result = await page.evaluate((id) => {
+          const globals = globalThis as typeof globalThis & {
+            runJobForTransportTest(id: number): Promise<{ accepted?: boolean; error?: string }>
+          }
+          return globals.runJobForTransportTest(id)
+        }, id)
+        const read = await fetch(`${jobUrl}&select=status,state`, { headers })
+        expect(read.ok).toBe(true)
+        const persisted = await read.json()
+        if (scenario === 'denied') {
+          expect(result.error).toBeTruthy()
+          expect(result.accepted).toBeUndefined()
+          expect(writes).toEqual(['running'])
+          expect(persisted).toEqual([{ status: 'pending', state: {} }])
+        } else if (scenario === 'competing') {
+          expect(result).toEqual({ accepted: false })
+          expect(writes).toEqual(['running'])
+          expect(persisted).toEqual([{ status: 'running', state: {} }])
+        } else if (scenario === 'close-conflict') {
+          expect(result).toEqual({
+            error: `Job ${id} no longer matches a running row while writing finished`,
+          })
+          expect(writes).toEqual(['running', 'finished'])
+          expect(persisted).toEqual([{ status: 'timed_out', state: {} }])
+        } else {
+          expect(result.error).toBeTruthy()
+          expect(result.accepted).toBeUndefined()
+          expect(writes).toEqual(['running', 'finished'])
+          expect(persisted).toEqual([{ status: 'finished', state: { handlerCompleted: true } }])
+        }
+      } finally {
+        await page.unroute(routePattern)
+        await fetch(jobUrl, { method: 'DELETE', headers })
+      }
+    }
+  } finally {
+    await fetch(`${postgrestUrl}job_types?id=eq.${type}`, { method: 'DELETE', headers })
+  }
+})
+
 test('Registry confirmation selects one Peer and offline enablement preserves other native pins', async ({
   page,
 }) => {

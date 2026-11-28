@@ -27,7 +27,9 @@ export class JobType extends Z.class({
   static dbApi = new DBAPIClient<'job_types', JobType>('job_types', JobType)
 
   static async get(id: JobTypeRef): Promise<JobType> {
-    return JobType.parse((await this.dbApi.from().select().eq('id', id).single()).data)
+    return JobType.parse(
+      (await this.dbApi.from().select().eq('id', id).single().throwOnError()).data
+    )
   }
 
   static async getAll(): Promise<JobType[]> {
@@ -71,7 +73,7 @@ export class Job extends Z.class({
       .order('created_at', { ascending: false })
       .limit(options.limit ?? 20)
     if (options.status) query = query.eq('status', options.status)
-    return ((await query).data ?? []).map((item) => Job.parse(item))
+    return ((await query.throwOnError()).data ?? []).map((item) => Job.parse(item))
   }
 
   static async getBySource(source: number, limit = 20): Promise<Job[]> {
