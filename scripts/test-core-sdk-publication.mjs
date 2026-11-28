@@ -194,11 +194,10 @@ void test('published SDK is verified against source tag and every saved package 
     await assert.rejects(verifyRelease(release, '0.4.0', receipt), /bytes differ/)
     archive = bytes
     tag = 'b'.repeat(40)
-    await assert.rejects(verifyRelease(release, '0.4.0', receipt), {
-      code: 'ERR_ASSERTION',
-      actual: tag,
-      expected: receipt.source_revision,
-    })
+    await assert.rejects(
+      verifyRelease(release, '0.4.0', receipt),
+      /tag must match the candidate source/
+    )
     tag = receipt.source_revision
     await assert.rejects(
       verifyRelease(release, '0.4.0', { ...receipt, source_revision: 'b'.repeat(40) }),
@@ -221,10 +220,10 @@ void test('recovery accepts only the same completed workflow from protected main
   assert.equal(validateRecoveryRun(run, { status: 'ahead' }), run.head_sha)
   for (const [field, error] of [
     ['event', /admitted main push/],
-    ['head_branch', { code: 'ERR_ASSERTION', expected: 'main' }],
-    ['path', { code: 'ERR_ASSERTION', expected: '.github/workflows/core-sdk-release.yml' }],
+    ['head_branch', /source branch must be main/],
+    ['path', /original SDK release workflow/],
     ['status', /must have completed/],
-    ['head_sha', { code: 'ERR_ASSERTION', actual: 'invalid' }],
+    ['head_sha', /source revision must be a full commit SHA/],
   ]) {
     assert.throws(
       () => validateRecoveryRun({ ...run, [field]: 'invalid' }, { status: 'ahead' }),
