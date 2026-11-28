@@ -71,11 +71,14 @@ void test('a completed failure is not presented as installation still in progres
 void test('password preparation matches Python character limits and preserves existing values', () => {
   const extension = { name: 'inkcre/caldav', nickname: 'CalDAV', config: {} }
   assert.equal(savedPassword(extension), null)
-  const existing = '日'.repeat(32)
+  const existing = '🌿'.repeat(128)
   assert.equal(savedPassword({ ...extension, config: { password: existing } }), existing)
   for (const password of ['a'.repeat(31), 'a'.repeat(129), 123])
-    assert.throws(() => savedPassword({ ...extension, config: { password } }))
+    assert.throws(
+      () => savedPassword({ ...extension, config: { password } }),
+      /Invalid DAV password configuration/
+    )
   const generated = generatePassword()
   assert.match(generated, /^[0-9a-f]{64}$/)
-  assert.notEqual(generated, generatePassword())
+  assert.equal(savedPassword({ ...extension, config: { password: generated } }), generated)
 })

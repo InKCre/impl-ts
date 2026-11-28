@@ -25,14 +25,9 @@ import {
 } from './store'
 
 type Sender = Browser.runtime.MessageSender
-const contentTypes = new Set([
-  'collection-observe',
-  'collection-auto-allowed',
-  'collection-observation-error',
-])
+const contentTypes = new Set(['collection-observe', 'collection-auto-allowed'])
 const pageTypes = new Set([
   'collection-status',
-  'collection-wake',
   'collection-connect',
   'collection-check-connection',
   'collection-settings',
@@ -45,7 +40,6 @@ const pageTypes = new Set([
   'collection-control-import',
   'collection-save-draft',
 ])
-const tabErrors = new Map<number, string>()
 let migrationWarning = ''
 let work: Promise<void> | undefined
 export function wakeWork(): Promise<void> {
@@ -247,7 +241,6 @@ export async function collectionStatus() {
     migrationWarning,
     legacyWarning,
     legacyTasks,
-    tabErrors: Object.fromEntries(tabErrors),
   }
 }
 export type CollectionStatus = Awaited<ReturnType<typeof collectionStatus>>
@@ -263,10 +256,6 @@ export async function handleCollectionMessage(
   if (contentTypes.has(type)) {
     const tab = await sourceTab(sender)
     if (type === 'collection-auto-allowed') return { allowed: await automaticAllowed(tab) }
-    if (type === 'collection-observation-error') {
-      tabErrors.set(tab.id, z.string().max(1000).parse(message.error))
-      return
-    }
     if (type === 'collection-observe') {
       if (!(await automaticAllowed(tab))) return false
       const capture = PageCaptureSchema.parse(message.capture)
@@ -281,10 +270,6 @@ export async function handleCollectionMessage(
   }
   if (sender.id !== browser.runtime.id || !sender.url?.startsWith(browser.runtime.getURL('/')))
     throw new Error('只接受扩展自身页面的操作。')
-  if (type === 'collection-wake') {
-    void wakeWork()
-    return
-  }
   if (type === 'collection-status') {
     return collectionStatus()
   }

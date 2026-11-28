@@ -56,7 +56,6 @@ export interface GraphSceneHooks {
 
 interface PendingPreview {
   block: Block
-  relations: Relation[]
   owns: () => boolean
 }
 
@@ -192,11 +191,6 @@ export function useGraphScene(hooks: GraphSceneHooks) {
   }
 
   function setGraph(graph: GraphModel): void {
-    const incident = new Map<number, Relation[]>()
-    for (const relation of graph.relations) {
-      incident.set(relation.from_, [...(incident.get(relation.from_) ?? []), relation])
-      incident.set(relation.to_, [...(incident.get(relation.to_) ?? []), relation])
-    }
     nodes.value = graph.blocks.map((block) =>
       blockNode(block, {
         focal: block.id === focalBlock.value,
@@ -211,7 +205,7 @@ export function useGraphScene(hooks: GraphSceneHooks) {
       })
     )
     applyPresentation()
-    void loadPreviews(graph.blocks, incident, generation)
+    void loadPreviews(graph.blocks, generation)
     // Layout after a short delay to allow Vue Flow to measure nodes.
     setTimeout(() => {
       hooks.layoutAndRoute()
@@ -233,7 +227,8 @@ export function useGraphScene(hooks: GraphSceneHooks) {
     const lookupBeforeRestore =
       allowRestoreRetry && ['idle', 'restoring'].includes(extensionHostRestoreState.value)
     try {
-      const resolver = await ResolverCache.getResolver(entry.block, entry.relations)
+      // A bounded scene is not the complete relation set owned by a Resolver.
+      const resolver = await ResolverCache.getResolver(entry.block)
       const solvedContent = await resolver.getSolvedContent({ materializeMissing: false })
       if (!entry.owns()) return
       nodes.value = nodes.value.map((node) =>
@@ -270,11 +265,7 @@ export function useGraphScene(hooks: GraphSceneHooks) {
     pendingPreviews.value = []
   })
 
-  async function loadPreviews(
-    blocks: Block[],
-    incident: Map<number, Relation[]>,
-    current: number
-  ): Promise<void> {
+  async function loadPreviews(blocks: Block[], current: number): Promise<void> {
     previewReady.value = false
     const meta = { ...configStore.metaConfig }
     const host = getExtensionHost()
@@ -288,7 +279,7 @@ export function useGraphScene(hooks: GraphSceneHooks) {
     async function worker(): Promise<void> {
       while (index < blocks.length) {
         const block = blocks[index++]!
-        await resolvePreview({ block, relations: incident.get(block.id) ?? [], owns }, true)
+        await resolvePreview({ block, owns }, true)
       }
     }
     await Promise.all(Array.from({ length: Math.min(4, blocks.length) }, () => worker()))
@@ -466,12 +457,6 @@ export function useGraphScene(hooks: GraphSceneHooks) {
       return
     }
 
-    const incident = new Map<number, Relation[]>()
-    for (const relation of graph.relations) {
-      incident.set(relation.from_, [...(incident.get(relation.from_) ?? []), relation])
-      incident.set(relation.to_, [...(incident.get(relation.to_) ?? []), relation])
-    }
-
     // Add new nodes with temporary positions (positioned by the layout hook)
     const newNodes = newBlocks.map((block) =>
       blockNode(block, {
@@ -510,7 +495,7 @@ export function useGraphScene(hooks: GraphSceneHooks) {
     }))
 
     // Load previews for new blocks only
-    void loadPreviews(newBlocks, incident, generation)
+    void loadPreviews(newBlocks, generation)
 
     // Layout only new nodes around existing graph, then focus camera.
     // Set skipLayout to prevent the view from re-layouting all nodes.

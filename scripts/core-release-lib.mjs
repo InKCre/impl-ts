@@ -1,5 +1,3 @@
-import { execFileSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 
 const stableImagePattern = /^ghcr\.io\/inkcre\/impl-py:stable$/
@@ -47,7 +45,7 @@ export function validateCoreReleaseConfig(config) {
   }
   for (const name of ['pgvector', 'postgrest']) {
     const image = config.runtime_images?.[name]
-    if (typeof image !== 'string' || !image.includes('@sha256:')) {
+    if (typeof image !== 'string' || !/^[^\s@]+@sha256:[0-9a-f]{64}$/.test(image)) {
       throw new Error(`${name} runtime image must be digest-pinned`)
     }
   }
@@ -66,7 +64,7 @@ function validateArtifactEntry(entry, expectedPath, label) {
   }
 }
 
-export function validateSchemaManifest(manifest) {
+function validateSchemaManifest(manifest) {
   if (
     manifest?.format !== 1 ||
     typeof manifest.contract_revision !== 'string' ||
@@ -85,7 +83,7 @@ export function validateSchemaManifest(manifest) {
   return manifest
 }
 
-export function validateRuntimeContract(contract, manifest) {
+function validateRuntimeContract(contract, manifest) {
   if (
     contract?.format !== 1 ||
     contract.revision !== manifest.contract_revision ||
@@ -147,7 +145,7 @@ export function validateDatabaseCompatibilityContract(contract) {
   return compatibility
 }
 
-export function selectImmutableDigest(repoDigests) {
+function selectImmutableDigest(repoDigests) {
   const canonicalDigests = [
     ...new Set(repoDigests.filter((candidate) => digestPattern.test(candidate))),
   ]
@@ -155,14 +153,6 @@ export function selectImmutableDigest(repoDigests) {
     throw new Error('stable core image did not resolve to one canonical digest')
   }
   return canonicalDigests[0]
-}
-
-export function localDocker(args, options = {}) {
-  return execFileSync('docker', args, {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: options.timeout ?? 180_000,
-  }).trim()
 }
 
 /** A reviewed canonical candidate can advance consumer admission without moving stable. */
@@ -183,7 +173,7 @@ export function resolveConfiguredCoreRelease(runDocker, config) {
   return release
 }
 
-export function resolveCoreRelease(runDocker, stableImage) {
+function resolveCoreRelease(runDocker, stableImage) {
   if (!stableImagePattern.test(stableImage)) {
     throw new Error(`unexpected core stable image: ${stableImage}`)
   }
@@ -216,14 +206,4 @@ export function inspectCoreRelease(runDocker, image, { allowLocalImage = false }
     manifest
   )
   return { image, manifest, runtime_contract: runtimeContract }
-}
-
-export function sha256(content) {
-  return createHash('sha256').update(content).digest('hex')
-}
-
-export function verifyArtifact(content, metadata, label) {
-  if (content.length !== metadata.size || sha256(content) !== metadata.sha256) {
-    throw new Error(`core ${label} artifact does not match its manifest`)
-  }
 }

@@ -1,31 +1,43 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
-import {
-  configStore,
-  MetaConfigSchema,
-  WebPeerRuntime,
-  readConnectionSettings,
-} from '../../packages/core/dist/index.js'
+import { configStore, MetaConfigSchema, WebPeerRuntime } from '../../packages/core/dist/index.js'
 
-void test('saved connections preserve identity, switch atomically, and survive restart/import', async () => {
-  const first = MetaConfigSchema.parse({
+void test('saved connection snapshots restore identity and preserve the selection on connection or write failure', async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'inkcre-connections-'))
+  const file = path.join(directory, 'connections.json')
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const priorMeta = configStore.metaConfig
+  const priorSettings = configStore.connectionSettings
+  const priorPeer = configStore.peerConfig
+  const priorAdapter = configStore.metaAdapter
+  t.after(() => {
+    configStore.metaConfig = priorMeta
+    configStore.connectionSettings = priorSettings
+    configStore.peerConfig = priorPeer
+    configStore.metaAdapter = priorAdapter
+  })
+  const first = {
     INKCRE_PGREST_URL: 'https://one.example',
     INKCRE_JWT_SECRET: 'fixture-one',
-  })
-  let persisted = structuredClone(first)
+    INKCRE_PEER_ID: '10000000-0000-4000-8000-000000000001',
+  }
+  await writeFile(file, JSON.stringify(first))
+  const readSnapshot = async () => JSON.parse(await readFile(file, 'utf8'))
   let rejectWrite = false
   const adapter = {
-    name: 'memory',
-    read: async () => persisted,
+    name: 'file-fixture',
+    read: readSnapshot,
     write: async (value) => {
       if (rejectWrite) throw new Error('disk full')
-      persisted = structuredClone(value)
+      await writeFile(file, JSON.stringify(value))
     },
   }
-  const connect = WebPeerRuntime.connect.bind(WebPeerRuntime)
   let stopped = 0
   let rejectConnection = false
-  WebPeerRuntime.connect = async () => {
+  t.mock.method(WebPeerRuntime, 'connect', async () => {
     if (rejectConnection) throw new Error('unreachable')
     return {
       runtime: {
@@ -35,55 +47,56 @@ void test('saved connections preserve identity, switch atomically, and survive r
       },
       peer: { config: {} },
     }
+  })
+  await configStore.initializeMeta(adapter)
+  const firstId = configStore.connectionSettings.activeConnectionId
+  assert.deepEqual(
+    configStore.connectionSettings.connections.map((entry) => entry.config.INKCRE_PEER_ID),
+    [first.INKCRE_PEER_ID]
+  )
+  const second = MetaConfigSchema.parse({
+    INKCRE_PGREST_URL: 'https://two.example',
+    INKCRE_JWT_SECRET: 'fixture-two',
+  })
+  const secondId = crypto.randomUUID()
+  await configStore.connectAndSave(second, {}, { id: secondId, name: '工作' })
+  await configStore.connectAndSave(first, {}, { id: firstId, name: '个人' })
+  // Rebuild runtime state from bytes written by the production store, without old selections.
+  configStore.metaConfig = MetaConfigSchema.parse({})
+  configStore.connectionSettings = { connections: [], activeConnectionId: null }
+  await configStore.initializeMeta(adapter)
+  assert.equal(configStore.connectionSettings.activeConnectionId, firstId)
+  assert.equal(configStore.metaConfig.INKCRE_PEER_ID, first.INKCRE_PEER_ID)
+  assert.equal(
+    configStore.connectionSettings.connections[1].config.INKCRE_PEER_ID,
+    second.INKCRE_PEER_ID
+  )
+  const snapshot = await readSnapshot()
+  const selectedMeta = JSON.parse(JSON.stringify(configStore.metaConfig))
+  rejectConnection = true
+  await assert.rejects(configStore.connectAndSave(second, {}, { id: secondId, name: '工作' }), {
+    message: 'unreachable',
+  })
+  assert.deepEqual(await readSnapshot(), snapshot)
+  assert.equal(configStore.connectionSettings.activeConnectionId, firstId)
+  assert.deepEqual(JSON.parse(JSON.stringify(configStore.metaConfig)), selectedMeta)
+  rejectConnection = false
+  rejectWrite = true
+  await assert.rejects(configStore.connectAndSave(second, {}, { id: secondId, name: '工作' }), {
+    message: 'disk full',
+  })
+  assert.equal(stopped, 1)
+  assert.deepEqual(await readSnapshot(), snapshot)
+  assert.equal(configStore.connectionSettings.activeConnectionId, firstId)
+  assert.deepEqual(JSON.parse(JSON.stringify(configStore.metaConfig)), selectedMeta)
+  const invalid = {
+    ...snapshot,
+    activeConnectionId: crypto.randomUUID(),
   }
-  try {
-    await configStore.initializeMeta(adapter)
-    const firstId = configStore.connectionSettings.activeConnectionId
-    assert.equal(configStore.connectionSettings.connections.length, 1)
-    assert.equal(configStore.metaConfig.INKCRE_PEER_ID, first.INKCRE_PEER_ID)
-    await configStore.saveMeta()
-    const second = MetaConfigSchema.parse({
-      INKCRE_PGREST_URL: 'https://two.example',
-      INKCRE_JWT_SECRET: 'fixture-two',
-    })
-    const secondId = crypto.randomUUID()
-    await configStore.connectAndSave(second, {}, { id: secondId, name: '工作' })
-    assert.equal(persisted.connections.length, 2)
-    await configStore.connectAndSave(first, {}, { id: firstId, name: '个人' })
-    await configStore.initializeMeta(adapter)
-    assert.equal(configStore.connectionSettings.activeConnectionId, firstId)
-    assert.equal(configStore.metaConfig.INKCRE_PEER_ID, first.INKCRE_PEER_ID)
-    assert.equal(
-      configStore.connectionSettings.connections[1].config.INKCRE_PEER_ID,
-      second.INKCRE_PEER_ID
-    )
-    const snapshot = JSON.stringify(persisted)
-    rejectConnection = true
-    await assert.rejects(configStore.connectAndSave(second, {}, { id: secondId, name: '工作' }))
-    assert.equal(JSON.stringify(persisted), snapshot)
-    assert.equal(configStore.connectionSettings.activeConnectionId, firstId)
-    rejectConnection = false
-    rejectWrite = true
-    await assert.rejects(configStore.connectAndSave(second, {}, { id: secondId, name: '工作' }))
-    assert.equal(stopped, 1)
-    assert.equal(configStore.connectionSettings.activeConnectionId, firstId)
-    rejectWrite = false
-    const exported = JSON.parse(JSON.stringify(configStore.connectionSettings))
-    await configStore.resetMeta()
-    await configStore.connectAndSave(first, {}, exported.connections[0], exported)
-    assert.deepEqual(JSON.parse(JSON.stringify(configStore.connectionSettings)), exported)
-    assert.equal(
-      readConnectionSettings(first, first).connections[0].config.INKCRE_PEER_ID,
-      first.INKCRE_PEER_ID
-    )
-    persisted = {
-      ...first,
-      connections: exported.connections,
-      activeConnectionId: crypto.randomUUID(),
-    }
-    await assert.rejects(configStore.initializeMeta(adapter))
-    assert.equal(persisted.connections.length, 2)
-  } finally {
-    WebPeerRuntime.connect = connect
-  }
+  await writeFile(file, JSON.stringify(invalid))
+  await assert.rejects(configStore.initializeMeta(adapter), {
+    name: 'ZodError',
+    message: /Invalid connection selection/,
+  })
+  assert.deepEqual(await readSnapshot(), invalid)
 })

@@ -45,12 +45,7 @@ export default defineContentScript({
           delay = 30_000
         } else delay = Math.min(delay * 2, 300_000)
       } catch (error) {
-        await browser.runtime
-          .sendMessage({
-            type: 'collection-observation-error',
-            error: error instanceof Error ? error.message : String(error),
-          })
-          .catch(() => undefined)
+        console.warn('Automatic collection could not read the current page:', error)
       } finally {
         running = false
         if (!final && document.visibilityState === 'visible') schedule(delay)

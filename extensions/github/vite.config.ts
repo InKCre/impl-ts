@@ -16,14 +16,7 @@ import {
 const extensionRoot = fileURLToPath(new URL('.', import.meta.url))
 const extensionComponents = fileURLToPath(new URL('./src/components', import.meta.url))
 
-export const githubArtifactBase = './'
-export const githubBuildTarget = 'es2022'
-export const githubBuildOptions = {
-  target: githubBuildTarget,
-  outDir: 'dist/web',
-  sourcemap: true,
-}
-export const githubFederationOptions = {
+const federationOptions = {
   name: 'extension.github',
   filename: 'remoteEntry.js',
   manifest: true,
@@ -39,7 +32,7 @@ export default defineConfig(async ({ command }) => {
   const uiSourceComponents = uiSource ? path.resolve(uiSource.root, 'src/components') : null
 
   return {
-    plugins: [vue(), federation(githubFederationOptions)],
+    plugins: [vue(), federation(federationOptions)],
     resolve: {
       alias: uiSource ? createUiSourceAliases(uiSource) : [],
       ...(uiSource ? { dedupe: uiSourceDedupe } : {}),
@@ -52,8 +45,12 @@ export default defineConfig(async ({ command }) => {
           },
         }
       : {}),
-    base: githubArtifactBase,
-    build: githubBuildOptions,
+    base: './',
+    build: {
+      target: 'es2022',
+      outDir: 'dist/web',
+      sourcemap: true,
+    },
     css: {
       preprocessorOptions: {
         scss: {

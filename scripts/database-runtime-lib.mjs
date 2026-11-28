@@ -25,16 +25,17 @@ import {
 } from './database-provider.mjs'
 
 export const repoRoot = fileURLToPath(new URL('..', import.meta.url))
-export const BROWSER_PEER_ID = '00000000-0000-4000-8000-000000000001'
-export const CORE_PEER_ID = '00000000-0000-4000-8000-000000000002'
+const BROWSER_PEER_ID = '00000000-0000-4000-8000-000000000001'
+const CORE_PEER_ID = '00000000-0000-4000-8000-000000000002'
 
 const CORE_CAPABILITIES = new Map([
+  ['core.feature_retrieval.lexical.v1', { method: 'POST', path: '/lexical-retrieval' }],
   ['core.semantic_retrieval.v1', { method: 'POST', path: '/semantic-retrieval' }],
   ['core.organization.rumination.v1', { method: 'POST', path: '/organization/ruminate' }],
   ['core.extension.management.v2', { method: 'POST', path: '/extension-management/v2' }],
 ])
 
-export function validateInstance(instance) {
+function validateInstance(instance) {
   if (!/^[a-z0-9][a-z0-9-]{2,48}$/.test(instance)) {
     throw new Error(`invalid runtime identity: ${instance}`)
   }
@@ -45,7 +46,7 @@ export function runtimeDirectory(instance) {
   return `${repoRoot}/.runtime/database/${validateInstance(instance)}`
 }
 
-export function projectName(instance) {
+function projectName(instance) {
   return `inkcre-web-${validateInstance(instance)}`
 }
 
@@ -349,7 +350,7 @@ export async function exists(path) {
   }
 }
 
-export async function fetchStatus(url, expectedStatuses, timeout = 3000) {
+async function fetchStatus(url, expectedStatuses, timeout = 3000) {
   try {
     const response = await fetch(url, {
       redirect: 'manual',
@@ -393,7 +394,7 @@ function expectedCapabilityUrl(baseUrl, path) {
 }
 
 function hasExpectedCapabilities(peer, baseUrl) {
-  if (!Array.isArray(peer?.capabilities) || Date.parse(peer.lease_expires_at) <= Date.now()) {
+  if (!Array.isArray(peer?.capabilities) || !(Date.parse(peer.lease_expires_at) > Date.now())) {
     return false
   }
   return [...CORE_CAPABILITIES].every(([id, expected]) => {
@@ -406,7 +407,7 @@ function hasExpectedCapabilities(peer, baseUrl) {
   })
 }
 
-export async function configureCorePeer(state, timeout = 35_000) {
+async function configureCorePeer(state, timeout = 35_000) {
   const credentials = await runtimeCredentials(state.identity)
   const authorization = `Bearer ${await createPeerToken(credentials.JWT_SECRET)}`
   if (state.provider.kind !== 'external') {

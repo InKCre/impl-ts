@@ -137,6 +137,15 @@ export const specimens = [
     post: {
       ...basePost,
       id: '1848392839000000011',
+      text: {
+        text: '🌿 safe script auth hidden',
+        visible: [0, 18],
+        entities: [
+          { type: 'url', range: [2, 6], expanded: 'https://example.org/visible' },
+          { type: 'url', range: [7, 13], expanded: 'javascript:alert(1)' },
+          { type: 'url', range: [14, 18], expanded: 'https://name:password@example.org/' },
+        ],
+      },
       counts: { likes: 0 },
       card: {
         type: 'summary',

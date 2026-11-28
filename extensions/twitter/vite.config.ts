@@ -16,14 +16,7 @@ import {
 const extensionRoot = fileURLToPath(new URL('.', import.meta.url))
 const extensionComponents = fileURLToPath(new URL('./src/components', import.meta.url))
 
-export const twitterArtifactBase = './'
-export const twitterBuildTarget = 'es2022'
-export const twitterBuildOptions = {
-  target: twitterBuildTarget,
-  outDir: 'dist/web',
-  sourcemap: true,
-}
-export const twitterFederationOptions = {
+const federationOptions = {
   name: `extension.twitter`,
   filename: 'remoteEntry.js',
   manifest: true,
@@ -45,7 +38,7 @@ export default defineConfig(async ({ command }) => {
   const uiSourceComponents = uiSource ? path.resolve(uiSource.root, 'src/components') : null
 
   return {
-    plugins: [vue(), vueJsx(), federation(twitterFederationOptions)],
+    plugins: [vue(), vueJsx(), federation(federationOptions)],
     resolve: {
       alias: uiSource ? createUiSourceAliases(uiSource) : [],
       ...(uiSource ? { dedupe: uiSourceDedupe } : {}),
@@ -62,8 +55,12 @@ export default defineConfig(async ({ command }) => {
           },
         }
       : {}),
-    base: twitterArtifactBase,
-    build: twitterBuildOptions,
+    base: './',
+    build: {
+      target: 'es2022',
+      outDir: 'dist/web',
+      sourcemap: true,
+    },
     css: {
       preprocessorOptions: {
         scss: {

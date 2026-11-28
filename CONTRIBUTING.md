@@ -58,10 +58,9 @@ and the distinction between applications, SDK packages, and native Extension rel
 
 ## Verification and pull requests
 
-Run `pnpm check` before opening or updating a pull request. Also run the behavior-level command that
-matches the change, normally `pnpm test:e2e:web`, `pnpm test:e2e:webext`, or a narrower documented
-acceptance command. Record what actually ran and any unmet environment condition in the pull-request
-body; a package build is not evidence of browser behavior.
+打开或更新 PR 前运行 `pnpm check`，并执行与变更行为对应的验收入口。`pnpm test:e2e` 包含 Web、WebExt 的独占数据库/浏览器路径和 Mail 阅读验收；局部复验使用 `pnpm test:e2e:web`、`pnpm test:e2e:webext`、`pnpm test:mail` 或文档中说明的专项入口。
+
+Core 构建完成后，`pnpm test:contracts` 可集中验证 SDK、运行时、采集和发布合同；本地默认检查与 CI 使用同一入口。在 PR 正文记录实际执行结果、跳过项和未满足的环境条件。产物构建通过不能代替浏览器行为证明。
 
 External fork workflows require maintainer approval and receive no preview or production credentials.
 A maintainer may perform a trusted Pages preview after the ordinary checks pass. Frozen dependency

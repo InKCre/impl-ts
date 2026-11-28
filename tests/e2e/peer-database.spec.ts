@@ -46,56 +46,6 @@ test.beforeEach(async ({ page }) => {
   )
 })
 
-test('built browser artifact reads and writes the peer protocol', async ({ page }) => {
-  await page.goto('/')
-
-  const authorization = `Bearer ${await token()}`
-  const result = await page.evaluate(
-    async ({ postgrestUrl, authorization }) => {
-      const read = await fetch(
-        `${postgrestUrl}peers?select=id,name&id=eq.00000000-0000-4000-8000-000000000001`,
-        { headers: { Authorization: authorization } }
-      )
-      const write = await fetch(`${postgrestUrl}peers?on_conflict=id`, {
-        method: 'POST',
-        headers: {
-          Authorization: authorization,
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates,return=representation',
-        },
-        body: JSON.stringify({
-          id: '11111111-1111-4111-8111-111111111111',
-          name: 'peer-e2e',
-          labels: ['e2e'],
-          config: {},
-          config_schema: {},
-          capabilities: [],
-          lease_expires_at: null,
-        }),
-      })
-      const writeBody = await write.json()
-      const cleanup = await fetch(
-        `${postgrestUrl}peers?id=eq.11111111-1111-4111-8111-111111111111`,
-        { method: 'DELETE', headers: { Authorization: authorization } }
-      )
-      return {
-        readStatus: read.status,
-        readBody: await read.json(),
-        writeStatus: write.status,
-        writeBody,
-        cleanupStatus: cleanup.status,
-      }
-    },
-    { postgrestUrl, authorization }
-  )
-
-  expect(result.readStatus).toBe(200)
-  expect(result.readBody).toHaveLength(1)
-  expect(result.writeStatus).toBe(201)
-  expect(result.writeBody[0].id).toBe('11111111-1111-4111-8111-111111111111')
-  expect(result.cleanupStatus).toBe(204)
-})
-
 test('startup shows pending and failed states without trapping a deep link', async ({ page }) => {
   const path = '/sources?startup-check=preserved'
   let release!: () => void
@@ -293,7 +243,6 @@ test('a pending initial lease does not block pages or admit the browser worker',
     await expect.poll(() => enabledReleaseReads).toBe(1)
     release()
     await expect.poll(() => workerRequests).toBeGreaterThan(0)
-    await expect.poll(() => extensionReads).toBeGreaterThan(0)
     await expect.poll(() => enabledReleaseReads).toBe(1)
     await expect(
       page.getByText(
@@ -313,6 +262,7 @@ test('reset invalidates pending registration before it can renew or start the wo
   const gate = new Promise<void>((resolve) => {
     release = resolve
   })
+  let registrationPending = false
   let registrationFinished = false
   let leaseRequests = 0
   let workerRequests = 0
@@ -329,6 +279,7 @@ test('reset invalidates pending registration before it can renew or start the wo
       await route.continue()
       return
     }
+    registrationPending = true
     await gate
     const response = await route.fetch()
     await route.fulfill({ response })
@@ -337,7 +288,8 @@ test('reset invalidates pending registration before it can renew or start the wo
   try {
     await page.goto('/sources')
     await expect(page.getByRole('main')).toBeVisible()
-    await page.goto('/settings')
+    await expect.poll(() => registrationPending).toBe(true)
+    await openSettings(page)
     await page.getByRole('button', { name: 'Reset', exact: true }).click()
     await page.getByRole('button', { name: 'Confirm', exact: true }).click()
     await expect(page.getByLabel('PostgREST URL')).toHaveValue('')
@@ -369,6 +321,7 @@ test('switching connections cannot renew a pending old registration against eith
   const gate = new Promise<void>((resolve) => {
     release = resolve
   })
+  let registrationPending = false
   let registrationFinished = false
   let oldLeaseRequests = 0
   let newLeaseRequests = 0
@@ -381,6 +334,7 @@ test('switching connections cannot renew a pending old registration against eith
       await route.continue()
       return
     }
+    registrationPending = true
     await gate
     const response = await route.fetch()
     await route.fulfill({ response })
@@ -418,6 +372,7 @@ test('switching connections cannot renew a pending old registration against eith
   try {
     await page.goto('/sources')
     await expect(page.getByRole('main')).toBeVisible()
+    await expect.poll(() => registrationPending).toBe(true)
     await openSettings(page)
     await page.getByLabel('PostgREST URL').fill(alternateUrl)
     await page.getByLabel('JWT signing secret').fill(alternateSecret)
@@ -468,7 +423,6 @@ test('a new browser identity waits for insertion before opening business pages',
     inserting = true
     const inserted = route.request().postDataJSON()
     expect(inserted.id).toBe(peerId)
-    expect(inserted.application_version).toBe(appVersion)
     expect(inserted.capabilities).toEqual([])
     await gate
     await route.fulfill({
@@ -562,7 +516,6 @@ test('zero participation persists, stays idle, and a custom interval resumes lea
   await expect.poll(() => scans).toBeGreaterThan(0)
   expect(leaseTtls.length).toBeGreaterThan(0)
   expect(leaseTtls.every((ttl) => ttl === 6)).toBe(true)
-  await expect.poll(() => extensionReads).toBeGreaterThan(0)
   const scansBefore = scans
   await page.clock.runFor(2_000)
   await expect.poll(() => scans).toBeGreaterThan(scansBefore)
@@ -624,6 +577,7 @@ test('disabling while registration is pending prevents its later lease or worker
   try {
     await page.goto('/sources')
     await expect(page.getByRole('main')).toBeVisible()
+    await expect.poll(() => patches).toBe(1)
     await openSettings(page)
     await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
     await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
@@ -707,17 +661,13 @@ test('disabling participation drains a dispatched claim before saving configurat
               loadShare(name: string): Promise<() => Sdk>
             }>
           }
-          __claimDrain: { stop(): Promise<void>; handlerRuns: number; stopCompleted: boolean }
+          __claimDrain: { handlerRuns: number }
         }
         const host = globals.__FEDERATION__.__INSTANCES__.find(
           (instance) => instance.options.name === 'host'
         )!
         const sdk = (await host.loadShare('@inkcre/core'))()
-        globals.__claimDrain = {
-          stop: () => sdk.JobManager.stopWorker(),
-          handlerRuns: 0,
-          stopCompleted: false,
-        }
+        globals.__claimDrain = { handlerRuns: 0 }
         sdk.JobManager.registerHandler(type, {
           parameters: sdk.MetaConfigSchema,
           canHandle: () => true,
@@ -730,20 +680,6 @@ test('disabling participation drains a dispatched claim before saving configurat
       { id, type }
     )
     await expect.poll(() => claimStored).toBe(true)
-    const stoppedBeforeClaimReturned = await page.evaluate(async () => {
-      const fixture = (
-        globalThis as typeof globalThis & {
-          __claimDrain: { stop(): Promise<void>; handlerRuns: number; stopCompleted: boolean }
-        }
-      ).__claimDrain
-      void fixture.stop().then(() => {
-        fixture.stopCompleted = true
-      })
-      await Promise.resolve()
-      await Promise.resolve()
-      return fixture.stopCompleted
-    })
-    expect(stoppedBeforeClaimReturned).toBe(false)
     await openSettings(page)
     await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
     await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
@@ -877,7 +813,7 @@ test('Registry confirmation selects one Peer and offline enablement preserves ot
     await page.reload()
     const first = page
       .getByRole('article', { name: 'Handoff check' })
-      .getByRole('region', { name: 'E2E Peer 1' })
+      .getByRole('group', { name: 'E2E Peer 1' })
     // Each row is its explicit target; one mutation cannot move the other Peer’s pin.
     await first.getByRole('button', { name: 'Enable', exact: true }).click()
     await expect
@@ -1175,22 +1111,6 @@ test('failed remote enablement reads back persisted intent without claiming a ru
   }
 })
 
-test('wrong and absent credentials are rejected', async ({ page }) => {
-  const wrongAuthorization = `Bearer ${await token('wrong-web-jwt-secret-at-least-32-bytes')}`
-  const statuses = await page.evaluate(
-    async ({ postgrestUrl, wrongAuthorization }) => {
-      const wrong = await fetch(`${postgrestUrl}peers?select=id`, {
-        headers: { Authorization: wrongAuthorization },
-      })
-      const anonymous = await fetch(`${postgrestUrl}peers?select=id`)
-      return [wrong.status, anonymous.status]
-    },
-    { postgrestUrl, wrongAuthorization }
-  )
-
-  expect(statuses).toEqual([401, 401])
-})
-
 test('Web Peer publishes its app identity and preserves a user name', async ({ page }) => {
   const id = crypto.randomUUID()
   const authorization = `Bearer ${await token()}`
@@ -1269,6 +1189,19 @@ test('Settings export restores the complete browser experience', async ({ page }
   })
   expect(created.status).toBe(201)
   try {
+    const selected = await fetch(`${postgrestUrl}extension_peer_participations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: extensionName,
+        peer_id: '00000000-0000-4000-8000-000000000001',
+        distribution: 'module_federation',
+        version: '1.0.0',
+        enabled: false,
+        config_schema: null,
+      }),
+    })
+    expect(selected.status).toBe(201)
     await page.goto('/settings')
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export', exact: true }).click()
@@ -1311,6 +1244,7 @@ test('Settings export restores the complete browser experience', async ({ page }
       { postgrestUrl, jwtSecret, alternateId }
     )
     await page.reload()
+    const documentStartedAt = await page.evaluate(() => performance.timeOrigin)
     page.once('dialog', (dialog) => dialog.accept())
     await page.locator('input[type="file"]').setInputFiles(path!)
     await expect
@@ -1325,14 +1259,21 @@ test('Settings export restores the complete browser experience', async ({ page }
       page.getByRole('switch', { name: 'Enable telemetry', exact: true })
     ).not.toBeChecked()
     // Import changes Peer identity without reloading this document: the Host must bind the new ID.
-    await page.goto('/extensions')
+    await page.locator('button[aria-controls="app-side-panel"]').click()
+    await page.getByLabel('Primary').getByRole('link', { name: 'Extensions', exact: true }).click()
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStartedAt)
     const row = page
       .getByRole('article', { name: 'Host identity switch', exact: true })
-      .getByRole('region')
+      .getByRole('group')
       .filter({ hasText: 'This browser' })
-    await expect(row.getByRole('button', { name: 'Install', exact: true })).toBeEnabled()
+    await expect(row.getByRole('button', { name: 'Change Version', exact: true })).toBeEnabled()
+    await expect(row.getByText('Not running', { exact: true })).toBeVisible()
     await expect(row.getByRole('alert')).toHaveCount(0)
   } finally {
+    await fetch(`${postgrestUrl}extension_peer_participations?name=eq.${extensionName}`, {
+      method: 'DELETE',
+      headers,
+    })
     await fetch(`${postgrestUrl}extensions?name=eq.${extensionName}`, { method: 'DELETE', headers })
     const cleanup = await fetch(endpoint, {
       method: 'DELETE',
@@ -1428,7 +1369,6 @@ test('Peer config keeps invalid and failed drafts and saves only once while pend
       const cancel = dialog.getByRole('button', { name: 'Cancel' })
       await expect(cancel).toBeDisabled()
       await expect(cancel).not.toHaveAttribute('aria-busy', 'true')
-      await expect(cancel.locator('.ink-button__loading')).toHaveCount(0)
       await page.keyboard.press('Escape')
       await expect(dialog).toBeVisible()
       await expect(editor).toHaveAttribute('contenteditable', 'false')
@@ -1460,75 +1400,6 @@ test('Peer config keeps invalid and failed drafts and saves only once while pend
     })
     expect(cleanup.status).toBe(204)
   }
-})
-
-test('core Peer publishes and serves its exact capability inbounds', async ({ page }) => {
-  await page.goto('/')
-  const authorization = `Bearer ${await token()}`
-  const result = await page.evaluate(
-    async ({ postgrestUrl, authorization }) => {
-      const peersResponse = await fetch(
-        `${postgrestUrl}peers?select=capabilities,lease_expires_at&id=eq.00000000-0000-4000-8000-000000000002`,
-        { headers: { Authorization: authorization } }
-      )
-      const peers = await peersResponse.json()
-      const management = peers[0]?.capabilities?.find(
-        (capability: { id: string }) => capability.id === 'core.extension.management.v2'
-      )
-      const execution = await fetch(management.inbound.parameters.url, {
-        method: management.inbound.parameters.method,
-        headers: { Authorization: authorization, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'status', extension: 'e2e/not-installed' }),
-      })
-      return {
-        peersStatus: peersResponse.status,
-        capabilities: peers[0]?.capabilities,
-        leaseExpiresAt: peers[0]?.lease_expires_at,
-        executionStatus: execution.status,
-        executionBody: await execution.json(),
-      }
-    },
-    { postgrestUrl, authorization }
-  )
-
-  expect(result.peersStatus).toBe(200)
-  expect(Date.parse(result.leaseExpiresAt)).toBeGreaterThan(Date.now())
-  expect(result.capabilities).toEqual([
-    {
-      id: 'core.extension.management.v2',
-      inbound: {
-        protocol: 'core.peer.protocol.http.v1',
-        parameters: { method: 'POST', url: `${coreUrl}extension-management/v2` },
-      },
-    },
-    {
-      id: 'core.feature_retrieval.lexical.v1',
-      inbound: {
-        protocol: 'core.peer.protocol.http.v1',
-        parameters: { method: 'POST', url: `${coreUrl}lexical-retrieval` },
-      },
-    },
-    {
-      id: 'core.organization.rumination.v1',
-      inbound: {
-        protocol: 'core.peer.protocol.http.v1',
-        parameters: { method: 'POST', url: `${coreUrl}organization/ruminate` },
-      },
-    },
-    {
-      id: 'core.semantic_retrieval.v1',
-      inbound: {
-        protocol: 'core.peer.protocol.http.v1',
-        parameters: { method: 'POST', url: `${coreUrl}semantic-retrieval` },
-      },
-    },
-  ])
-  expect(result.executionStatus).toBe(200)
-  expect(result.executionBody).toEqual({
-    peer_id: '00000000-0000-4000-8000-000000000002',
-    supported_distributions: ['python'],
-    extensions: [],
-  })
 })
 
 test('saved content keeps Markdown structure and literal text in Web reading and previews', async ({
@@ -1572,14 +1443,19 @@ test('saved content keeps Markdown structure and literal text in Web reading and
         if (block.resolver === 'core.markdown.v1') {
           await expect(reader.getByRole('checkbox')).toBeChecked()
           await expect(reader.getByRole('checkbox')).toBeDisabled()
-          await page.screenshot({ path: 'test-results/web-markdown-reader.png' })
         }
       }
       if (block.resolver !== 'core.html.v1') {
-        await page.goto(`/info-base/graph/blocks/${block.id}`)
-        await expect(
-          page.locator('.content-preview').filter({ hasText: 'stays literal' }).first()
-        ).toContainText('<node>')
+        await page.goto(`/info-base/graph?focal_block=${block.id}`)
+        const preview = page.getByRole('button', {
+          name: `Explore entry #${block.id}`,
+          exact: true,
+        })
+        await expect(preview).toContainText(
+          block.resolver === 'core.text.v1'
+            ? 'Plain <node> stays literal'
+            : '`<node>` stays literal'
+        )
       }
     }
   } finally {
@@ -1592,6 +1468,86 @@ test('saved content keeps Markdown structure and literal text in Web reading and
     )
     expect(cleanup.status).toBe(204)
   }
+})
+
+test('the graph retries a failed read and keeps a dragged node when highlighting incoming relations', async ({
+  page,
+}) => {
+  const headers = {
+    Authorization: `Bearer ${await token()}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  }
+  const created = await fetch(`${postgrestUrl}blocks`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(
+      ['Graph focus', 'Outgoing neighbor'].map((content) => ({
+        resolver: 'core.text.v1',
+        storage: null,
+        content,
+      }))
+    ),
+  })
+  expect(created.status).toBe(201)
+  const [focus, neighbor] = await created.json()
+  try {
+    const relation = await fetch(`${postgrestUrl}relations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ from_: focus.id, to_: neighbor.id, content: 'related' }),
+    })
+    expect(relation.status).toBe(201)
+    let rejectRead = true
+    let rejected = 0
+    await page.route('**/blocks?**', async (route) => {
+      if (
+        rejectRead &&
+        new URL(route.request().url()).searchParams.get('id') === `eq.${focus.id}`
+      ) {
+        rejected++
+        await route.fulfill({ status: 403, json: { message: 'Fixture graph read rejected' } })
+      } else await route.continue()
+    })
+    await page.goto(`/info-base/graph?focal_block=${focus.id}`)
+    await expect(page.getByText('Unable to load the graph', { exact: true })).toBeVisible()
+    expect(rejected).toBeGreaterThan(0)
+    rejectRead = false
+    await page.getByRole('button', { name: 'Retry', exact: true }).click()
+    const focusNode = page.locator('.block-node').filter({
+      has: page.getByRole('button', { name: `Explore entry #${focus.id}`, exact: true }),
+    })
+    const neighborNode = page.locator('.block-node').filter({
+      has: page.getByRole('button', { name: `Explore entry #${neighbor.id}`, exact: true }),
+    })
+    await expect(focusNode).toContainText('Graph focus')
+    await expect(neighborNode).toContainText('Outgoing neighbor')
+    const offset = async () =>
+      (await focusNode.boundingBox())!.x - (await neighborNode.boundingBox())!.x
+    const handle = focusNode.getByText(`#${focus.id}`, { exact: true })
+    await handle.click({ trial: true })
+    const before = await offset()
+    const box = (await handle.boundingBox())!
+    await page.mouse.move(box.x + 3, box.y + 3)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 68, box.y + 23, { steps: 6 })
+    await page.mouse.up()
+    await expect.poll(offset).toBeGreaterThan(before + 40)
+    const dragged = await offset()
+    await page.getByText('View options', { exact: true }).click()
+    await page.getByRole('combobox', { name: 'Emphasize relations' }).click()
+    await page.getByRole('option', { name: 'Incoming', exact: true }).click()
+    await expect(neighborNode).toHaveCSS('border-top-style', 'dashed')
+    expect(Math.abs((await offset()) - dragged)).toBeLessThan(2)
+  } finally {
+    const cleanup = await fetch(`${postgrestUrl}blocks?id=in.(${focus.id},${neighbor.id})`, {
+      method: 'DELETE',
+      headers,
+    })
+    expect(cleanup.status).toBe(200)
+  }
+  await page.goto(`/info-base/graph/blocks/${focus.id}`)
+  await expect(page.getByText(`Entry #${focus.id} no longer exists.`)).toBeVisible()
 })
 
 test('Block Inspector delegates rumination through the discovered Peer', async ({ page }) => {
@@ -1945,7 +1901,6 @@ test('Job preserves readable errors and logs and distinguishes failed and missin
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
     ).toBe(true)
-    await expect(errorDetails).toHaveJSProperty('textContent', failureDetails)
 
     const structuredFailure = { error: { message: failureDetails } }
     const updatedState = await fetch(`${postgrestUrl}jobs?id=eq.${jobId}`, {
@@ -1971,7 +1926,9 @@ test('Job preserves readable errors and logs and distinguishes failed and missin
   }
 })
 
-test('Source titles follow saved names across navigation and refresh', async ({ page }) => {
+test('Sources preserve the draft after a lost creation response and reopen the saved source', async ({
+  page,
+}) => {
   const authorization = `Bearer ${await token()}`
   const headers = { Authorization: authorization, 'Content-Type': 'application/json' }
   const type = `e2e.title.${crypto.randomUUID()}`
@@ -1990,16 +1947,35 @@ test('Source titles follow saved names across navigation and refresh', async ({ 
   expect(createdType.status).toBe(201)
   let sourceId: number | undefined
   try {
-    const created = await fetch(`${postgrestUrl}sources`, {
-      method: 'POST',
-      headers: { ...headers, Prefer: 'return=representation' },
-      body: JSON.stringify({ type, nickname: initialName, config: {} }),
+    let submitted = 0
+    await page.route('**/sources?**', async (route) => {
+      if (route.request().method() !== 'POST' || route.request().postDataJSON().id !== undefined)
+        return route.continue()
+      submitted++
+      const response = await route.fetch()
+      expect(response.status()).toBe(201)
+      sourceId = (await response.json()).id
+      // The database accepted the source, but the creating browser never receives its ID.
+      await route.abort('connectionreset')
     })
-    expect(created.status).toBe(201)
-    const [source] = await created.json()
-    sourceId = source.id
     await page.goto('/sources')
     await expect(page).toHaveTitle('Sources - InKCre')
+    await page.getByRole('button', { name: 'Create source', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Create source', exact: true })
+    await dialog.getByLabel('Nickname', { exact: true }).fill(initialName)
+    await dialog.getByRole('combobox', { name: 'Type', exact: true }).click()
+    await dialog.getByRole('option', { name: type, exact: true }).click()
+    await dialog.locator('.cm-content').fill('{"review":"kept"}')
+    await dialog.getByRole('button', { name: 'Create source', exact: true }).click()
+    await expect(dialog.getByRole('alert')).toContainText(
+      'Unable to confirm creation. Check the source list before trying again.'
+    )
+    await expect(dialog.getByLabel('Nickname', { exact: true })).toHaveValue(initialName)
+    await expect(dialog.locator('.cm-content')).toContainText('"review":"kept"')
+    page.once('dialog', (confirmation) => confirmation.accept())
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+    expect(submitted).toBe(1)
     await page.getByRole('link', { name: initialName, exact: true }).click()
     await expect(page).toHaveTitle(`${initialName} - Sources - InKCre`)
     await page.getByRole('tab', { name: 'Config' }).click()

@@ -16,14 +16,7 @@ import {
 const extensionRoot = fileURLToPath(new URL('.', import.meta.url))
 const extensionComponents = fileURLToPath(new URL('./src/components', import.meta.url))
 
-export const bilibiliArtifactBase = './'
-export const bilibiliBuildTarget = 'es2022'
-export const bilibiliBuildOptions = {
-  target: bilibiliBuildTarget,
-  outDir: 'dist/web',
-  sourcemap: true,
-}
-export const bilibiliFederationOptions = {
+const federationOptions = {
   name: 'extension.bilibili',
   filename: 'remoteEntry.js',
   manifest: true,
@@ -39,7 +32,7 @@ export default defineConfig(async ({ command }) => {
   const uiSourceComponents = uiSource ? path.resolve(uiSource.root, 'src/components') : null
 
   return {
-    plugins: [vue(), federation(bilibiliFederationOptions)],
+    plugins: [vue(), federation(federationOptions)],
     resolve: {
       alias: uiSource ? createUiSourceAliases(uiSource) : [],
       ...(uiSource ? { dedupe: uiSourceDedupe } : {}),
@@ -52,8 +45,12 @@ export default defineConfig(async ({ command }) => {
           },
         }
       : {}),
-    base: bilibiliArtifactBase,
-    build: bilibiliBuildOptions,
+    base: './',
+    build: {
+      target: 'es2022',
+      outDir: 'dist/web',
+      sourcemap: true,
+    },
     css: {
       preprocessorOptions: {
         scss: {

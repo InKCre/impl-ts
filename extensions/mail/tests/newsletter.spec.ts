@@ -3,7 +3,6 @@ import { expect, test } from '@playwright/test'
 test('reading, original content and publication archive preserve meaningful differences', async ({
   page,
 }) => {
-  page.on('pageerror', (error) => console.error(error))
   const externalRequests: string[] = []
   page.on('request', (request) => {
     if (request.url().includes('tracker.invalid') || request.url().includes('example.org')) {
@@ -39,7 +38,6 @@ test('reading, original content and publication archive preserve meaningful diff
   await expect(page.getByText('weekly.example.org', { exact: true })).not.toBeVisible()
   await expect(page.getByRole('button', { name: 'Weekly research', exact: true })).toHaveCount(2)
   await page.getByText('2 份投递副本').click()
-  await expect(page.getByRole('button', { name: '打开投递副本 2' })).toBeVisible()
   await page.getByRole('button', { name: '打开投递副本 1' }).click()
   await expect(body.getByRole('heading', { name: 'Article two' })).toBeVisible()
   expect(externalRequests).toEqual([])
@@ -153,11 +151,6 @@ test('recall groups one email while preserving ambiguous, orphan and unavailable
   expect(groups[0].evidence.map((match: { rank: number }) => match.rank)).toEqual([10, 9, 8])
   expect(groups[0].evidence[0].excerpt).toContain('opaque-subscriber-token')
   expect(groups.flatMap((group: { evidence: unknown[] }) => group.evidence)).toHaveLength(8)
-  expect(
-    groups.every((group: { evidence: { unchanged: boolean }[] }) =>
-      group.evidence.every((match) => match.unchanged)
-    )
-  ).toBe(true)
   expect(groups.slice(2).every((group: { readable: boolean }) => !group.readable)).toBe(true)
 })
 

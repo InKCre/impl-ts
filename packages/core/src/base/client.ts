@@ -12,6 +12,14 @@ export interface DatabaseConnection {
   readonly fetch?: typeof globalThis.fetch
 }
 
+export function captureDatabaseConnection({
+  baseUrl,
+  tokenProvider,
+  fetch: fetcher = globalThis.fetch,
+}: DatabaseConnection): Required<DatabaseConnection> {
+  return { baseUrl, tokenProvider, fetch: fetcher }
+}
+
 function encodeTransportValue<Value>(value: unknown): Value {
   const encoded = JSON.stringify(value)
   if (encoded === undefined) {
@@ -105,7 +113,7 @@ export class DatabaseClient<
     protected defSchema: { parse(input: unknown): DT } | undefined,
     connection: DatabaseConnection
   ) {
-    const { baseUrl, tokenProvider, fetch: fetcher = globalThis.fetch } = connection
+    const { baseUrl, tokenProvider, fetch: fetcher } = captureDatabaseConnection(connection)
     const url = new URL(baseUrl)
     if (!['https:', 'http:'].includes(url.protocol)) {
       throw new TypeError('PostgREST URL must use HTTP(S).')

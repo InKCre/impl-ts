@@ -52,6 +52,7 @@ export class CaptureResolver extends Resolver<string, SolvedCapture> {
       throw new Error('采集材料顺序不连续或重复。')
     }
     const annotations = outgoing.filter((relation) => relation.content === 'annotation')
+    if (!materials.length && !annotations.length) throw new Error('采集内容缺少材料和附注。')
     if (annotations.length > 1) throw new Error('采集内容存在重复附注。')
     const result: SolvedCapture = { metadata, materials: [], annotation: null }
     for (const relation of materials) {

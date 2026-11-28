@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DatabaseClient, type DatabaseConnection } from '../base/client'
+import { captureDatabaseConnection, DatabaseClient, type DatabaseConnection } from '../base/client'
 import { PeerCapabilitySnapshotSchema, PEER_HTTP_PROTOCOL } from '../peer/contracts'
 import {
   OBSERVABILITY_CAPABILITY,
@@ -37,14 +37,14 @@ const HISTORY = 'Only the selected backend is queried. Data from previous backen
 
 /** One explicit deployment snapshot; queries never consult a selected App connection. */
 export class ObservabilityClient {
-  private readonly connection: DatabaseConnection
+  private readonly connection: Required<DatabaseConnection>
   private readonly logs: DatabaseClient<'logs'>
   private readonly configs: DatabaseClient<'configs'>
   private readonly peers: DatabaseClient<'peers'>
   private selectedBackend?: Promise<'postgresql' | 'loki'>
 
   constructor(connection: DatabaseConnection) {
-    this.connection = { ...connection }
+    this.connection = captureDatabaseConnection(connection)
     this.logs = new DatabaseClient('logs', undefined, this.connection)
     this.configs = new DatabaseClient('configs', undefined, this.connection)
     this.peers = new DatabaseClient('peers', undefined, this.connection)
@@ -127,7 +127,8 @@ export class ObservabilityClient {
     timeoutMs = 30_000
   ): Promise<unknown> {
     // After provider selection, dispatch once. Never redirect a failed write to another backend.
-    const response = await (this.connection.fetch ?? globalThis.fetch)(endpoint.url, {
+    const { fetch: fetcher } = this.connection
+    const response = await fetcher(endpoint.url, {
       method: endpoint.method,
       headers: {
         Authorization: `Bearer ${await this.connection.tokenProvider()}`,

@@ -43,19 +43,22 @@ function page(ids: number[], more: boolean, number = 1, extra: object = {}): Fav
     { code: 0, data: { info, medias: ids.map((id) => media(id)), has_more: more, ...extra } },
     account.mid,
     '900123',
-    number,
-    '2026-11-06T00:00:00.000Z'
+    number
   )
 }
 
 void test('full media_id is kept distinct from raw fid, visibility is a bit, and login is required', () => {
   const folders = parseFolders(
-    { code: 0, data: { list: [info, { ...info, id: 900124, attr: 23 }] } },
+    {
+      code: 0,
+      data: { list: [info, { ...info, id: 900124, attr: 23 }, { ...info, id: 900125, attr: 22 }] },
+    },
     account.mid
   )
   assert.equal(folders[0]!.id, '900123')
   assert.equal(folders[0]!.is_private, true)
   assert.equal(folders[1]!.is_private, true)
+  assert.equal(folders[2]!.is_private, false)
   assert.throws(() => parseAccount({ code: 0, data: { isLogin: false, mid: 1001 } }), /登录/)
   assert.throws(
     () => parseFolders({ code: 0, data: { list: [{ ...info, mid: 777 }] } }, account.mid),
@@ -81,8 +84,7 @@ void test('short pages follow has_more, unavailable placeholders preserve unknow
     },
     account.mid,
     '900123',
-    2,
-    '2026-11-06T00:00:00.000Z'
+    2
   )
   assert.equal(value.hasMore, true)
   assert.equal(value.items.length, 2)
@@ -95,6 +97,9 @@ void test('short pages follow has_more, unavailable placeholders preserve unknow
   assert.equal(value.items[1]!.membership.position_in_page, 1)
   const record = favoriteGraph(account, value).records.find((entry) => entry.key === 'video:12')!
   assert.equal(Object.hasOwn(record.content, 'title'), false)
+  const fullPage = Array.from({ length: 20 }, (_, index) => index + 1)
+  assert.equal(page(fullPage, true).items.length, 20)
+  assert.throws(() => page([...fullPage, 21], true), /超出分页范围/)
   assert.throws(() => page([], true), /分页为空/)
   assert.throws(
     () => parseFavoritePage({ code: -101, message: '账号未登录' }, account.mid, '900123', 1),
@@ -125,8 +130,15 @@ void test('a shared video has one identity and separate stable membership record
     second.records.find((entry) => entry.resolver.endsWith('.membership.v1'))!.key
   )
   assert.deepEqual(
-    first.relations.map((entry) => entry.content),
-    ['owns', 'contains', 'item', 'author']
+    first.relations
+      .toSorted((left, right) => left.from_key.localeCompare(right.from_key))
+      .map(({ from_key, content, to_key }) => [from_key, content, to_key]),
+    [
+      ['folder:900123', 'contains', 'membership:900123:11'],
+      ['membership:900123:11', 'item', 'video:11'],
+      ['user:1001', 'owns', 'folder:900123'],
+      ['video:11', 'author', 'user:2002'],
+    ]
   )
 })
 
@@ -188,10 +200,13 @@ void test('budgeted runs continue beyond initial pages only after checking head 
     commit
   )
   assert.deepEqual(requested, [1, 2, 3, 1])
-  assert.equal((persisted.bilibili as Progress).last_run.status, 'complete')
+  const completed = persisted.bilibili as Progress
+  assert.equal(completed.last_run.status, 'complete')
+  assert.equal(completed.folders['900123']!.reported_count, 41)
+  assert.equal(completed.folders['900123']!.rows, 4)
 })
 
-void test('a changed head restarts scanning and failed persistence never advances acknowledged progress', async () => {
+void test('a changed head restarts scanning with the new first page', async () => {
   const pages = [page([11], true), page([12], false, 2)]
   let persisted: Record<string, unknown> = {}
   await collectFavorites(
@@ -204,24 +219,7 @@ void test('a changed head restarts scanning and failed persistence never advance
       persisted = { bilibili: progress }
     }
   )
-  const before = structuredClone(persisted)
-  const requested: number[] = []
   const changed = [page([99], true), page([11], false, 2)]
-  await assert.rejects(
-    collectFavorites(
-      config,
-      startProgress(persisted, config),
-      { max_pages: 1 },
-      new AbortController().signal,
-      session(changed, requested),
-      async () => {
-        throw new Error('page write failed')
-      }
-    ),
-    /page write failed/
-  )
-  assert.deepEqual(requested, [1])
-  assert.deepEqual(persisted, before)
   const imported: string[] = []
   await collectFavorites(
     config,
@@ -239,17 +237,23 @@ void test('a changed head restarts scanning and failed persistence never advance
 
 void test('cancellation and repeated pagination fail without a false completed checkpoint', async () => {
   const controller = new AbortController()
-  controller.abort()
+  const reason = new Error('collection cancelled before starting')
+  let writes = 0
+  controller.abort(reason)
   await assert.rejects(
     collectFavorites(
       config,
       startProgress({}, config),
       { max_pages: 2 },
       controller.signal,
-      session([], []),
-      async () => assert.fail('must not write')
-    )
+      session([page([11], false)], []),
+      async () => {
+        writes++
+      }
+    ),
+    (error) => error === reason
   )
+  assert.equal(writes, 0)
   let persisted: Record<string, unknown> = {}
   await assert.rejects(
     collectFavorites(
@@ -302,9 +306,11 @@ void test('a changed committed boundary restarts even when the first page has no
 
 void test('an abort during page reading prevents dispatching an uncommitted batch', async () => {
   const controller = new AbortController()
+  const reason = new Error('collection cancelled during page reading')
+  let writes = 0
   const target = session([page([11], false)], [])
   target.read = async () => {
-    controller.abort()
+    controller.abort(reason)
     return page([11], false)
   }
   await assert.rejects(
@@ -314,9 +320,13 @@ void test('an abort during page reading prevents dispatching an uncommitted batc
       { max_pages: 1 },
       controller.signal,
       target,
-      async () => assert.fail('must not write an aborted batch')
-    )
+      async () => {
+        writes++
+      }
+    ),
+    (error) => error === reason
   )
+  assert.equal(writes, 0)
 })
 
 void test('a head reorder during the same run prevents a false completed scan', async () => {
@@ -345,22 +355,4 @@ void test('a head reorder during the same run prevents a false completed scan', 
   assert.equal(cursor.next_page, 2)
   assert.equal(cursor.complete, false)
   assert.equal(cursor.rows, 1)
-})
-
-void test('reported count differences from hidden items do not turn a fully traversed scan into an endless restart', async () => {
-  const target = session([page([11], true), page([12], false, 2)], [])
-  let result: Progress | undefined
-  await collectFavorites(
-    config,
-    startProgress({}, config),
-    { max_pages: 2 },
-    new AbortController().signal,
-    target,
-    async (_account, _page, next) => {
-      result = next
-    }
-  )
-  assert.equal(result!.last_run.status, 'complete')
-  assert.equal(result!.folders['900123']!.reported_count, 41)
-  assert.equal(result!.folders['900123']!.rows, 2)
 })

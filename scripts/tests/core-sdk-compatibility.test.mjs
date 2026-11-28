@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
+import { jwtVerify } from 'jose'
 import {
   authStore,
   Block,
@@ -9,85 +9,187 @@ import {
   peerJwtContract,
   presentLexicalMatches,
   Resolver,
+  ResolverCache,
+  MarkdownResolver,
+  HtmlResolver,
   TextResolver,
   DBAPIClient,
   PostgreSQLBinaryStorage,
   rawPostgrestFetch,
 } from '../../packages/core/dist/index.js'
 
-void test('SDK 0.4 preserves the legacy JWT default without changing database admission truth', async () => {
-  const generated = JSON.parse(
-    await readFile(
-      new URL('../../packages/core/src/database/runtime-contract.generated.json', import.meta.url),
-      'utf8'
-    )
-  )
-  assert.equal(Object.hasOwn(generated.jwt, 'maximum_lifetime_seconds'), false)
+void test('SDK 0.4 signs 24-hour tokens and serves valid credentials after the cached token expires', async (t) => {
   assert.equal(peerJwtContract.maximum_lifetime_seconds, 86_400)
-  assert.equal(databaseRuntimeContract.jwt, peerJwtContract)
-  configStore.metaConfig.INKCRE_JWT_SECRET = 'sdk-compatibility-test-only'
+  assert.equal(databaseRuntimeContract.jwt.maximum_lifetime_seconds, 86_400)
+  const priorSecret = configStore.metaConfig.INKCRE_JWT_SECRET
+  const secret = 'sdk-compatibility-test-secret-at-least-32-bytes'
+  const key = new TextEncoder().encode(secret)
+  const peer = { algorithms: ['HS256'], issuer: 'inkcre-peer', audience: 'inkcre-api' }
+  let now = Date.parse('2026-11-01T12:00:00Z')
+  t.mock.method(Date, 'now', () => now)
+  configStore.metaConfig.INKCRE_JWT_SECRET = secret
   try {
-    const token = await authStore.newToken()
-    const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
-    assert.equal(claims.exp - claims.iat, peerJwtContract.maximum_lifetime_seconds)
+    const first = await authStore.newToken()
+    const { payload } = await jwtVerify(first, key, { ...peer, currentDate: new Date(now) })
+    assert.equal(payload.role, 'authenticated')
+    assert.equal(payload.exp - payload.iat, 86_400)
+    now = payload.exp * 1000
+    const second = await authStore.getToken()
+    await jwtVerify(second, key, { ...peer, currentDate: new Date(now) })
   } finally {
-    configStore.metaConfig.INKCRE_JWT_SECRET = ''
+    configStore.metaConfig.INKCRE_JWT_SECRET = priorSecret
   }
 })
 
-void test('binary storage keeps its explicit connection for create, read, update and delete', async () => {
-  const originalFetch = globalThis.fetch
+void test('the first database request after a connection change uses the new address and signing key', async (t) => {
+  const meta = configStore.metaConfig
+  const prior = {
+    INKCRE_PGREST_URL: meta.INKCRE_PGREST_URL,
+    INKCRE_JWT_SECRET: meta.INKCRE_JWT_SECRET,
+  }
+  const previous = 'sdk-compatibility-old-connection-key'
+  const next = 'sdk-compatibility-new-connection-key'
+  const verifyRequest = async (url, secret) => {
+    assert.equal(requests.at(-1).url, url)
+    await jwtVerify(requests.at(-1).bearer, new TextEncoder().encode(secret), {
+      algorithms: ['HS256'],
+      issuer: 'inkcre-peer',
+      audience: 'inkcre-api',
+    })
+  }
+  const requests = []
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    requests.push({
+      url: new URL(input).origin,
+      bearer: new Headers(init.headers).get('Authorization').slice('Bearer '.length),
+    })
+    return Response.json([])
+  })
+  try {
+    Object.assign(meta, {
+      INKCRE_PGREST_URL: 'https://previous-connection.test',
+      INKCRE_JWT_SECRET: previous,
+    })
+    await authStore.newToken()
+    await rawPostgrestFetch('/blocks?select=id')
+    await verifyRequest('https://previous-connection.test', previous)
+    Object.assign(meta, {
+      INKCRE_PGREST_URL: 'https://next-connection.test',
+      INKCRE_JWT_SECRET: next,
+    })
+    await rawPostgrestFetch('/blocks?select=id')
+    await verifyRequest('https://next-connection.test', next)
+  } finally {
+    Object.assign(meta, prior)
+  }
+})
+
+void test('binary storage targets the selected blob for bytea updates and deletion', async (t) => {
   const calls = []
   const id = '00000000-0000-4000-8000-000000000009'
-  globalThis.fetch = async (input, init) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    calls.push({ url, token: new Headers(init.headers).get('Authorization') })
-    if (url.includes('create_storage_blob')) return Response.json(id)
-    if (url.includes('read_storage_blob')) return new Response(new Uint8Array([37, 80, 68, 70]))
+  const pointer = JSON.stringify({ blob_id: id })
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    const url = new URL(input)
+    calls.push(init.method)
+    assert.equal(url.origin + url.pathname, 'https://connection.test/database/storage_blobs')
+    assert.equal(url.searchParams.get('id'), `eq.${id}`)
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer explicit-connection')
+    assert.equal(new Headers(init.headers).get('Content-Profile'), 'inkcre')
+    if (init.method === 'PATCH') assert.deepEqual(JSON.parse(init.body), { data: '\\x00017fff' })
     return Response.json([{ id }])
-  }
-  try {
-    const token = async () => 'explicit-connection-test-token'
-    const baseUrl = 'https://connection.test/database'
-    const storage = new PostgreSQLBinaryStorage(
-      { id: -4, type: 'postgresql_binary' },
-      (path, options) => rawPostgrestFetch(path, { ...options, baseUrl, tokenProvider: token }),
-      new DBAPIClient('storage_blobs', undefined, 'inkcre', baseUrl, token)
+  })
+  const storage = new PostgreSQLBinaryStorage(
+    { id: -4, type: 'postgresql_binary' },
+    undefined,
+    new DBAPIClient(
+      'storage_blobs',
+      undefined,
+      'inkcre',
+      'https://connection.test/database',
+      async () => 'explicit-connection'
     )
-    const pointer = await storage.createRawContent(new Uint8Array([37, 80, 68, 70]))
-    assert.deepEqual(JSON.parse(pointer), { blob_id: id })
-    assert.deepEqual(
-      await storage.getRawContent({ id: 1, storage: -4, content: pointer }),
-      new Uint8Array([37, 80, 68, 70])
-    )
-    assert.equal(await storage.updateRawContent(pointer, new Uint8Array([1])), true)
-    assert.equal(await storage.deleteRawContent(pointer), true)
-    assert.equal(calls.length, 4)
-    for (const call of calls) {
-      assert.equal(call.url.startsWith(baseUrl + '/'), true)
-      assert.equal(call.token, 'Bearer explicit-connection-test-token')
-    }
-  } finally {
-    globalThis.fetch = originalFetch
-  }
+  )
+  assert.equal(await storage.updateRawContent(pointer, new Uint8Array([0, 1, 127, 255])), true)
+  assert.equal(await storage.deleteRawContent(pointer), true)
+  assert.deepEqual(calls, ['PATCH', 'DELETE'])
 })
 
-void test('optional recall APIs preserve an ordinary resolver and its original match', async () => {
-  TextResolver.previewRenderer = { render: () => null }
-  TextResolver.solvedContentRenderer = { render: () => null }
-  Resolver.register(TextResolver.type, TextResolver)
+void test('optional recall APIs preserve an ordinary resolver and its original matches', async (t) => {
+  class Article extends TextResolver {
+    static type = 'test.article.v1'
+    static previewRenderer = { render: () => null }
+    static solvedContentRenderer = { render: () => null }
+  }
+  Resolver.register(Article.type, Article)
   const block = Block.parse({
     id: 1,
-    resolver: TextResolver.type,
+    resolver: Article.type,
     content: 'article',
     storage: null,
     updated_at: '2026-10-21T00:00:00Z',
   })
+  t.after(() => {
+    Resolver.unregister(Article.type, Article)
+    ResolverCache.invalidate(block.id)
+  })
   const match = { block, label: 'Article', excerpt: 'article', evidence: 'text_substring', rank: 1 }
-  const resolver = new TextResolver(block)
-  assert.equal(await resolver.getRecallTarget(match), null)
-  const [group] = await presentLexicalMatches([match])
-  assert.equal(group.block, block)
+  const later = { ...match, excerpt: 'another passage', rank: 2 }
+  const [group] = await presentLexicalMatches([match, later])
+  assert.deepEqual(group.block, block)
   assert.equal(group.readable, false)
+  assert.equal(group.matches.length, 2)
   assert.equal(group.matches[0], match)
+  assert.equal(group.matches[1], later)
+})
+
+void test('text projections retain authored Markdown and expose HTML columns and media references', async () => {
+  const markdown = '# Title\n\n```html\n<node>& value\n  indent\n```\n[link](https://example.org)\n'
+  const block = Block.parse({
+    id: 2,
+    resolver: 'core.markdown.v1',
+    storage: null,
+    content: markdown,
+  })
+  assert.equal(await new MarkdownResolver(block).getText(), markdown)
+  const html = Block.parse({
+    id: 4,
+    resolver: 'core.html.v1',
+    storage: null,
+    content:
+      '<table><tr><th>Name</th><td>Score</td><td>12</td></tr></table><video><track src="https://example.org/captions.vtt"></video>',
+  })
+  const text = await new HtmlResolver(html).getText()
+  assert.match(text, /Name\s+Score\s+12/)
+  assert.ok(text.includes('https://example.org/captions.vtt'))
+})
+
+void test('a replaced Resolver serves its new projection even when the old module later unloads', async (t) => {
+  class Original extends TextResolver {
+    static type = 'test.replaceable.v1'
+    static previewRenderer = { render: () => null }
+    static solvedContentRenderer = { render: () => null }
+  }
+  class Replacement extends Original {
+    async getText() {
+      return 'new projection'
+    }
+  }
+  const block = Block.parse({
+    id: 3,
+    resolver: Original.type,
+    storage: null,
+    content: 'old projection',
+    updated_at: '2026-10-21T00:00:00Z',
+  })
+  t.after(() => {
+    Resolver.unregister(Original.type, Original)
+    Resolver.unregister(Original.type, Replacement)
+    ResolverCache.invalidate(block.id)
+  })
+  Resolver.register(Original.type, Original)
+  assert.equal(await (await ResolverCache.getResolver(block)).getText(), 'old projection')
+  Resolver.unregister(Original.type, Original)
+  Resolver.register(Original.type, Replacement)
+  assert.equal(Resolver.unregister(Original.type, Original), false)
+  assert.equal(await (await ResolverCache.getResolver(block)).getText(), 'new projection')
 })

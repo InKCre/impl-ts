@@ -20,12 +20,21 @@ export function extensionId(key) {
     .replace(/[0-9a-f]/g, (digit) => String.fromCharCode(97 + Number.parseInt(digit, 16)))
 }
 
-export function preparedVersion(version, changelog, pending) {
-  assert.match(version, /^\d+\.\d+\.\d+$/, 'Use a numeric browser version, not a prerelease suffix')
+function validateBrowserVersion(version) {
+  assert.match(
+    version,
+    /^(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*)){2}$/,
+    'Use a numeric browser version, not a prerelease suffix'
+  )
   assert.ok(
     version.split('.').every((part) => Number(part) <= 65535),
     'Browser version segment exceeds 65535'
   )
+  assert.notEqual(version, '0.0.0', 'Browser version segments must not be all zero')
+}
+
+export function preparedVersion(version, changelog, pending) {
+  validateBrowserVersion(version)
   return !pending && changelog.split('\n').some((line) => line === `## ${version}`)
 }
 
@@ -115,7 +124,7 @@ export async function createDraftRelease({ tag, source, version, news }) {
 async function verifyCandidate() {
   const receipt = await readJson(`${directory}/source.json`)
   assert.equal(receipt.name, '@inkcre/webext')
-  assert.match(receipt.version, /^\d+\.\d+\.\d+$/)
+  validateBrowserVersion(receipt.version)
   assert.match(receipt.source_revision, /^[0-9a-f]{40}$/)
   assert.deepEqual(receipt.assets.map((asset) => asset.name).sort(), [
     `inkcre-webext-${receipt.version}-chrome.zip`,
@@ -156,7 +165,7 @@ async function versionPrepared(version) {
   return preparedVersion(version, changelog, pending)
 }
 
-export async function main(command) {
+async function main(command) {
   const { version } = await readJson(`${app}/package.json`)
   const tag = `webext-v${version}`
   if (command === 'plan') {
@@ -170,6 +179,7 @@ export async function main(command) {
     return
   }
   if (command === 'build') {
+    validateBrowserVersion(version)
     assert.equal(
       git('status', '--porcelain', '--untracked-files=no'),
       '',

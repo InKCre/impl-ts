@@ -18,7 +18,7 @@ void test('a rerun cannot replace a missing or expired release candidate', () =>
   const candidate = { id: 42, name: 'first-party-extension-candidate', expired: false }
   const unrelated = { id: 43, name: 'other-artifact', expired: false }
   assert.equal(selectSavedCandidate([unrelated], '1'), undefined)
-  assert.equal(selectSavedCandidate([unrelated, candidate], '2'), candidate)
+  assert.equal(selectSavedCandidate([unrelated, candidate], '2').id, candidate.id)
   assert.throws(() => selectSavedCandidate([unrelated], '2'), /missing on a rerun/)
   assert.throws(() => selectSavedCandidate([{ ...candidate, expired: true }], '2'), /expired/)
   assert.throws(() => selectSavedCandidate([candidate, candidate], '2'), /multiple/)
@@ -28,20 +28,23 @@ void test('a rerun cannot replace a missing or expired release candidate', () =>
 // A real HTTP fault-injection boundary for the publisher, not a replacement Registry implementation.
 void test('an unknown MF-only upload resumes the saved ZIP and verifies even an existing association', async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-publication-test-'))
-  let registryUrl = 'https://registry.example.test'
+  let registryUrl
   const prefix = '/extensions/test/source/1.0.0/module-federation/'
   const build = path.join(workspace, 'extensions/source/dist/web')
   const uploaded = path.join(workspace, 'uploaded')
-  let prepared
+  const releases = '/v2/extensions/test/source/distributions/module_federation/releases'
+  const release = `${releases}/1.0.0`
   let published = false
   let uploads = 0
   let publishes = 0
   let writes = 0
   let corrupt = false
+  let missingHeader
   let forceConflict = false
   const server = createServer(async (req, res) => {
     try {
-      res.setHeader('Access-Control-Allow-Origin', '*')
+      if (req.headers.origin === 'https://app.inkcre.dev')
+        res.setHeader('Access-Control-Allow-Origin', '*')
       const json = (status, body) => {
         res.writeHead(status, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(body))
@@ -58,21 +61,32 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
           manifest_url: `${prefix}mf-manifest.json`,
         },
       })
+      if (req.url.includes('/test/pending/'))
+        return json(500, { detail: 'pending producer must not be consulted during capture' })
       if (req.method === 'POST') {
         writes++
         assert.equal(req.headers.authorization, 'Bearer test-only')
         const chunks = []
         for await (const chunk of req) chunks.push(chunk)
         const body = Buffer.concat(chunks)
-        if (req.url.endsWith('/releases')) {
+        if (req.url === releases) {
           if (forceConflict)
             return json(409, { detail: 'Module Federation association is immutable' })
           const value = JSON.parse(body)
-          if (prepared) assert.deepEqual(value, prepared)
-          prepared = value
+          assert.deepEqual(value, {
+            nickname: 'Source',
+            version: '1.0.0',
+            module_federation: {
+              host_sdk: '@inkcre/core',
+              host_sdk_version: '>=0.2.0 <0.4.0',
+              source_repository: 'https://github.com/InKCre/impl-ts',
+              source_revision: 'exact-source',
+              build_id: 'same-run',
+            },
+          })
           return json(200, { state: 'preparing' })
         }
-        if (req.url.endsWith('/module-federation')) {
+        if (req.url === `${release}/module-federation`) {
           uploads++
           const form = await new Response(body, {
             headers: { 'Content-Type': req.headers['content-type'] },
@@ -83,7 +97,7 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
           // Heroku can return H12 while the server keeps processing this exact archive.
           return json(503, { detail: 'H12 request timeout' })
         }
-        if (req.url.endsWith('/publish')) {
+        if (req.url === `${release}/publish`) {
           publishes++
           if (publishes === 1)
             return json(409, {
@@ -93,9 +107,10 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
           return json(200, record())
         }
       }
-      if (req.url.startsWith('/v2/'))
+      if (req.method === 'GET' && req.url === release)
         return json(published ? 200 : 404, published ? record() : { detail: 'not found' })
-      if (!published) return json(404, { detail: 'not found' })
+      if (req.method !== 'GET' || !published || !req.url.startsWith(prefix))
+        return json(404, { detail: 'not found' })
       const relativePath = req.url.slice(prefix.length)
       let bytes = await readFile(path.join(uploaded, relativePath))
       if (relativePath === 'mf-manifest.json') {
@@ -104,7 +119,9 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
         bytes = Buffer.from(JSON.stringify(manifest))
       }
       if (corrupt && relativePath === 'transitive.js') bytes = Buffer.from('changed')
-      res.writeHead(200, { 'Cache-Control': 'public, no-cache', ETag: '"snapshot"' })
+      res.setHeader('Cache-Control', 'public, no-cache')
+      res.setHeader('ETag', '"snapshot"')
+      if (relativePath === 'transitive.js' && missingHeader) res.removeHeader(missingHeader)
       res.end(bytes)
     } catch (error) {
       res.writeHead(500)
@@ -114,23 +131,26 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
   try {
     await mkdir(path.join(build, '.vite'), { recursive: true })
     await mkdir(path.join(workspace, 'extensions/.agents'))
-    await mkdir(path.join(workspace, 'extensions/guidance'))
+    await mkdir(path.join(workspace, 'extensions/pending'))
     await mkdir(path.join(workspace, 'packages/core'), { recursive: true })
     await writeFile(
       path.join(workspace, 'packages/core/package.json'),
       JSON.stringify({ version: '0.3.0' })
     )
-    await writeFile(
-      path.join(workspace, 'extensions/source/package.json'),
-      JSON.stringify({
-        version: '1.0.0',
-        inkcre: {
-          name: 'test/source',
-          nickname: 'Source',
-          module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.2.0 <0.4.0' },
-        },
-      })
-    )
+    for (const name of ['source', 'pending']) {
+      await writeFile(
+        path.join(workspace, `extensions/${name}/package.json`),
+        JSON.stringify({
+          name: `@test/${name}`,
+          version: '1.0.0',
+          inkcre: {
+            name: `test/${name}`,
+            nickname: name === 'source' ? 'Source' : 'Pending',
+            module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.2.0 <0.4.0' },
+          },
+        })
+      )
+    }
     await writeFile(
       path.join(build, 'mf-manifest.json'),
       JSON.stringify({
@@ -145,19 +165,18 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
     await writeFile(path.join(build, '.vite/manifest.json'), '{}')
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
-    const origin = `http://127.0.0.1:${server.address().port}`
-    registryUrl = origin
+    registryUrl = `http://127.0.0.1:${server.address().port}`
     const options = {
       workspace,
       registryUrl,
       deliveryDirectory: path.join(workspace, 'candidate'),
       token: 'test-only',
+      pendingPackages: new Set(['@inkcre/core', '@test/pending']),
       provenance: {
         source_repository: 'https://github.com/InKCre/impl-ts',
         source_revision: 'exact-source',
         build_id: 'same-run',
       },
-      fetchImplementation: (url, init) => fetch(new URL(new URL(url).pathname, origin), init),
     }
     await assert.rejects(
       verifyPublicModuleFederation({
@@ -184,6 +203,25 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
     corrupt = true
     await assert.rejects(publishCandidates(options), /public asset bytes differ: transitive.js/)
     corrupt = false
+    // Read the already uploaded snapshot through the public verification command's owner.
+    for (const [header, refusal] of [
+      ['Access-Control-Allow-Origin', /asset transitive.js must allow browser reads/],
+      ['Cache-Control', /asset transitive.js must revalidate Registry readability/],
+      ['ETag', /asset transitive.js must include an ETag/],
+    ]) {
+      missingHeader = header
+      await assert.rejects(
+        verifyPublicModuleFederation({
+          registryUrl,
+          packagePath: path.join(workspace, 'extensions/source/package.json'),
+          corePackagePath: path.join(workspace, 'packages/core/package.json'),
+          artifactDirectory: uploaded,
+        }),
+        refusal,
+        header
+      )
+    }
+    missingHeader = undefined
     forceConflict = true
     const beforeConflict = writes
     await assert.rejects(publishCandidates(options), /association is immutable/)
@@ -198,16 +236,15 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
     await assert.rejects(publishCandidates(options), /saved ZIP digest differs/)
     assert.equal(writes, beforeInvalid, 'invalid saved candidates must fail before Registry writes')
     await rm(build, { recursive: true })
-    const historical = await captureCandidates({
-      ...options,
-      deliveryDirectory: path.join(workspace, 'later-run'),
-    })
+    const laterDirectory = path.join(workspace, 'later-run')
+    await captureCandidates({ ...options, deliveryDirectory: laterDirectory })
+    const historical = JSON.parse(await readFile(path.join(laterDirectory, 'plan.json'), 'utf8'))
     assert.deepEqual(
       historical.candidates,
       [],
       'unrelated builds must not claim to verify historical releases'
     )
-    await writeFile(path.join(workspace, 'extensions/guidance/package.json'), '{invalid')
+    await writeFile(path.join(workspace, 'extensions/pending/package.json'), '{invalid')
     await assert.rejects(
       captureCandidates({ ...options, deliveryDirectory: path.join(workspace, 'invalid-run') }),
       SyntaxError,

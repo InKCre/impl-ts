@@ -20,6 +20,8 @@
 
   &__id {
     @include apply-font(label-lg);
+    display: inline;
+    margin: 0;
   }
 
   &__version {
