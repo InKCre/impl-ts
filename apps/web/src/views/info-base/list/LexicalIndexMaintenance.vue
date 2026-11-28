@@ -31,7 +31,7 @@ const meta = computed(() => configStore.metaConfig)
 const activeStatuses = [JobStatus.PENDING, JobStatus.RUNNING]
 
 async function refresh(checkTypes = false) {
-  if (!open.value || loading.value) return
+  if (!open.value || loading.value || submitting.value) return
   loading.value = true
   readError.value = false
   const generation = connectionGeneration
@@ -67,7 +67,7 @@ const rows = computed(() =>
   operations.map((operation) => {
     const summary = summaries.value[operation]
     const job = summary?.latest
-    const active = summary?.active
+    const active = summary?.active ?? (job && !job.isTerminal ? job : undefined)
     const parsed = LexicalIndexReportSchema.safeParse(job?.state)
     const report = job?.status === JobStatus.FINISHED && parsed.success ? parsed.data : null
     const canContinue =
