@@ -376,6 +376,32 @@
       "noPreview": "No preview. Open the entry to read it.",
       "score": "Similarity"
     },
+    "lexicalIndex": {
+      "title": "Keyword index maintenance",
+      "description": "Incremental maintenance indexes missing or stale records. Rebuilding also refreshes existing records and may fetch external content.",
+      "maintain": "Incremental maintenance",
+      "rebuild": "Rebuild",
+      "job": "Job #{id}",
+      "noJobs": "No jobs recorded.",
+      "waiting": "Waiting for a Peer that can run this job.",
+      "counts": "This batch indexed {indexed} records. {unavailable} unavailable, {failed} failed.",
+      "more": "More records were available when this batch ran.",
+      "unavailable": "Connect a Core that supports this job type.",
+      "readError": "Could not read index job status. Refresh to try again.",
+      "submitError": "Could not confirm submission. Refresh job status before trying again.",
+      "continue": "Queue next batch",
+      "queue": "Queue new job",
+      "rebuildConfirm": "A rebuild also refreshes existing index records and may fetch external content. Queue the first batch?",
+      "emptyHint": "Some content may still need indexing. Open keyword index maintenance to check recent jobs.",
+      "status": {
+        "pending": "Pending",
+        "running": "Running",
+        "finished": "Finished",
+        "failed": "Failed",
+        "timed_out": "Timed out",
+        "aborted": "Aborted"
+      }
+    },
     "blockInspector": {
       "loadFailed": "Unable to load this entry.",
       "title": "Entry",

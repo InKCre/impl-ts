@@ -88,6 +88,8 @@ export {
   LexicalRetrievalMatchSchema,
   LexicalEvidenceSchema,
   LEXICAL_RETRIEVAL_CAPABILITY,
+  LEXICAL_INDEX_JOB_TYPES,
+  LexicalIndexReportSchema,
   type LexicalRetrievalRequest,
   type LexicalRetrievalResult,
   type LexicalRetrievalMatch,

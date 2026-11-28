@@ -30,6 +30,7 @@ import SolvedContentPopup from '@/components/info-base/SolvedContentPopup/Solved
 import RelationInspectorPopup from '@/components/info-base/RelationInspectorPopup/RelationInspectorPopup.vue'
 import InfoBaseViewTabs from '@/components/info-base/InfoBaseViewTabs.vue'
 import PreviewRenderer from '@/components/info-base/PreviewRenderer/PreviewRenderer.vue'
+import LexicalIndexMaintenance from './LexicalIndexMaintenance.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -195,6 +196,7 @@ function refresh(): void {
           :disabled="status === 'loading'"
         />
       </InkForm>
+      <LexicalIndexMaintenance />
     </header>
 
     <section class="info-base-list-view__results" aria-live="polite">
@@ -225,6 +227,7 @@ function refresh(): void {
       <InkPlaceholder
         v-else-if="status === 'success' && matches.length === 0 && semanticMatches.length === 0"
         :title="t('infoBase.list.empty', { query: routeQuery })"
+        :description="routeMode === 'lexical' ? t('infoBase.lexicalIndex.emptyHint') : undefined"
       />
       <ol v-else-if="matches.length" class="info-base-list-view__matches">
         <li v-for="match in matches" :key="match.block.id">

@@ -1832,6 +1832,51 @@ test('an empty browser saves its connection across refresh and reads Peers', asy
   }
 })
 
+test('Info Base queues keyword index maintenance and shows the durable Job on mobile', async ({
+  page,
+}) => {
+  const type = 'core.feature_retrieval.lexical.maintain.v1'
+  let jobId: number | undefined
+  const authorization = `Bearer ${await token()}`
+  try {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/info-base/list')
+    await page.getByText('Keyword index maintenance', { exact: true }).click()
+    const section = page.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Incremental maintenance', exact: true }),
+    })
+    const queue = section.getByRole('button', { name: 'Queue new job' })
+    await expect(queue).toBeEnabled()
+    const response = page.waitForResponse(
+      (result) =>
+        result.url().startsWith(`${postgrestUrl}jobs`) &&
+        result.request().method() === 'POST' &&
+        result.request().postDataJSON().type === type
+    )
+    await queue.click()
+    const submitted = await response
+    expect(submitted.status()).toBe(201)
+    const job = await submitted.json()
+    jobId = job.id
+    const jobLink = section.getByRole('link', { name: `Job #${jobId}` })
+    await expect(jobLink).toBeVisible()
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true)
+    await jobLink.click()
+    await expect(page).toHaveURL(new RegExp(`/jobs/${jobId}$`))
+    await expect(page.getByText('finished', { exact: true })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByLabel('State', { exact: true })).toContainText('"indexed"')
+  } finally {
+    if (jobId !== undefined) {
+      await fetch(`${postgrestUrl}jobs?id=eq.${jobId}`, {
+        method: 'DELETE',
+        headers: { Authorization: authorization },
+      })
+    }
+  }
+})
+
 test('Job preserves readable errors and logs and distinguishes failed and missing reads', async ({
   page,
 }) => {
