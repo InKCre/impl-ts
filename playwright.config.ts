@@ -5,6 +5,7 @@ export default defineConfig({
   tsconfig: './tsconfig.json',
   testDir: './tests/e2e',
   fullyParallel: false,
+  forbidOnly: !!process.env.CI,
   workers: 1,
   globalTimeout: 300_000,
   retries: process.env.CI ? 1 : 0,
@@ -19,6 +20,13 @@ export default defineConfig({
     {
       name: 'web-database',
       testMatch: 'peer-database.spec.ts',
+      use: {
+        baseURL: process.env.INKCRE_E2E_WEB_URL,
+      },
+    },
+    {
+      name: 'accessibility',
+      testMatch: 'accessibility.spec.ts',
       use: {
         baseURL: process.env.INKCRE_E2E_WEB_URL,
       },

@@ -379,27 +379,7 @@ export function registerGitHubNativeTests(): void {
       await page.clock.fastForward(35_000)
       expect(leaseRenewals).toBe(stoppedLeases)
       expect(jobScans).toBe(stoppedScans)
-      const localHost = await page.evaluate(async () => {
-        type Sdk = typeof import('../../packages/core/src/index')
-        const state = globalThis as typeof globalThis & {
-          __FEDERATION__: {
-            __INSTANCES__: Array<{
-              options: { name: string }
-              loadShare(name: string): Promise<() => Sdk>
-            }>
-          }
-          githubReaderHost?: unknown
-          githubReaderClass?: unknown
-        }
-        const host = state.__FEDERATION__.__INSTANCES__.find(
-          (instance) => instance.options.name === 'host'
-        )!
-        const sdk = (await host.loadShare('@inkcre/core'))()
-        state.githubReaderHost = host
-        state.githubReaderClass = sdk.Resolver.getClass('extensions.github.repository.v1')
-        return !!state.githubReaderClass
-      })
-      expect(localHost).toBe(true)
+      const documentStartedAt = await page.evaluate(() => performance.timeOrigin)
       await openSettings()
       await setInterval(2)
       await expect.poll(() => leaseRenewals).toBeGreaterThan(stoppedLeases)
@@ -411,7 +391,7 @@ export function registerGitHubNativeTests(): void {
       expect(leaseRenewals).toBe(finalLeases)
       expect(jobScans).toBe(finalScans)
       expect(
-        await page.evaluate(async () => {
+        await page.evaluate(async (repository) => {
           type Sdk = typeof import('../../packages/core/src/index')
           const state = globalThis as typeof globalThis & {
             __FEDERATION__: {
@@ -420,23 +400,18 @@ export function registerGitHubNativeTests(): void {
                 loadShare(name: string): Promise<() => Sdk>
               }>
             }
-            githubReaderHost?: unknown
-            githubReaderClass?: unknown
           }
           const host = state.__FEDERATION__.__INSTANCES__.find(
             (instance) => instance.options.name === 'host'
           )!
           const sdk = (await host.loadShare('@inkcre/core'))()
-          return {
-            // The restored extension must keep serving reads through its resolver.
-            resolverRegistered:
-              sdk.Resolver.getClass('extensions.github.repository.v1') !== undefined,
-          }
-        })
-        // NOTE: MF host instance identity is not asserted here. The unified entity
-        // UI replaces the host-side MF instance while restoring extensions during a
-        // participation cycle, so identity no longer holds on this branch.
-      ).toEqual({ resolverRegistered: true })
+          const resolver = await sdk.ResolverCache.getResolver(await sdk.Block.get(repository))
+          return resolver.getText()
+        }, repository)
+      ).toBe(
+        'fixture-org/demo\n<script>unsafe()</script> Stored repository description\nLanguage: Python\nTopics: fixture, reader'
+      )
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStartedAt)
       expect(githubApiCalls).toBe(0)
     } finally {
       releaseRemoteEntry()

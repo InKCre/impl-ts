@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "test:a11y": "playwright test accessibility.spec.ts",
-    "test:a11y:report": "playwright test accessibility.spec.ts --reporter=html"
+    "test:a11y": "node ../../scripts/test-e2e.mjs --project accessibility",
+    "test:a11y:report": "node ../../scripts/test-e2e.mjs --project accessibility --reporter=html"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.2",
@@ -34,7 +34,6 @@
     "zod-config": "^1.4.0"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.14.0",
     "@iconify-json/mdi": "^1.2.3",
     "@module-federation/vite": "^1.1.0",
     "@playwright/test": "1.61.1",

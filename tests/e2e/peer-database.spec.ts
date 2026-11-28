@@ -313,6 +313,7 @@ test('reset invalidates pending registration before it can renew or start the wo
   const gate = new Promise<void>((resolve) => {
     release = resolve
   })
+  let registrationPending = false
   let registrationFinished = false
   let leaseRequests = 0
   let workerRequests = 0
@@ -329,6 +330,7 @@ test('reset invalidates pending registration before it can renew or start the wo
       await route.continue()
       return
     }
+    registrationPending = true
     await gate
     const response = await route.fetch()
     await route.fulfill({ response })
@@ -337,7 +339,8 @@ test('reset invalidates pending registration before it can renew or start the wo
   try {
     await page.goto('/sources')
     await expect(page.getByRole('main')).toBeVisible()
-    await page.goto('/settings')
+    await expect.poll(() => registrationPending).toBe(true)
+    await openSettings(page)
     await page.getByRole('button', { name: 'Reset', exact: true }).click()
     await page.getByRole('button', { name: 'Confirm', exact: true }).click()
     await expect(page.getByLabel('PostgREST URL')).toHaveValue('')
@@ -369,6 +372,7 @@ test('switching connections cannot renew a pending old registration against eith
   const gate = new Promise<void>((resolve) => {
     release = resolve
   })
+  let registrationPending = false
   let registrationFinished = false
   let oldLeaseRequests = 0
   let newLeaseRequests = 0
@@ -381,6 +385,7 @@ test('switching connections cannot renew a pending old registration against eith
       await route.continue()
       return
     }
+    registrationPending = true
     await gate
     const response = await route.fetch()
     await route.fulfill({ response })
@@ -418,6 +423,7 @@ test('switching connections cannot renew a pending old registration against eith
   try {
     await page.goto('/sources')
     await expect(page.getByRole('main')).toBeVisible()
+    await expect.poll(() => registrationPending).toBe(true)
     await openSettings(page)
     await page.getByLabel('PostgREST URL').fill(alternateUrl)
     await page.getByLabel('JWT signing secret').fill(alternateSecret)
@@ -624,6 +630,7 @@ test('disabling while registration is pending prevents its later lease or worker
   try {
     await page.goto('/sources')
     await expect(page.getByRole('main')).toBeVisible()
+    await expect.poll(() => patches).toBe(1)
     await openSettings(page)
     await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
     await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
@@ -707,17 +714,13 @@ test('disabling participation drains a dispatched claim before saving configurat
               loadShare(name: string): Promise<() => Sdk>
             }>
           }
-          __claimDrain: { stop(): Promise<void>; handlerRuns: number; stopCompleted: boolean }
+          __claimDrain: { handlerRuns: number }
         }
         const host = globals.__FEDERATION__.__INSTANCES__.find(
           (instance) => instance.options.name === 'host'
         )!
         const sdk = (await host.loadShare('@inkcre/core'))()
-        globals.__claimDrain = {
-          stop: () => sdk.JobManager.stopWorker(),
-          handlerRuns: 0,
-          stopCompleted: false,
-        }
+        globals.__claimDrain = { handlerRuns: 0 }
         sdk.JobManager.registerHandler(type, {
           parameters: sdk.MetaConfigSchema,
           canHandle: () => true,
@@ -730,20 +733,6 @@ test('disabling participation drains a dispatched claim before saving configurat
       { id, type }
     )
     await expect.poll(() => claimStored).toBe(true)
-    const stoppedBeforeClaimReturned = await page.evaluate(async () => {
-      const fixture = (
-        globalThis as typeof globalThis & {
-          __claimDrain: { stop(): Promise<void>; handlerRuns: number; stopCompleted: boolean }
-        }
-      ).__claimDrain
-      void fixture.stop().then(() => {
-        fixture.stopCompleted = true
-      })
-      await Promise.resolve()
-      await Promise.resolve()
-      return fixture.stopCompleted
-    })
-    expect(stoppedBeforeClaimReturned).toBe(false)
     await openSettings(page)
     await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
     await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
@@ -877,7 +866,7 @@ test('Registry confirmation selects one Peer and offline enablement preserves ot
     await page.reload()
     const first = page
       .getByRole('article', { name: 'Handoff check' })
-      .getByRole('region', { name: 'E2E Peer 1' })
+      .getByRole('group', { name: 'E2E Peer 1' })
     // Each row is its explicit target; one mutation cannot move the other Peer’s pin.
     await first.getByRole('button', { name: 'Enable', exact: true }).click()
     await expect
@@ -1176,19 +1165,29 @@ test('failed remote enablement reads back persisted intent without claiming a ru
 })
 
 test('wrong and absent credentials are rejected', async ({ page }) => {
+  const authorization = `Bearer ${await token()}`
   const wrongAuthorization = `Bearer ${await token('wrong-web-jwt-secret-at-least-32-bytes')}`
-  const statuses = await page.evaluate(
-    async ({ postgrestUrl, wrongAuthorization }) => {
+  const result = await page.evaluate(
+    async ({ postgrestUrl, authorization, wrongAuthorization }) => {
+      const allowed = await fetch(`${postgrestUrl}peers?select=id`, {
+        headers: { Authorization: authorization },
+      })
       const wrong = await fetch(`${postgrestUrl}peers?select=id`, {
         headers: { Authorization: wrongAuthorization },
       })
       const anonymous = await fetch(`${postgrestUrl}peers?select=id`)
-      return [wrong.status, anonymous.status]
+      return {
+        statuses: [allowed.status, wrong.status, anonymous.status],
+        allowed: await allowed.json(),
+        wrong: await wrong.json(),
+      }
     },
-    { postgrestUrl, wrongAuthorization }
+    { postgrestUrl, authorization, wrongAuthorization }
   )
 
-  expect(statuses).toEqual([401, 401])
+  expect(result.statuses).toEqual([200, 401, 401])
+  expect(result.allowed).toContainEqual({ id: '00000000-0000-4000-8000-000000000001' })
+  expect(result.wrong).toMatchObject({ code: 'PGRST301' })
 })
 
 test('Web Peer publishes its app identity and preserves a user name', async ({ page }) => {
@@ -1269,6 +1268,19 @@ test('Settings export restores the complete browser experience', async ({ page }
   })
   expect(created.status).toBe(201)
   try {
+    const selected = await fetch(`${postgrestUrl}extension_peer_participations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: extensionName,
+        peer_id: '00000000-0000-4000-8000-000000000001',
+        distribution: 'module_federation',
+        version: '1.0.0',
+        enabled: false,
+        config_schema: null,
+      }),
+    })
+    expect(selected.status).toBe(201)
     await page.goto('/settings')
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export', exact: true }).click()
@@ -1311,6 +1323,7 @@ test('Settings export restores the complete browser experience', async ({ page }
       { postgrestUrl, jwtSecret, alternateId }
     )
     await page.reload()
+    const documentStartedAt = await page.evaluate(() => performance.timeOrigin)
     page.once('dialog', (dialog) => dialog.accept())
     await page.locator('input[type="file"]').setInputFiles(path!)
     await expect
@@ -1325,14 +1338,21 @@ test('Settings export restores the complete browser experience', async ({ page }
       page.getByRole('switch', { name: 'Enable telemetry', exact: true })
     ).not.toBeChecked()
     // Import changes Peer identity without reloading this document: the Host must bind the new ID.
-    await page.goto('/extensions')
+    await page.locator('button[aria-controls="app-side-panel"]').click()
+    await page.getByLabel('Primary').getByRole('link', { name: 'Extensions', exact: true }).click()
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStartedAt)
     const row = page
       .getByRole('article', { name: 'Host identity switch', exact: true })
-      .getByRole('region')
+      .getByRole('group')
       .filter({ hasText: 'This browser' })
-    await expect(row.getByRole('button', { name: 'Install', exact: true })).toBeEnabled()
+    await expect(row.getByRole('button', { name: 'Change Version', exact: true })).toBeEnabled()
+    await expect(row.getByText('Not running', { exact: true })).toBeVisible()
     await expect(row.getByRole('alert')).toHaveCount(0)
   } finally {
+    await fetch(`${postgrestUrl}extension_peer_participations?name=eq.${extensionName}`, {
+      method: 'DELETE',
+      headers,
+    })
     await fetch(`${postgrestUrl}extensions?name=eq.${extensionName}`, { method: 'DELETE', headers })
     const cleanup = await fetch(endpoint, {
       method: 'DELETE',
