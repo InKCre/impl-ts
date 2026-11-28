@@ -14,6 +14,12 @@ validates the candidate but uploads no deployable SPA, Module Federation, or Reg
 artifact. Preview and production each build at their own authority boundary and cannot publish
 first-party Extensions.
 
+Workspace compilation, Web and WebExt browser acceptance, and Pages preview start with
+`pnpm review:candidate` in a clean detached checkout. The command applies that checkout's
+pending Changesets and refreshes workspace dependencies before dispatching to the requested
+build or acceptance. App checks use the event commit and Pages preview uses the exact PR head.
+Release workflows use the committed release versions.
+
 The browser-side authority behind this invariant belongs to
 [App Runtime and Delegation](../30-unit-tdd/app-runtime-and-delegation.md).
 
@@ -127,14 +133,18 @@ identity; never substitute the current controller SHA or overwrite an existing t
 
 ## Pull-request Preview
 
-[`.github/workflows/pages-preview.yml`](../../.github/workflows/pages-preview.yml) owns previews for
-open, same-repository pull requests targeting `main`; fork pull requests are ineligible. The
-`pull_request_target` controller checks out its trusted default-branch revision separately from the
-exact candidate head, installs the candidate's frozen pnpm and PDM environments, builds its SPA and
-selected Module Federation snapshots, and uses `inkcre-ext preview build` with the explicit
-`.github/preview/extensions.json` inventory to add a same-origin static Registry facade. The
-current inventory includes the CalDAV, GitHub, Twitter and Mail Module Federation distributions. The controller uses the PR head selected by the identity job through staging and deployment.
+[`.github/workflows/pages-preview-build.yml`](../../.github/workflows/pages-preview-build.yml)
+在普通 `pull_request` 低权限作业中，为指向 `main` 的同仓开放 PR 构建精确 head；fork PR 不参与预览。
+该作业安装候选的冻结 pnpm/PDM 环境，通过 `pnpm review:candidate build` 构建 SPA 和 Module Federation
+快照，并用 `inkcre-ext preview build` 加入 `.github/preview/extensions.json` 指定的同源静态 Registry facade。
+当前清单包括 CalDAV、GitHub、Twitter 和 Mail。`PREVIEW_ORIGIN` 来自 PR
+编号及仓库级非秘密变量 `CLOUDFLARE_PAGES_PROJECT`，静态输出按 head SHA 命名并上传为短期 artifact。
 
+[`.github/workflows/pages-preview.yml`](../../.github/workflows/pages-preview.yml) 由成功的
+`Web Pages preview build` 的 `workflow_run` 触发，仅 checkout 可信控制器。它核对工作流路径、同仓
+PR 及精确 head，仅下载触发 run 的同名 artifact，拒绝符号链接、非常规文件及 `_worker.js`，然后运行
+可信快照绑定并在独立工具目录部署静态文件。部署前再次核对 PR 的 open、base、repo 和 head。
+候选的代码、依赖、配置和缓存不会进入有部署权限的执行路径。
 The Toolkit places read-only native Extension snapshots and preview Releases beside the exact-head
 app build, using the stable alias branch `preview/client-web/pr-<number>`. This is a preview
 projection, not Registry publication: the workflow has no
@@ -142,8 +152,7 @@ projection, not Registry publication: the workflow has no
 through Pages and reports the provider deployment result. The GitHub environment links to the
 Pages branch alias; the job summary includes that alias, the deployment-specific URL, and the exact
 source SHA. This reporting reads Wrangler outputs without adding network acceptance checks.
-Because `pull_request_target` uses the trusted base workflow, reporting changes take effect after
-they reach `main`; they cannot rewrite summaries of completed runs. It does not turn edge propagation,
+`workflow_run` 使用默认分支上的可信部署流程，因此报告逻辑变更到达 `main` 后才生效，不会重写已完成 run 的摘要。 It does not turn edge propagation,
 deep route traversal, cache behavior, or byte comparison into synchronous delivery gates; consumer
 acceptance is a separate black-box activity.
 

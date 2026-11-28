@@ -1,24 +1,24 @@
 name: Pages preview
 
 on:
-  pull_request_target:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - Web Pages preview build
     types:
-      - opened
-      - reopened
-      - synchronize
+      - completed
 
 permissions:
+  actions: read
   contents: read
+  pull-requests: read
 
 jobs:
   identity:
     name: Resolve trusted preview identity
     if: >-
-      github.event.pull_request.base.ref == 'main' &&
-      github.event.pull_request.base.repo.full_name == github.repository &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
       branch: ${{ steps.identity.outputs.branch }}
@@ -30,19 +30,45 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const pull = context.payload.pull_request
-            const repository = `${context.repo.owner}/${context.repo.repo}`
-            if (
-              pull.state !== 'open' ||
-              pull.base.ref !== 'main' ||
-              pull.base.repo.full_name !== repository ||
-              pull.head.repo?.full_name !== repository
-            ) {
-              core.setFailed('Preview delivery only accepts an open same-repository PR targeting main.')
+            const runId = context.payload.workflow_run.id
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            })
+            if (run.name !== 'Web Pages preview build' || run.path !== '.github/workflows/pages-preview-build.yml') {
+              core.setFailed('Preview must be orchestrated by the trusted Web Pages preview build workflow.')
               return
             }
+            if (run.conclusion !== 'success' || run.event !== 'pull_request') {
+              core.setFailed('Preview delivery requires a successful pull-request check run.')
+              return
+            }
+            if (run.head_repository?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              core.setFailed('Fork pull requests are not eligible for preview credentials.')
+              return
+            }
+
+            const pulls = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: run.head_sha,
+            })
+            const pull = pulls.data.find((candidate) =>
+              candidate.state === 'open' &&
+              candidate.base.ref === 'main' &&
+              candidate.base.repo.full_name === `${context.repo.owner}/${context.repo.repo}` &&
+              run.pull_requests.some((item) => item.number === candidate.number) &&
+              candidate.head.sha === run.head_sha &&
+              candidate.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`
+            )
+            if (!pull) {
+              core.setFailed('Run is not the exact head of an eligible internal pull request.')
+              return
+            }
+
             core.setOutput('branch', `preview/client-web/pr-${pull.number}`)
-            core.setOutput('head_sha', pull.head.sha)
+            core.setOutput('head_sha', run.head_sha)
             core.setOutput('pull_number', String(pull.number))
 
   deploy:
@@ -54,6 +80,8 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      actions: read
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment:
@@ -67,77 +95,65 @@ jobs:
           path: controller
           persist-credentials: false
 
-      - name: Checkout the exact pull-request head
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up trusted Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          ref: ${{ needs.identity.outputs.head_sha }}
-          path: candidate
-          fetch-depth: 0
-          persist-credentials: false
+          node-version-file: controller/package.json
 
-      - name: Install the pinned pnpm release
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Prepare isolated delivery tool directory
+        run: mkdir --parents "$RUNNER_TEMP/pages-preview-tool"
+
+      - name: Download the triggering run exact-head artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          version: 11.11.0
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: pages-preview-${{ needs.identity.outputs.head_sha }}
+          path: ${{ runner.temp }}/pages-preview-artifact
 
-      - name: Set up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: candidate/package.json
-          cache: pnpm
-          cache-dependency-path: candidate/pnpm-lock.yaml
-
-      - name: Set up Python and PDM
-        uses: pdm-project/setup-pdm@544d7237314ee09c256785bd360f6b30add38b37 # v4.6
-        with:
-          python-version-file: candidate/.python-version
-          version: 2.28.0
-          cache: true
-          cache-dependency-path: candidate/pdm.lock
-
-      - name: Install frozen preview toolchains
-        working-directory: candidate
-        run: |
-          pnpm install --frozen-lockfile
-          pdm install --frozen-lockfile
+      - name: Validate static preview files
         env:
-          PDM_CHECK_UPDATE: 'false'
-
-      - name: Inspect pending preview versions
-        id: preview-versions
-        working-directory: candidate
+          PREVIEW_DIST: ${{ runner.temp }}/pages-preview-artifact
         run: |
-          git show-ref --verify --quiet refs/heads/main || git branch main HEAD
-          pnpm exec changeset status --output "$RUNNER_TEMP/preview-versions.json"
-          node -e 'console.log("needed=" + (require(process.argv[1]).releases.length > 0))' "$RUNNER_TEMP/preview-versions.json" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare preview versions in the temporary checkout
-        if: steps.preview-versions.outputs.needed == 'true'
-        working-directory: candidate
-        run: |
-          pnpm release:version
-          pnpm install --lockfile-only --ignore-scripts
-
-      - name: Build the exact-head SPA and Module Federation snapshots
-        working-directory: candidate
-        run: pnpm build
-
-      - name: Build the same-origin Preview Registry facade
-        working-directory: candidate
-        env:
-          PREVIEW_ORIGIN: https://preview-client-web-pr-${{ needs.identity.outputs.pull_number }}.${{ vars.CLOUDFLARE_PAGES_PROJECT }}.pages.dev
-        run: |
-          pdm run inkcre-ext preview build \
-            --inventory .github/preview/extensions.json \
-            --public-origin "$PREVIEW_ORIGIN" \
-            --output .preview-registry
-          cp -R .preview-registry/. apps/web/dist/
-          cp -R apps/web/dist "$GITHUB_WORKSPACE/.pages-preview"
+          python3 - <<'PYCODE'
+          import os
+          import stat
+          from pathlib import Path
+          root = Path(os.environ['PREVIEW_DIST'])
+          for directory, dirs, files in os.walk(root, followlinks=False):
+              for name in dirs + files:
+                  path = Path(directory) / name
+                  mode = path.lstat().st_mode
+                  if stat.S_ISLNK(mode) or not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                      raise SystemExit(f'Unsupported static artifact entry: {path}')
+                  if name == '_worker.js':
+                      raise SystemExit(f'Pages Worker code is forbidden: {path}')
+          if not (root / 'index.html').is_file():
+              raise SystemExit('Static preview requires index.html')
+          PYCODE
 
       - name: Bind Module Federation assets to the selected snapshot
         env:
           INKCRE_PREVIEW_SOURCE_SHA: ${{ needs.identity.outputs.head_sha }}
-        run: node controller/scripts/prepare-pages-preview.mjs "$GITHUB_WORKSPACE/.pages-preview"
+        run: node controller/scripts/prepare-pages-preview.mjs "$RUNNER_TEMP/pages-preview-artifact"
+
+      - name: Reverify the current pull request before delivery
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          PREVIEW_PULL_NUMBER: ${{ needs.identity.outputs.pull_number }}
+          PREVIEW_HEAD_SHA: ${{ needs.identity.outputs.head_sha }}
+        with:
+          script: |
+            const { data: pull } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: Number(process.env.PREVIEW_PULL_NUMBER),
+            })
+            const repository = `${context.repo.owner}/${context.repo.repo}`
+            if (pull.state !== 'open' || pull.head.sha !== process.env.PREVIEW_HEAD_SHA ||
+                pull.base.ref !== 'main' || pull.base.repo.full_name !== repository ||
+                pull.head.repo?.full_name !== repository) {
+              core.setFailed('The current PR no longer matches the exact-head preview build.')
+            }
 
       - name: Deploy to the isolated Pages preview branch
         id: pages
@@ -145,11 +161,11 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          packageManager: pnpm
+          packageManager: npm
           wranglerVersion: 4.114.0
-          workingDirectory: candidate
+          workingDirectory: ${{ runner.temp }}/pages-preview-tool
           command: >-
-            pages deploy ../.pages-preview
+            pages deploy ${{ runner.temp }}/pages-preview-artifact
             --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }}
             --branch=${{ needs.identity.outputs.branch }}
             --commit-hash=${{ needs.identity.outputs.head_sha }}
