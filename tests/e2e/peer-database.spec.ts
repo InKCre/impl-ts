@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { SignJWT } from 'jose'
 import { readFileSync } from 'node:fs'
 import { registerGitHubNativeTests } from './github-native'
+import { registerGraphNavigationTests } from './graph-navigation.mjs'
 
 const postgrestUrl = process.env.INKCRE_E2E_POSTGREST_URL!
 const jwtSecret = process.env.INKCRE_E2E_JWT_SECRET!
@@ -2012,3 +2013,4 @@ test('Sources preserve the draft after a lost creation response and reopen the s
 })
 
 registerGitHubNativeTests()
+registerGraphNavigationTests()

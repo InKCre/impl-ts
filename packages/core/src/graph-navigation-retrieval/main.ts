@@ -61,6 +61,7 @@ const MAX_MAX_HOPS = 8
 const DEFAULT_MAX_EXPLORED_BLOCKS = 1000
 const MAX_MAX_EXPLORED_BLOCKS = 10000
 const FRONTIER_QUERY_SIZE = 200
+const FRONTIER_RELATION_PAGE_SIZE = 1000
 
 type PathStep = { block: BlockRef; relation: RelationRef } | null
 
@@ -134,10 +135,13 @@ export class GraphNavigationRetrievalManager {
   static async getRelationNeighborhood(
     focalRelation: RelationRef
   ): Promise<RelationNeighborhood | null> {
-    const relation = await Relation.find(focalRelation)
+    const relation = await Relation.find(focalRelation, { requireEndpoints: true })
     if (!relation) return null
-    const blocks = await Block.getMany([relation.from_, relation.to_])
-    if (new Set(blocks.map((block) => block.id)).size !== 2) return null
+    const endpoints = new Set([relation.from_, relation.to_])
+    const blocks = await Block.getMany(endpoints)
+    const blockIds = new Set(blocks.map((block) => block.id))
+    if (blockIds.size !== endpoints.size || [...endpoints].some((id) => !blockIds.has(id)))
+      return null
     return RelationNeighborhoodSchema.parse({
       focal_relation: focalRelation,
       graph: { blocks, relations: [relation] },
@@ -176,6 +180,7 @@ export class GraphNavigationRetrievalManager {
         relation_path: [],
       }) as PathResult
     }
+    if (maxExplored < 2) return { status: 'limit_reached' }
 
     const forwardSteps = new Map<BlockRef, PathStep>([[fromBlock, null]])
     const backwardSteps = new Map<BlockRef, PathStep>([[toBlock, null]])
@@ -184,6 +189,7 @@ export class GraphNavigationRetrievalManager {
     let forwardFrontier = new Set([fromBlock])
     let backwardFrontier = new Set([toBlock])
     const traversedRelations = new Map<RelationRef, Relation>()
+    const exploredBlocks = new Set([fromBlock, toBlock])
 
     while (forwardFrontier.size > 0 && backwardFrontier.size > 0) {
       const forwardLevel = forwardDepths.get(forwardFrontier.values().next().value!)!
@@ -199,13 +205,13 @@ export class GraphNavigationRetrievalManager {
         ownDepths: expandForward ? forwardDepths : backwardDepths,
         otherDepths: expandForward ? backwardDepths : forwardDepths,
         maxHops,
+        maxExplored,
+        exploredBlocks,
         traversedRelations,
       })
+      if (!expanded) return { status: 'limit_reached' }
       if (expandForward) forwardFrontier = expanded.frontier
       else backwardFrontier = expanded.frontier
-      if (new Set([...forwardSteps.keys(), ...backwardSteps.keys()]).size > maxExplored) {
-        return { status: 'limit_reached' }
-      }
       if (expanded.meeting !== null) {
         return this.assemblePath({
           fromBlock,
@@ -229,22 +235,23 @@ export class GraphNavigationRetrievalManager {
     ownDepths: Map<BlockRef, number>
     otherDepths: Map<BlockRef, number>
     maxHops: number
+    maxExplored: number
+    exploredBlocks: Set<BlockRef>
     traversedRelations: Map<RelationRef, Relation>
-  }): Promise<{ frontier: Set<BlockRef>; meeting: BlockRef | null }> {
+  }): Promise<{ frontier: Set<BlockRef>; meeting: BlockRef | null } | null> {
     const blocks = [...options.frontier]
     const nextFrontier = new Set<BlockRef>()
     let meeting: BlockRef | null = null
     let bestHops = Number.POSITIVE_INFINITY
     for (let offset = 0; offset < blocks.length; offset += FRONTIER_QUERY_SIZE) {
       const chunk = new Set(blocks.slice(offset, offset + FRONTIER_QUERY_SIZE))
-      const relations = await this.getFrontierRelations(
+      const relations = this.getFrontierRelations(
         chunk,
         options.direction,
         options.contents,
         options.reverse
       )
-      for (const relation of relations) {
-        options.traversedRelations.set(relation.id, relation)
+      for await (const relation of relations) {
         for (const [current, neighbor] of this.relationSteps(
           relation,
           chunk,
@@ -252,6 +259,9 @@ export class GraphNavigationRetrievalManager {
           options.reverse
         )) {
           if (options.ownSteps.has(neighbor)) continue
+          options.exploredBlocks.add(neighbor)
+          if (options.exploredBlocks.size > options.maxExplored) return null
+          options.traversedRelations.set(relation.id, relation)
           options.ownSteps.set(neighbor, { block: current, relation: relation.id })
           options.ownDepths.set(neighbor, options.ownDepths.get(current)! + 1)
           nextFrontier.add(neighbor)
@@ -268,36 +278,34 @@ export class GraphNavigationRetrievalManager {
     return { frontier: nextFrontier, meeting }
   }
 
-  private static async getFrontierRelations(
+  private static async *getFrontierRelations(
     frontier: Set<BlockRef>,
     direction: GraphDirection,
     contents: string[],
     reverse: boolean
-  ): Promise<Relation[]> {
+  ): AsyncGenerator<Relation> {
     const needsFrom = reverse ? direction !== 'out' : direction !== 'in'
     const needsTo = reverse ? direction !== 'in' : direction !== 'out'
-    const queries: Promise<Relation[]>[] = []
-    if (needsFrom) {
-      queries.push(
-        Relation.getEndpointPage({
+    const endpoints: ('from_' | 'to_')[] = []
+    if (needsFrom) endpoints.push('from_')
+    if (needsTo) endpoints.push('to_')
+    for (const endpoint of endpoints) {
+      let cursor: RelationRef | undefined
+      // Parallel edges do not exhaust the Block budget, and PostgREST may shorten a page.
+      while (true) {
+        const page = await Relation.getEndpointPage({
           blockIds: frontier,
-          endpoint: 'from_',
+          endpoint,
           contents,
-          limit: MAX_MAX_EXPLORED_BLOCKS,
+          cursor,
+          limit: FRONTIER_RELATION_PAGE_SIZE,
         })
-      )
+        const last = page.at(-1)
+        if (!last) break
+        yield* page
+        cursor = last.id
+      }
     }
-    if (needsTo) {
-      queries.push(
-        Relation.getEndpointPage({
-          blockIds: frontier,
-          endpoint: 'to_',
-          contents,
-          limit: MAX_MAX_EXPLORED_BLOCKS,
-        })
-      )
-    }
-    return [...new Map((await Promise.all(queries)).flat().map((item) => [item.id, item])).values()]
   }
 
   private static relationSteps(
