@@ -154,6 +154,9 @@ try {
     executable,
     [
       '--headless=new',
+      // A locked macOS display can stop frame callbacks in a visible headless tab.
+      // Puppeteer's real click waits for the button's IntersectionObserver callback.
+      ...(process.platform === 'darwin' ? ['--disable-frame-rate-limit'] : []),
       // Hosted Linux CI disallows Chromium's user-namespace sandbox. This browser
       // uses a disposable profile and serves only this fixture's synthetic pages.
       ...(process.platform === 'linux' && process.env.CI ? ['--no-sandbox'] : []),
