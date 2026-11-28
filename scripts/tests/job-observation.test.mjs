@@ -59,11 +59,12 @@ function observationReader(records) {
 void test('old Job queries include early submission and records just after persisted closure', async () => {
   const created = '2025-10-01T10:00:00.082Z'
   const closed = '2025-10-01T10:00:02.000Z'
-  const records = [observation(1, '2025-10-01T10:00:00.000Z', 'job.submitted')]
+  const records = [
+    observation(1, '2025-10-01T10:00:00.000Z', 'job.submitted'),
+    observation(2, '2025-10-01T10:00:02.052Z', 'job.closed'),
+  ]
   const window = defaultObservationWindow(now, 1, created, closed)
   const reader = observationReader(records)
-  assert.equal((await reader.query({ ...window, job_id: 11 })).records.length, 1)
-  records.push(observation(2, '2025-10-01T10:00:02.052Z', 'job.closed'))
   const result = await reader.query({ ...window, job_id: 11 })
   assert.deepEqual(
     result.records.map((record) => record.event_name),

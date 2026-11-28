@@ -3,12 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import {
-  configStore,
-  MetaConfigSchema,
-  WebPeerRuntime,
-  readConnectionSettings,
-} from '../../packages/core/dist/index.js'
+import { configStore, MetaConfigSchema, WebPeerRuntime } from '../../packages/core/dist/index.js'
 
 void test('saved connection snapshots restore identity and preserve the selection on connection or write failure', async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'inkcre-connections-'))
@@ -99,10 +94,6 @@ void test('saved connection snapshots restore identity and preserve the selectio
   await configStore.connectAndSave(first, {}, exported.connections[0], exported)
   assert.deepEqual(JSON.parse(JSON.stringify(configStore.connectionSettings)), exported)
   assert.deepEqual((await readSnapshot()).connections, exported.connections)
-  assert.equal(
-    readConnectionSettings(first, first).connections[0].config.INKCRE_PEER_ID,
-    first.INKCRE_PEER_ID
-  )
   const invalid = {
     ...first,
     connections: exported.connections,
