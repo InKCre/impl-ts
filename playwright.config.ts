@@ -19,7 +19,7 @@ export default defineConfig({
   projects: [
     {
       name: 'web-database',
-      testMatch: 'peer-database.spec.ts',
+      testMatch: ['peer-database.spec.ts', 'native-readers.spec.ts', 'native-setup.spec.ts'],
       use: {
         baseURL: process.env.INKCRE_E2E_WEB_URL,
       },

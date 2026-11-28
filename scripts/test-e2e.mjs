@@ -1,3 +1,6 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { parse } from 'yaml'
 import { execFileSync, spawn } from 'node:child_process'
 
 import { availablePort, compose, repoRoot } from './database-runtime-lib.mjs'
@@ -10,6 +13,40 @@ function run(command, args, options = {}) {
     stdio: options.stdio ?? 'inherit',
     timeout: options.timeout ?? 300_000,
   })
+}
+
+function verifyRestoreFailure(instance) {
+  const composeFile = new URL('../runtime/database.compose.yml', import.meta.url)
+  const { restore } = parse(readFileSync(composeFile, 'utf8')).services
+  const inputs = ['database-roles.sql', 'database-schema.sql']
+  for (const badInput of inputs) {
+    // An anonymous volume masks the admitted bundle for this one container.
+    // Refuse to write unless both files are absent. All SQL is read-only.
+    const fixtures = inputs.map((input) => {
+      const sql = input === badInput ? 'SELECT 1/0; SELECT 1;' : 'SELECT 1;'
+      return `printf '%s' '${sql}' > /database-contract/${input}`
+    })
+    const script = [
+      ...inputs.map((input) => `test ! -e /database-contract/${input}`),
+      ...fixtures,
+      ...restore.command,
+    ].join(' && ')
+    assert.throws(
+      () =>
+        compose(instance, [
+          'run',
+          '-T',
+          '--rm',
+          '--no-deps',
+          '--volume',
+          '/database-contract',
+          'restore',
+          script,
+        ]),
+      (error) => error.status === 3 && /division by zero/.test(String(error.stderr)),
+      `restore must propagate the SQL failure in ${badInput}`
+    )
+  }
 }
 
 function developmentFingerprint(instance) {
@@ -41,11 +78,28 @@ async function waitForWeb(url) {
 
 await runIsolatedDatabaseTest('web', async (state, credentials) => {
   const instance = state.identity
+  verifyRestoreFailure(instance)
   const baseline = developmentFingerprint(instance)
   let preview
   try {
     run('pnpm', ['--filter', '@inkcre/web', 'build-only'])
-    run('pnpm', ['--filter', '@inkcre/ext-github...', '--filter', '@inkcre/ext-mail...', 'build'])
+    run('pnpm', [
+      '--filter',
+      '@inkcre/ext-github...',
+      '--filter',
+      '@inkcre/ext-mail...',
+      '--filter',
+      '@inkcre/ext-capture...',
+      '--filter',
+      '@inkcre/ext-caldav...',
+      '--filter',
+      '@inkcre/ext-local-files...',
+      '--filter',
+      '@inkcre/ext-memos...',
+      '--filter',
+      '@inkcre/ext-twitter...',
+      'build',
+    ])
     const webPort = await availablePort()
     const webUrl = `http://127.0.0.1:${webPort}/`
     preview = spawn(
