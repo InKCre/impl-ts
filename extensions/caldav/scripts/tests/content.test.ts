@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseCollection, parseResource, safeHttpUrl } from '../../src/content.ts'
+import { parseCollection, parseResource } from '../../src/content.ts'
 
 const resource = (text: string) => JSON.stringify({ href: 'test.ics', text })
 const fixture = (name: string) =>
@@ -79,9 +79,9 @@ void test('floating and unknown TZID wall times are not converted; folded text a
 })
 
 void test('unsafe photos and links cannot become active content; remote photos remain explicit links', () => {
-  assert.equal(safeHttpUrl('javascript:alert(1)'), null)
-  assert.equal(safeHttpUrl('https://user:secret@example.com/'), null)
   for (const [photo, embedded, link] of [
+    ['javascript:alert(1)', null, null],
+    ['https://user:secret@example.com/', null, null],
     ['data:image/svg+xml;base64,PHN2Zz4=', null, null],
     ['https://example.com/photo.png', null, 'https://example.com/photo.png'],
     ['data:image/png;base64,aGVsbG8=', 'data:image/png;base64,aGVsbG8=', null],

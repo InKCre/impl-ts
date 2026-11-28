@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { jwtVerify } from 'jose'
-import { connectMailHost, mailDatabaseToken } from './mail-connection'
+import { connectNativeHost, databaseToken, serveBuiltExtension } from './native-extension-fixture'
 
 type BlockRow = { id: number; resolver: string; content: string; storage: number | null }
 type RelationRow = { id: number; from_: number; to_: number; content: string }
@@ -17,24 +16,8 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
   const browserPeer = crypto.randomUUID()
   const materializationPeer = crypto.randomUUID()
   const materializeUrl = 'https://mail-peer.example.invalid/materialize'
-  const producer = JSON.parse(
-    await readFile(new URL('../../extensions/mail/package.json', import.meta.url), 'utf8')
-  )
-  const version: string = producer.version
-  const assetBase = `https://registry.inkcre.dev/extensions/inkcre/mail/${version}/module-federation/`
-  const release = {
-    name: 'inkcre/mail',
-    nickname: 'Mail',
-    version,
-    distribution: 'module_federation',
-    state: 'published',
-    python: null,
-    module_federation: {
-      ...producer.inkcre.module_federation,
-      manifest_url: `${assetBase}mf-manifest.json`,
-    },
-  }
-  const authorization = await mailDatabaseToken(jwtSecret)
+  const extension = await serveBuiltExtension(page, 'mail')
+  const authorization = await databaseToken(jwtSecret)
   const headers = { Authorization: `Bearer ${authorization}`, 'Content-Type': 'application/json' }
   async function database(path: string, options: RequestInit = {}): Promise<Response> {
     const requestHeaders = new Headers(headers)
@@ -71,51 +54,18 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
     relations.push(row.id)
   }
   const cors = { 'Access-Control-Allow-Origin': '*' }
-  let holdRemoteEntry = false
-  let remoteEntryPending = false
-  let releaseRemoteEntry!: () => void
-  const remoteEntryGate = new Promise<void>((resolve) => {
-    releaseRemoteEntry = resolve
-  })
-  await page.route('**/v2/extensions/inkcre/mail/distributions/module_federation**', (route) =>
-    route.fulfill({
-      headers: cors,
-      json: route.request().url().includes('/releases/')
-        ? release
-        : { name: release.name, nickname: release.nickname, releases: [release] },
-    })
-  )
-  await page.route(`${assetBase}**`, async (route) => {
-    const relative = new URL(route.request().url()).pathname.split('/module-federation/')[1]!
-    if (holdRemoteEntry && relative === 'remoteEntry.js') {
-      remoteEntryPending = true
-      await remoteEntryGate
-    }
-    let body = await readFile(
-      new URL(`../../extensions/mail/dist/web/${relative}`, import.meta.url)
-    )
-    if (relative === 'mf-manifest.json') {
-      const manifest = JSON.parse(body.toString())
-      manifest.metaData.publicPath = 'auto'
-      body = Buffer.from(JSON.stringify(manifest))
-    }
-    await route.fulfill({
-      headers: cors,
-      contentType: relative.endsWith('.js')
-        ? 'application/javascript'
-        : relative.endsWith('.css')
-          ? 'text/css'
-          : 'application/json',
-      body,
-    })
-  })
   const trackerRequests: string[] = []
   await page.route('https://tracker.invalid/**', async (route) => {
     trackerRequests.push(route.request().url())
     await route.abort()
   })
-  await connectMailHost(page, { postgrestUrl, jwtSecret, browserPeer })
+  await connectNativeHost(page, { postgrestUrl, jwtSecret, browserPeer })
   let materializations = 0
+  let releaseFirstAttempt!: () => void
+  const firstAttempt = new Promise<void>((resolve) => {
+    releaseFirstAttempt = resolve
+  })
+
   let materialized: BlockRow | undefined
   const imageBase64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
@@ -198,7 +148,12 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
         algorithms: ['HS256'],
       })
       expect(signed.payload.role).toBe('authenticated')
-      expect(materializations, 'Reopening must use the stored MIME content').toBe(1)
+      if (materializations === 1) {
+        await firstAttempt
+        await route.fulfill({ status: 503, headers: cors, json: { detail: 'Offline mailbox' } })
+        return
+      }
+      expect(materializations, 'Only the explicit retry may materialize the MIME content').toBe(2)
       const bytes = Buffer.from(imageBase64, 'base64')
       const response = await database('rpc/create_storage_blob', {
         method: 'POST',
@@ -212,18 +167,7 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
       await route.fulfill({ headers: cors, json: materialized })
     })
 
-    await page.goto(
-      `/extensions?install=inkcre%2Fmail&distribution=module_federation&version=${version}`
-    )
-    await expect(page.getByRole('heading', { name: 'Mail', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Install', exact: true }).click()
-    await expect(page).toHaveURL(/\/extensions$/)
-    const row = page
-      .getByRole('article', { name: 'Mail', exact: true })
-      .locator('.extension-card__peer-row')
-      .filter({ hasText: 'This browser' })
-    await row.getByRole('button', { name: 'Enable', exact: true }).click()
-    await expect(row.getByText(`Running ${version}`, { exact: true })).toBeVisible()
+    await extension.install()
     await page.goto(`/info-base/graph?focal_block=${email.id}`)
     await page.getByRole('button', { name: `Inspect entry #${email.id}`, exact: true }).click()
     await expect(page).toHaveURL((url) => url.pathname === `/info-base/graph/blocks/${email.id}`)
@@ -242,14 +186,13 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
     )
     await expect(content.getByRole('heading', { name: subject, exact: true })).toBeVisible()
 
-    holdRemoteEntry = true
+    extension.hold()
     await page.goto(`/info-base/graph/blocks/${email.id}/content`, {
       waitUntil: 'domcontentloaded',
     })
-    await expect.poll(() => remoteEntryPending).toBe(true)
+    await expect.poll(extension.waiting).toBe(true)
     await expect(content).toContainText('Unknown resolver ID: extensions.mail.email.v1')
-    releaseRemoteEntry()
-    holdRemoteEntry = false
+    extension.release()
     await expect(content.getByRole('heading', { name: subject, exact: true })).toBeVisible()
     const html = page.frameLocator('iframe[title="Email HTML body"]')
     await expect(
@@ -271,7 +214,13 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
 
     await content.locator('summary', { hasText: 'Inline content' }).click()
     const inlinePart = content.locator('.content-email__part', { hasText: 'architecture-map.png' })
-    await inlinePart.getByRole('button', { name: 'Download', exact: true }).click()
+    const download = inlinePart.getByRole('button', { name: 'Download', exact: true })
+    await download.click()
+    await expect(download).toBeDisabled()
+    releaseFirstAttempt()
+    await expect(inlinePart).toContainText('Mail materialization Peer returned HTTP 503')
+    await expect(download).toBeEnabled()
+    await download.click()
     await expect(inlinePart.getByRole('link', { name: 'Open', exact: true })).toBeVisible()
     await expect(inlinePart.getByRole('link', { name: 'Open', exact: true })).toHaveAttribute(
       'href',
@@ -296,7 +245,7 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
         }
       })
     ).toBe('SecurityError')
-    expect(materializations).toBe(1)
+    expect(materializations).toBe(2)
     const saved = await (
       await database(`relations?from_=eq.${mimePart.id}&content=eq.content`)
     ).json()
@@ -309,7 +258,7 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
     await page.reload()
     await expect(content.getByRole('heading', { name: subject, exact: true })).toBeVisible()
     await expect(html.getByAltText('Architecture map')).toHaveJSProperty('naturalWidth', 1)
-    expect(materializations).toBe(1)
+    expect(materializations).toBe(2)
     expect(trackerRequests).toEqual([])
     await content.locator('summary', { hasText: 'Related messages' }).click()
     await content.getByRole('button', { name: 'The original design note', exact: true }).click()
@@ -321,7 +270,8 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
     await page.goto('/info-base/graph/blocks/2147483647')
     await expect(page.getByText('Entry #2147483647 no longer exists.')).toBeVisible()
   } finally {
-    releaseRemoteEntry()
+    releaseFirstAttempt()
+    extension.release()
     if (!page.isClosed()) await page.goto('about:blank').catch(() => {})
     for (const id of relations) await database(`relations?id=eq.${id}`, { method: 'DELETE' })
     for (const id of blocks) await database(`blocks?id=eq.${id}`, { method: 'DELETE' })

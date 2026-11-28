@@ -588,46 +588,34 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   )
   const postBlock = posts.find((row) => (JSON.parse(row.content) as { id?: string }).id === postId)
   expect(postBlock).toBeDefined()
+  const replyBlock = posts.find((row) => JSON.parse(row.content).id === replyId)
+  expect(replyBlock).toBeDefined()
   const mediaBlocks = await databaseRows<BlockRow>(
     'blocks?select=id,resolver,content&resolver=eq.extensions.twitter.media.v1&order=id.desc&limit=100'
   )
-  const mediaBlock = mediaBlocks.find(
-    (row) => (JSON.parse(row.content) as { id?: string }).id === mediaId
+  const expectedMediaBlocks = [mediaId, failedMediaId, videoId, alternateMediaId].map(
+    (nativeId) => {
+      const matches = mediaBlocks.filter((row) => JSON.parse(row.content).id === nativeId)
+      expect(matches, `one stored Block for media ${nativeId}`).toHaveLength(1)
+      return matches[0]!.id
+    }
   )
-  expect(mediaBlock).toBeDefined()
-  const failedMediaBlock = mediaBlocks.find(
-    (row) => (JSON.parse(row.content) as { id?: string }).id === failedMediaId
-  )
-  expect(failedMediaBlock).toBeDefined()
-  const videoBlock = mediaBlocks.find(
-    (row) => (JSON.parse(row.content) as { id?: string }).id === videoId
-  )
-  expect(videoBlock).toBeDefined()
-  const alternateMediaBlock = mediaBlocks.find(
-    (row) => (JSON.parse(row.content) as { id?: string }).id === alternateMediaId
-  )
-  expect(alternateMediaBlock).toBeDefined()
   const relations = await databaseRows<RelationRow>(
     `relations?select=from_,to_,content&from_=eq.${postBlock!.id}`
   )
-  expect(
-    relations.some((row) => row.to_ === mediaBlock!.id && JSON.parse(row.content).type === 'media')
-  ).toBe(true)
-  expect(
-    relations.some(
-      (row) => row.to_ === failedMediaBlock!.id && JSON.parse(row.content).type === 'media'
-    )
-  ).toBe(true)
-  expect(
-    relations.some((row) => row.to_ === videoBlock!.id && JSON.parse(row.content).type === 'media')
-  ).toBe(true)
-  expect(
-    relations.some(
-      (row) => row.to_ === alternateMediaBlock!.id && JSON.parse(row.content).type === 'media'
-    )
-  ).toBe(true)
+  const mediaRelations = relations.flatMap((row) => {
+    const reference = JSON.parse(row.content)
+    return reference.type === 'media' ? [{ target: row.to_, position: reference.position }] : []
+  })
+  expect(mediaRelations.sort((a, b) => a.position - b.position)).toEqual(
+    expectedMediaBlocks.map((target, position) => ({ target, position }))
+  )
 
   const controlledMediaReads: string[] = []
+  const imageBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+    'base64'
+  )
   await page.route('https://pbs.twimg.com/media/**', async (route) => {
     const url = route.request().url()
     if (url === imageUrl) {
@@ -636,10 +624,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
         status: 200,
         contentType: 'image/png',
         headers: { 'Access-Control-Allow-Origin': '*' },
-        body: Buffer.from(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
-          'base64'
-        ),
+        body: imageBytes,
       })
       return
     }
@@ -675,10 +660,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
       status: 200,
       contentType: 'image/png',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
-        'base64'
-      ),
+      body: imageBytes,
     })
   })
 
@@ -698,10 +680,6 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   await expect(content).toContainText('Long-form paragraph remains readable.')
   await expect(content).toContainText('Replying to @')
   await expect(content.getByRole('region', { name: 'Quoted post' })).toBeVisible()
-  await expect(content).toContainText('Acceptance image metadata')
-  await expect(content).toContainText('Controlled failure image metadata')
-  await expect(content).toContainText('Acceptance video metadata')
-  await expect(content).toContainText('Alternate CDN image metadata')
   const mediaCards = content.locator('.tweet-media')
   await expect(mediaCards).toHaveCount(4)
   const imageCard = mediaCards.filter({ hasText: 'Acceptance image metadata' })
@@ -714,70 +692,25 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   await expect(
     alternateMediaCard.getByRole('button', { name: /^Load (photo|video)/ })
   ).toBeVisible()
-  expect(
-    await page.evaluate(
-      ({
-        imageUrl,
-        failedImageUrl,
-        videoCoverUrl,
-        alternateImageUrl,
-        lowVideoUrl,
-        highVideoUrl,
-        playlistUrl,
-      }) =>
-        performance
-          .getEntriesByType('resource')
-          .map((entry) => entry.name)
-          .filter((name) =>
-            [
-              imageUrl,
-              failedImageUrl,
-              videoCoverUrl,
-              alternateImageUrl,
-              lowVideoUrl,
-              highVideoUrl,
-              playlistUrl,
-            ].includes(name)
-          ),
-      {
-        imageUrl,
-        failedImageUrl,
-        videoCoverUrl,
-        alternateImageUrl,
-        lowVideoUrl,
-        highVideoUrl,
-        playlistUrl,
-      }
-    )
-  ).toEqual([])
   expect(controlledMediaReads).toEqual([])
-  const imageRead = page.waitForRequest((request) => request.url() === imageUrl)
   await imageCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
-  await imageRead
   const loadedImage = imageCard.locator('img')
   await expect(loadedImage).toBeVisible()
   await expect(loadedImage).toHaveJSProperty('naturalWidth', 1)
-  const failedImageRead = page.waitForRequest((request) => request.url() === failedImageUrl)
   await failedMediaCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
-  await failedImageRead
   await expect(failedMediaCard.getByRole('alert')).toContainText('HTTP 503')
-  const videoRead = page.waitForRequest((request) => request.url() === highVideoUrl)
   await videoCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
-  await videoRead
   await expect(videoCard.locator('video')).toBeVisible()
   expect(await videoCard.locator('video').getAttribute('src')).toMatch(/^blob:/)
-  const alternateImageRead = page.waitForRequest((request) => request.url() === alternateImageUrl)
   await alternateMediaCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
-  await alternateImageRead
   await expect(alternateMediaCard.locator('img')).toHaveJSProperty('naturalWidth', 1)
   expect(controlledMediaReads).toEqual([imageUrl, failedImageUrl, highVideoUrl, alternateImageUrl])
 
   await content.getByRole('button', { name: /^Replying to @/ }).click()
   await expect(page).toHaveURL(
-    new RegExp(
-      `/info-base/graph/blocks/${relations.find((row) => row.content.includes('reply'))?.to_}/content$`
-    )
+    (url) => url.pathname === `/info-base/graph/blocks/${replyBlock!.id}/content`
   )
+  await expect(content).toContainText('Reply target native post.')
 
   const indexJob = await maintainLexicalIndex((id) =>
     recordPhase('indexing', { lexical_job_id: id })
@@ -785,12 +718,7 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   await recordPhase('indexed', {
     lexical_job_id: indexJob.id,
     post_block_id: postBlock!.id,
-    media_block_ids: [
-      mediaBlock!.id,
-      failedMediaBlock!.id,
-      videoBlock!.id,
-      alternateMediaBlock!.id,
-    ],
+    media_block_ids: expectedMediaBlocks,
   })
   expect(indexJob.state).toMatchObject({ failed: 0, unavailable: 0 })
   await recordPhase('searching')

@@ -50,20 +50,26 @@ void test('Python-authored contact graph preserves phones, photo and subsequent 
 void test('component identity retains TZID exceptions and audio-alarm attachments', () => {
   const sample = samples.find((item: any) => item.kind === 'calendar')
   const text = composeGraph(sample.remainder, properties(sample))
-  const actual = parseResource(JSON.stringify({ href: 'event.ics', text }), 'calendar')
-  const expected = parseResource(
-    JSON.stringify({ href: 'event.ics', text: sample.text }),
-    'calendar'
-  )
-  assert.notEqual(actual.kind, 'invalid')
-  if (actual.kind !== 'calendar' || expected.kind !== 'calendar') return
-  assert.deepEqual(actual.items, expected.items)
   const root = new ICAL.Component(ICAL.parse(text))
-  const attachment = root
-    .getFirstSubcomponent('vevent')!
-    .getFirstSubcomponent('valarm')!
-    .getFirstProperty('attach')!
-    .getFirstValue()
+  const events = root.getAllSubcomponents('vevent')
+  assert.equal(events.length, 2)
+  const master = events.find((event) => !event.hasProperty('recurrence-id'))!
+  const exception = events.find((event) => event.hasProperty('recurrence-id'))!
+  assert.equal(master.getFirstPropertyValue('uid'), 'shared-event')
+  assert.equal(master.getFirstPropertyValue('summary'), '共享日程')
+  assert.equal(master.getFirstProperty('dtstart')!.getParameter('tzid'), 'Asia/Shanghai')
+  assert.equal(String(master.getFirstPropertyValue('dtstart')), '2026-10-20T09:00:00')
+  assert.equal(String(master.getFirstPropertyValue('rrule')), 'FREQ=DAILY;COUNT=3')
+  assert.equal(exception.getFirstPropertyValue('uid'), 'shared-event')
+  assert.equal(exception.getFirstPropertyValue('summary'), '单次例外')
+  assert.equal(String(exception.getFirstPropertyValue('dtstart')), '2026-10-21T10:00:00')
+  assert.equal(master.getFirstPropertyValue('description'), '共同正文')
+  assert.equal(master.getFirstPropertyValue('attach'), 'https://example.invalid/plan.pdf')
+  assert.equal(exception.getFirstPropertyValue('description'), '例外正文')
+  const recurrence = exception.getFirstProperty('recurrence-id')!
+  assert.equal(recurrence.getParameter('tzid'), 'Asia/Shanghai')
+  assert.equal(String(recurrence.getFirstValue()), '2026-10-21T09:00:00')
+  const attachment = master.getFirstSubcomponent('valarm')!.getFirstPropertyValue('attach')
   assert.ok(attachment instanceof ICAL.Binary)
   assert.equal(attachment.decodeValue(), 'hello')
   assert.match(text, /X-UNKNOWN;X-KEEP=yes:保留/)

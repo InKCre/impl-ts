@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { connectMailHost, mailDatabaseToken } from './mail-connection'
+import { connectNativeHost, databaseToken } from './native-extension-fixture'
 
 type BlockRow = { id: number; content: string }
 type RelationRow = { to_: number; content: string }
@@ -19,7 +19,7 @@ test('the deployed Python Mail Peer materializes the attachment requested by the
     )
   }
   const databaseBase = postgrestUrl.replace(/\/?$/, '/')
-  const token = await mailDatabaseToken(jwtSecret)
+  const token = await databaseToken(jwtSecret)
   async function rows<Row>(path: string): Promise<Row[]> {
     const response = await request.get(new URL(path, databaseBase).href, {
       headers: { Authorization: `Bearer ${token}` },
@@ -40,6 +40,11 @@ test('the deployed Python Mail Peer materializes the attachment requested by the
       )
       for (const component of components) {
         if (JSON.parse(component.content).role !== 'inline') continue
+        const parts = await rows<BlockRow>(
+          `blocks?select=id,content&id=eq.${component.to_}&resolver=eq.extensions.mail.mime_part.v1`
+        )
+        const mime = parts[0] && JSON.parse(parts[0].content)
+        if (mime?.filename !== 'architecture-map.png' || mime.media_type !== 'image/png') continue
         const saved = await rows(`relations?select=id&from_=eq.${component.to_}&content=eq.content`)
         if (!saved.length) return { email: email.id, part: component.to_ }
       }
@@ -48,7 +53,7 @@ test('the deployed Python Mail Peer materializes the attachment requested by the
   }
 
   const graph = await unmaterializedInlinePart()
-  await connectMailHost(page, {
+  await connectNativeHost(page, {
     postgrestUrl,
     jwtSecret,
     browserPeer: process.env.INKCRE_E2E_MAIL_PEER_ID ?? '00000000-0000-4000-8000-000000000001',

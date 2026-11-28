@@ -115,14 +115,14 @@ async function run(): Promise<unknown> {
       refresh: true,
       materializeMissing: true,
     })
-    const reopened = await resolver.getSolvedContent({ refresh: true, materializeMissing: false })
+    const refreshed = await resolver.getSolvedContent({ refresh: true, materializeMissing: false })
     return {
       distinct: distinct.map((item) =>
         item.status === 'rejected' ? String(item.reason) : 'unexpected success'
       ),
       before: before.content,
       materialized: materialized.content?.solvedContent,
-      reopened: reopened.content?.solvedContent,
+      refreshed: refreshed.content?.solvedContent,
       delegates,
     }
   }

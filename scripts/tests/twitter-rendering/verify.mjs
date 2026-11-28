@@ -35,10 +35,6 @@ try {
       '.tweet-preview a, .tweet-preview button, .tweet-preview img, .tweet-preview video'
     )
   ).toHaveCount(0)
-  await check(
-    `(async () => { const { visibleText, safeUrl } = await import('/@fs' + ${JSON.stringify(resolve('extensions/twitter/src/components/contentTweet/presentation.ts'))}); return visibleText({text: '🌿Hello! hidden', visible: [0, 7]}) === '🌿Hello!' && safeUrl('javascript:alert(1)') === undefined && safeUrl('https://name:password@example.com') === undefined })()`,
-    'Visible Unicode text and external link boundary'
-  )
   await shot('after-detail-light')
   const objectUrls = []
   for (const [id, count] of [
@@ -180,6 +176,16 @@ try {
     'Fullscreen denial keeps the loaded player usable'
   )
   await select(111)
+  await expect(page.locator('.specimen-preview .tweet-preview__text')).toHaveText(
+    '🌿 safe script auth'
+  )
+  const rich = page.locator('.specimen-detail .content-tweet__text')
+  await expect(rich).toHaveText('🌿 safe script auth')
+  await expect(rich.getByRole('link')).toHaveCount(1)
+  await expect(rich.getByRole('link', { name: 'safe', exact: true })).toHaveAttribute(
+    'href',
+    'https://example.org/visible'
+  )
   await expect(page.locator('.content-tweet__counts dd')).toHaveCount(1)
   await expect(page.locator('.content-tweet__counts dd')).toHaveText('0')
   await select(112)

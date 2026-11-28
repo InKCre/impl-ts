@@ -11,7 +11,7 @@ const cases = [
       distinct: Array(3).fill('Error: Content is already loading'),
       before: null,
       materialized: 'Persisted MIME payload',
-      reopened: 'Persisted MIME payload',
+      refreshed: 'Persisted MIME payload',
       delegates: 1,
     },
   ],

@@ -43,19 +43,22 @@ function page(ids: number[], more: boolean, number = 1, extra: object = {}): Fav
     { code: 0, data: { info, medias: ids.map((id) => media(id)), has_more: more, ...extra } },
     account.mid,
     '900123',
-    number,
-    '2026-11-06T00:00:00.000Z'
+    number
   )
 }
 
 void test('full media_id is kept distinct from raw fid, visibility is a bit, and login is required', () => {
   const folders = parseFolders(
-    { code: 0, data: { list: [info, { ...info, id: 900124, attr: 23 }] } },
+    {
+      code: 0,
+      data: { list: [info, { ...info, id: 900124, attr: 23 }, { ...info, id: 900125, attr: 22 }] },
+    },
     account.mid
   )
   assert.equal(folders[0]!.id, '900123')
   assert.equal(folders[0]!.is_private, true)
   assert.equal(folders[1]!.is_private, true)
+  assert.equal(folders[2]!.is_private, false)
   assert.throws(() => parseAccount({ code: 0, data: { isLogin: false, mid: 1001 } }), /登录/)
   assert.throws(
     () => parseFolders({ code: 0, data: { list: [{ ...info, mid: 777 }] } }, account.mid),
@@ -81,8 +84,7 @@ void test('short pages follow has_more, unavailable placeholders preserve unknow
     },
     account.mid,
     '900123',
-    2,
-    '2026-11-06T00:00:00.000Z'
+    2
   )
   assert.equal(value.hasMore, true)
   assert.equal(value.items.length, 2)
@@ -95,6 +97,9 @@ void test('short pages follow has_more, unavailable placeholders preserve unknow
   assert.equal(value.items[1]!.membership.position_in_page, 1)
   const record = favoriteGraph(account, value).records.find((entry) => entry.key === 'video:12')!
   assert.equal(Object.hasOwn(record.content, 'title'), false)
+  const fullPage = Array.from({ length: 20 }, (_, index) => index + 1)
+  assert.equal(page(fullPage, true).items.length, 20)
+  assert.throws(() => page([...fullPage, 21], true), /超出分页范围/)
   assert.throws(() => page([], true), /分页为空/)
   assert.throws(
     () => parseFavoritePage({ code: -101, message: '账号未登录' }, account.mid, '900123', 1),
@@ -125,8 +130,13 @@ void test('a shared video has one identity and separate stable membership record
     second.records.find((entry) => entry.resolver.endsWith('.membership.v1'))!.key
   )
   assert.deepEqual(
-    first.relations.map((entry) => entry.content),
-    ['owns', 'contains', 'item', 'author']
+    first.relations.map(({ from_key, content, to_key }) => [from_key, content, to_key]).sort(),
+    [
+      ['folder:900123', 'contains', 'membership:900123:11'],
+      ['membership:900123:11', 'item', 'video:11'],
+      ['user:1001', 'owns', 'folder:900123'],
+      ['video:11', 'author', 'user:2002'],
+    ]
   )
 })
 

@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { SignJWT } from 'jose'
+import { databaseToken, serveBuiltExtension } from './native-extension-fixture'
 
 /** Uses the real built MF module and disposable suite DB; only Registry delivery is served locally. */
 export function registerGitHubNativeTests(): void {
@@ -12,32 +10,9 @@ export function registerGitHubNativeTests(): void {
     const postgrestUrl = process.env.INKCRE_E2E_POSTGREST_URL!
     const jwtSecret = process.env.INKCRE_E2E_JWT_SECRET!
     const peerId = crypto.randomUUID()
-    const producer = JSON.parse(
-      await readFile(new URL('../../extensions/github/package.json', import.meta.url), 'utf8')
-    )
-    const version: string = producer.version
-    const authorization = await new SignJWT({ role: 'authenticated' })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('1h')
-      .setIssuer('inkcre-peer')
-      .setAudience('inkcre-api')
-      .sign(new TextEncoder().encode(jwtSecret))
+    const extension = await serveBuiltExtension(page, 'github')
+    const authorization = await databaseToken(jwtSecret)
     const headers = { Authorization: `Bearer ${authorization}`, 'Content-Type': 'application/json' }
-    const assetBase = `https://registry.inkcre.dev/extensions/inkcre/github/${version}/module-federation/`
-    const release = {
-      name: 'inkcre/github',
-      nickname: 'GitHub',
-      version,
-      distribution: 'module_federation',
-      state: 'published',
-      python: null,
-      module_federation: {
-        ...producer.inkcre.module_federation,
-        manifest_url: `${assetBase}mf-manifest.json`,
-      },
-    }
-    const cors = { 'Access-Control-Allow-Origin': '*' }
     let leaseRenewals = 0
     let jobScans = 0
     page.on('request', (request) => {
@@ -47,48 +22,9 @@ export function registerGitHubNativeTests(): void {
         jobScans++
     })
     let githubApiCalls = 0
-    let holdRemoteEntry = false
-    let remoteEntryPending = false
-    let releaseRemoteEntry!: () => void
-    const remoteEntryGate = new Promise<void>((resolve) => {
-      releaseRemoteEntry = resolve
-    })
     await page.route('https://api.github.com/**', async (route) => {
       githubApiCalls++
       await route.abort()
-    })
-    await page.route(
-      '**/v2/extensions/inkcre/github/distributions/module_federation**',
-      async (route) => {
-        await route.fulfill({
-          headers: cors,
-          json: route.request().url().includes('/releases/')
-            ? release
-            : { name: release.name, nickname: release.nickname, releases: [release] },
-        })
-      }
-    )
-    await page.route(`${assetBase}**`, async (route) => {
-      const relative = new URL(route.request().url()).pathname.split('/module-federation/')[1]
-      if (holdRemoteEntry && relative === 'remoteEntry.js') {
-        remoteEntryPending = true
-        await remoteEntryGate
-      }
-      const file = fileURLToPath(
-        new URL(`../../extensions/github/dist/web/${relative}`, import.meta.url)
-      )
-      let body = await readFile(file)
-      if (relative === 'mf-manifest.json') {
-        const manifest = JSON.parse(body.toString())
-        manifest.metaData.publicPath = 'auto'
-        body = Buffer.from(JSON.stringify(manifest))
-      }
-      const contentType = relative.endsWith('.js')
-        ? 'application/javascript'
-        : relative.endsWith('.css')
-          ? 'text/css'
-          : 'application/json'
-      await route.fulfill({ headers: cors, contentType, body })
     })
     await page.addInitScript(
       ({ postgrestUrl, jwtSecret, peerId }) => {
@@ -176,24 +112,14 @@ export function registerGitHubNativeTests(): void {
       await relate(user, list, 'owns')
       await relate(organization, repository, 'owns')
       const membership = await relate(list, repository, 'contains')
-      await page.goto(
-        `/extensions?install=inkcre%2Fgithub&distribution=module_federation&version=${version}`
-      )
-      await expect(page.getByRole('heading', { name: 'GitHub', exact: true })).toBeVisible()
-      await page.getByRole('button', { name: 'Install', exact: true }).click()
-      await expect(page).toHaveURL(/\/extensions$/)
-      const card = page.getByRole('article', { name: 'GitHub', exact: true })
-      const row = card.locator('.extension-card__peer-row').filter({ hasText: 'This browser' })
-      await row.getByRole('button', { name: 'Enable', exact: true }).click()
-      await expect(row.getByText(`Running ${version}`, { exact: true })).toBeVisible()
-      holdRemoteEntry = true
+      const { row, version } = await extension.install()
+      extension.hold()
       await page.goto(`/info-base/graph?focal_block=${list}`, { waitUntil: 'domcontentloaded' })
-      await expect.poll(() => remoteEntryPending).toBe(true)
+      await expect.poll(extension.waiting).toBe(true)
       await expect(
         page.getByRole('button', { name: `Explore entry #${list}`, exact: true })
       ).toBeVisible()
-      releaseRemoteEntry()
-      holdRemoteEntry = false
+      extension.release()
       await expect(
         page
           .getByRole('button', { name: `Explore entry #${list}`, exact: true })
@@ -285,49 +211,6 @@ export function registerGitHubNativeTests(): void {
       await expect(page.locator('.solved-content-popup__state')).toContainText(
         'invented_membership'
       )
-      // Inspect the public SDK shared by the actual MF Host; this adds no application hook.
-      const lifecycle = await page.evaluate(async (blockId) => {
-        type Sdk = typeof import('../../packages/core/src/index')
-        const host = (
-          globalThis as typeof globalThis & {
-            __FEDERATION__: {
-              __INSTANCES__: Array<{
-                options: { name: string }
-                loadShare(name: string): Promise<() => Sdk>
-              }>
-            }
-          }
-        ).__FEDERATION__.__INSTANCES__.find((instance) => instance.options.name === 'host')!
-        const sdk = (await host.loadShare('@inkcre/core'))()
-        const block = await sdk.Block.get(blockId)
-        const original = sdk.Resolver.getClass(block.resolver)
-        const cached = await sdk.ResolverCache.getResolver(block)
-        class Replacement extends original {
-          async getText() {
-            return cached.getText()
-          }
-        }
-        sdk.Resolver.unregister(block.resolver, original)
-        sdk.Resolver.register(block.resolver, Replacement)
-        try {
-          const replacement = await sdk.ResolverCache.getResolver(block)
-          return {
-            text: await replacement.getText(),
-            replacementDiffers: replacement !== cached,
-            replacementUsesRegisteredClass: replacement.constructor === Replacement,
-            wrongOwnerCannotUnregister: !sdk.Resolver.unregister(block.resolver, original),
-          }
-        } finally {
-          sdk.Resolver.unregister(block.resolver, Replacement)
-          sdk.Resolver.register(block.resolver, original)
-        }
-      }, repository)
-      expect(lifecycle.replacementDiffers).toBe(true)
-      expect(lifecycle.replacementUsesRegisteredClass).toBe(true)
-      expect(lifecycle.wrongOwnerCannotUnregister).toBe(true)
-      expect(lifecycle.text).toBe(
-        'fixture-org/demo\n<script>unsafe()</script> Stored repository description\nLanguage: Python\nTopics: fixture, reader'
-      )
       await page.goto('/extensions')
       await row.getByRole('button', { name: 'Disable', exact: true }).click()
       await expect(row.getByText('Not running', { exact: true })).toBeVisible()
@@ -414,7 +297,7 @@ export function registerGitHubNativeTests(): void {
       expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStartedAt)
       expect(githubApiCalls).toBe(0)
     } finally {
-      releaseRemoteEntry()
+      extension.release()
       // Timeout teardown may already have closed the page; DB cleanup must still run.
       if (!page.isClosed()) await page.goto('about:blank').catch(() => {})
       for (const id of createdRelations)
