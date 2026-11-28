@@ -9,7 +9,10 @@ const config = {
   format: 1,
   repository: 'InKCre/impl-py',
   stable_image: 'ghcr.io/inkcre/impl-py:stable',
-  runtime_images: { pgvector: 'pgvector@sha256:1', postgrest: 'postgrest@sha256:2' },
+  runtime_images: {
+    pgvector: `pgvector/pgvector:pg17@sha256:${'1'.repeat(64)}`,
+    postgrest: `postgrest/postgrest@sha256:${'2'.repeat(64)}`,
+  },
   canonical_candidate: { image, source_revision: source, contract_revision: revision },
 }
 const artifact = (path) => ({ path, sha256: 'c'.repeat(64), size: 1 })
@@ -48,6 +51,7 @@ void test('consumer admission rejects unknown candidate origin, source and contr
   for (const invalid of [
     'ghcr.io/inkcre/impl-py:preview',
     image.replace('ghcr.io', 'other.example'),
+    `sha256:${'b'.repeat(64)}`,
   ]) {
     assert.throws(
       () =>
@@ -56,6 +60,22 @@ void test('consumer admission rejects unknown candidate origin, source and contr
           canonical_candidate: { ...config.canonical_candidate, image: invalid },
         }),
       /requires a published repository digest/
+    )
+  }
+})
+
+void test('runtime containers require a full immutable image digest', () => {
+  for (const [name, image] of [
+    ['pgvector', 'pgvector/pgvector:pg17@sha256:1'],
+    ['postgrest', 'postgrest/postgrest:latest'],
+  ]) {
+    assert.throws(
+      () =>
+        validateCoreReleaseConfig({
+          ...config,
+          runtime_images: { ...config.runtime_images, [name]: image },
+        }),
+      new RegExp(`${name} runtime image must be digest-pinned`)
     )
   }
 })

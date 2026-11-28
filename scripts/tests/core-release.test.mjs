@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { inspectCoreRelease, validateCoreReleaseConfig } from '../core-release-lib.mjs'
+import { inspectCoreRelease } from '../core-release-lib.mjs'
 
 const imageId = `sha256:${'a'.repeat(64)}`
 const digest = `ghcr.io/inkcre/impl-py@${imageId}`
@@ -65,19 +65,5 @@ void test('published digest admission and artifact checks remain independent of 
         allowLocalImage: true,
       }),
     /schema manifest identity is invalid/
-  )
-  assert.throws(
-    () =>
-      validateCoreReleaseConfig({
-        format: 1,
-        repository: 'InKCre/impl-py',
-        stable_image: 'ghcr.io/inkcre/impl-py:stable',
-        canonical_candidate: {
-          image: imageId,
-          source_revision: manifest.source_revision,
-          contract_revision: manifest.contract_revision,
-        },
-      }),
-    /published repository digest/
   )
 })

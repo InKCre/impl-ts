@@ -140,7 +140,6 @@ record(
   databaseCompatibility.protocol?.schema === 'inkcre' ? 'ok' : 'error',
   `${databaseCompatibility.revision}; schema ${databaseCompatibility.protocol?.schema}; Supabase-generated types checked in`
 )
-record('config-provenance', 'ok', 'browser-local; no checked-in environment profile')
 
 if (portableConfigPath) {
   try {
