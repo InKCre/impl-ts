@@ -7,16 +7,22 @@ void test('only a prepared numeric WebExt version is selected, independently of 
   assert.equal(preparedVersion('0.2.0', '## 0.2.0', true), false)
   assert.equal(preparedVersion('0.1.3', '', false), false)
   assert.equal(preparedVersion('0.2.0', '## 0.2.01', false), false)
-  assert.throws(() => preparedVersion('0.2.0-beta.2', '', false))
-  assert.throws(() => preparedVersion('0.2.65536', '', false))
+  for (const invalid of ['0.2.0-beta.2', '0.02.0']) {
+    assert.throws(() => preparedVersion(invalid, `## ${invalid}`, false), /numeric browser version/)
+  }
+  assert.throws(() => preparedVersion('0.0.0', '## 0.0.0', false), /all zero/)
+  assert.throws(() => preparedVersion('0.2.65536', '', false), /exceeds 65535/)
 })
 
 void test('draft recovery cannot overwrite a public version or another source', () => {
   const source = 'a'.repeat(40)
   const draft = { tag_name: 'webext-v0.2.0', target_commitish: source, draft: true }
   assertDraft(draft, draft.tag_name, source)
-  assert.throws(() => assertDraft({ ...draft, draft: false }, draft.tag_name, source))
-  assert.throws(() => assertDraft(draft, draft.tag_name, 'b'.repeat(40)))
+  assert.throws(
+    () => assertDraft({ ...draft, draft: false }, draft.tag_name, source),
+    /never overwritten/
+  )
+  assert.throws(() => assertDraft(draft, draft.tag_name, 'b'.repeat(40)), /another source/)
   assert.throws(() => assertDraft(undefined, draft.tag_name, source), /draft release was not found/)
 })
 

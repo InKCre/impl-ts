@@ -10,19 +10,23 @@ void test('browser artifacts preserve identity, numeric version and readable too
   const root = new URL('../../apps/webext/', import.meta.url)
   const metadata = JSON.parse(await readFile(new URL('package.json', root), 'utf8'))
   const { key } = JSON.parse(await readFile(new URL('chromium-key.json', root), 'utf8'))
-  assert.match(extensionId(key), /^[a-p]{32}$/)
   for (const browser of ['chrome', 'firefox']) {
     const manifest = JSON.parse(
       await readFile(new URL(`.output/${browser}-mv3/manifest.json`, root), 'utf8')
     )
     checkManifest(manifest, metadata.version, browser, key)
-    assert.throws(() =>
-      checkManifest({ ...manifest, version: '0.0.1' }, metadata.version, browser, key)
+    assert.throws(
+      () => checkManifest({ ...manifest, version: '0.0.1' }, metadata.version, browser, key),
+      { code: 'ERR_ASSERTION', actual: '0.0.1', expected: metadata.version }
     )
-    if (browser === 'chrome')
-      assert.throws(() =>
-        checkManifest({ ...manifest, key: undefined }, metadata.version, browser, key)
+    if (browser === 'chrome') {
+      // Existing installations retain the ID published in webext-v0.2.2/source.json.
+      assert.equal(extensionId(manifest.key), 'fnejbpghhbcojofhgjglkejhednalfoa')
+      assert.throws(
+        () => checkManifest({ ...manifest, key: undefined }, metadata.version, browser, key),
+        /fixed Chromium identity/
       )
+    }
     assert.deepEqual(
       manifest.icons,
       Object.fromEntries([16, 32, 48, 96, 128].map((size) => [size, `icon/${size}.png`]))
