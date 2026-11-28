@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { SignJWT } from 'jose'
 import { readFileSync } from 'node:fs'
 import { registerGitHubNativeTests } from './github-native'
+import { registerGraphNavigationTests } from './graph-navigation.mjs'
 
 const postgrestUrl = process.env.INKCRE_E2E_POSTGREST_URL!
 const jwtSecret = process.env.INKCRE_E2E_JWT_SECRET!
@@ -2036,3 +2037,4 @@ test('Source titles follow saved names across navigation and refresh', async ({ 
 })
 
 registerGitHubNativeTests()
+registerGraphNavigationTests()
