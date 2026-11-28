@@ -96,7 +96,6 @@ export class GraphNavigationRetrievalManager {
           contents: options.contents,
           cursor: options.cursor,
           limit: requested,
-          requireEndpoints: true,
         })
       )
     }
@@ -108,7 +107,6 @@ export class GraphNavigationRetrievalManager {
           contents: options.contents,
           cursor: options.cursor,
           limit: requested,
-          requireEndpoints: true,
         })
       )
     }
@@ -301,7 +299,6 @@ export class GraphNavigationRetrievalManager {
           contents,
           cursor,
           limit: FRONTIER_RELATION_PAGE_SIZE,
-          requireEndpoints: true,
         })
         const last = page.at(-1)
         if (!last) break

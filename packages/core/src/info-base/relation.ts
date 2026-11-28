@@ -55,23 +55,20 @@ export class Relation extends Z.class({
     contents?: Iterable<string>
     cursor?: RelationRef
     limit: number
-    requireEndpoints?: boolean
   }): Promise<Relation[]> {
     const blockIds = [...new Set(options.blockIds)]
     if (blockIds.length === 0 || options.limit <= 0) return []
+    const opposite = options.endpoint === 'from_' ? 'to_' : 'from_'
     let query = this.dbApi
       .from()
       .select()
       .in(options.endpoint, blockIds)
+      .not(opposite, 'is', null)
       .order('id', { ascending: false })
       .limit(options.limit)
     const contents = [...new Set(options.contents ?? [])]
     if (contents.length > 0) query = query.in('content', contents)
     if (options.cursor !== undefined) query = query.lt('id', options.cursor)
-    if (options.requireEndpoints) {
-      const opposite = options.endpoint === 'from_' ? 'to_' : 'from_'
-      query = query.not(opposite, 'is', null)
-    }
     const result = await query
     if (result.error) throw result.error
     return (result.data ?? []).map((item) => Relation.parse(item))
