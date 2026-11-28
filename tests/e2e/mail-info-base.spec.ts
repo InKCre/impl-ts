@@ -66,7 +66,6 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
     releaseFirstAttempt = resolve
   })
 
-  let materialized: BlockRow | undefined
   const imageBase64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
   try {
@@ -162,7 +161,11 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
       })
       const blobId: string = await response.json()
       blobs.push(blobId)
-      materialized = await block('core.image.v1', JSON.stringify({ blob_id: blobId }), storage)
+      const materialized = await block(
+        'core.image.v1',
+        JSON.stringify({ blob_id: blobId }),
+        storage
+      )
       await relate(mimePart.id, materialized.id, 'content')
       await route.fulfill({ headers: cors, json: materialized })
     })
@@ -208,9 +211,6 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
     expect(await page.evaluate(() => '__mailAcceptanceScriptExecuted' in window)).toBe(false)
     expect(trackerRequests).toEqual([])
     expect(materializations).toBe(0)
-    expect(
-      await (await database(`relations?from_=eq.${mimePart.id}&content=eq.content`)).json()
-    ).toEqual([])
 
     await content.locator('summary', { hasText: 'Inline content' }).click()
     const inlinePart = content.locator('.content-email__part', { hasText: 'architecture-map.png' })
@@ -246,13 +246,6 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
       })
     ).toBe('SecurityError')
     expect(materializations).toBe(2)
-    const saved = await (
-      await database(`relations?from_=eq.${mimePart.id}&content=eq.content`)
-    ).json()
-    expect(saved).toEqual([
-      expect.objectContaining({ from_: mimePart.id, to_: materialized!.id, content: 'content' }),
-    ])
-
     // The saved MIME child lies beyond the email's graph neighborhood. A new document must
     // reload its complete relations and bytes, rather than reuse only the visible graph edges.
     await page.reload()

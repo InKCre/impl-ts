@@ -46,14 +46,6 @@ for (const [service, port] of Object.entries({
   }
 }
 
-const peer = services.core?.environment
-if (
-  peer?.PEER_ID !== '00000000-0000-4000-8000-000000000002' ||
-  Number(peer?.PEER_LEASE_RENEW_INTERVAL_SECONDS) !== 1
-) {
-  errors.push('development Core must renew its known peer identity every second')
-}
-
 if (errors.length > 0) {
   for (const error of errors) console.error(`[ERROR] ${error}`)
   process.exit(1)

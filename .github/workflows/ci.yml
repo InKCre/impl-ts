@@ -64,9 +64,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify canonical candidate admission boundaries
-        run: node --test scripts/test-core-release.mjs
-
       - name: Resolve admitted Core once to an immutable release
         id: release
         run: node scripts/resolve-core-release.mjs

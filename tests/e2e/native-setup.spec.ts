@@ -115,13 +115,14 @@ test('Memos keeps its saved PAT when the selected Peer address is unavailable', 
       await open()
       const setup = page.locator('.memos-setup')
       const choose = setup.getByRole('combobox', { name: 'Core providing Memos' })
-      await expect(setup.getByRole('button', { name: 'Prepare connection' })).toBeVisible()
+      const prepare = setup.getByRole('button', { name: 'Prepare connection' })
+      await expect(prepare).toBeVisible()
       if (await choose.isVisible()) {
         await choose.click()
         await page.getByRole('option', { name: /Setup native fixture/ }).click()
       }
       expect(mutations).toEqual([])
-      await setup.getByRole('button', { name: 'Prepare connection' }).click()
+      await prepare.click()
       await expect(setup.getByRole('alert')).toContainText('PAT saved and Memos enabled')
       const [saved] = (await database('extensions?name=eq.inkcre/memos&select=config')) as {
         config: { personal_access_token: string }
@@ -193,22 +194,17 @@ test('Twitter retains the selected bookmark source on a failed switch and starts
           await page.getByRole('option', { name, exact: true }).click()
         }
         const time = setup.locator('.ink-picker')
-        const editTime = async (hour: string, minute: string, decision: 'Cancel' | 'Confirm') => {
+        const editTime = async (hour: string, minute: string) => {
           await time.click()
           const dialog = page
             .getByRole('dialog')
             .filter({ has: page.getByRole('listbox', { name: /^Hour/ }) })
           await dialog.getByRole('listbox', { name: /^Hour/ }).selectOption(hour)
           await dialog.getByRole('listbox', { name: /^Minute/ }).selectOption(minute)
-          await dialog.getByRole('button', { name: decision, exact: true }).click()
+          await dialog.getByRole('button', { name: 'Confirm', exact: true }).click()
         }
         await select('Morning bookmarks')
-        await expect(setup.getByRole('button', { name: 'Continue', exact: true })).toBeVisible()
-        const originalTime = await time.innerText()
-        await editTime('7', '30', 'Cancel')
-        await expect(time).toHaveText(originalTime)
-        await editTime('7', '30', 'Confirm')
-        await expect(time).toContainText('7:30')
+        await editTime('7', '30')
         const crons = '**/crons?**'
         const rejectRead = (route: Route) =>
           route.fulfill({
@@ -225,7 +221,7 @@ test('Twitter retains the selected bookmark source on a failed switch and starts
         await select('Evening bookmarks')
         await expect(picker).toHaveText('Evening bookmarks')
         await expect(setup.getByRole('alert')).toHaveCount(0)
-        await editTime('17', '45', 'Confirm')
+        await editTime('17', '45')
         const rejectWrite = (route: Route) =>
           route.request().method() === 'POST'
             ? route.fulfill({

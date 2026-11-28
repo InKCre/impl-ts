@@ -18,7 +18,7 @@ async function rejectsWith(operation: Promise<unknown>, name: string, message: R
 }
 
 async function main() {
-  if (location.pathname === '/unpaired' || location.pathname === '/paired') {
+  if (location.pathname === '/probe') {
     const found = await BrowserAccess.discover()
     await fetch('/probe-report', {
       method: 'POST',
@@ -253,13 +253,13 @@ async function main() {
     'Exact-provider rejection was caused by a broken authorized bridge'
   )
   BrowserAccess.unbind(wrongProvider)
-  const probe = async (route: string): Promise<{ count: number; providers: string[] }> => {
+  const probe = async (): Promise<{ count: number; providers: string[] }> => {
     const token = crypto.randomUUID()
     const opened = await fetch('/fixture-command', {
       method: 'POST',
       body: JSON.stringify({
         type: 'fixture-open-probe',
-        url: `${otherOrigin}${route}?token=${token}`,
+        url: `${otherOrigin}/probe?token=${token}`,
       }),
     }).then((response) => response.json())
     check(opened.ok, 'Could not open a separate top-level Web origin')
@@ -271,7 +271,7 @@ async function main() {
     return observed
   }
   check(
-    (await probe('/unpaired')).count === 0,
+    (await probe()).count === 0,
     'An unpaired origin on the same permitted host acquired a provider'
   )
   const granted = await fetch('/fixture-command', {
@@ -283,39 +283,18 @@ async function main() {
     }),
   }).then((response) => response.json())
   check(granted.ok, 'Second origin could not be paired dynamically')
-  const paired = await probe('/paired')
+  const paired = await probe()
   check(
     paired.count === 1 && paired.providers[0] === secondBinding.provider,
     'Second origin did not discover its exact authorized provider'
   )
   await fetch('/report', {
     method: 'POST',
-    body: JSON.stringify({
-      ok: true,
-      entries: extracted.entries,
-      cases: [
-        'provider-revoke-isolation',
-        'second-origin-pairing',
-        'login-state',
-        'page-navigation',
-        'dynamic-batch',
-        'network-json',
-        'new-tab-cleanup',
-        'borrowed-tab-preserved',
-        'borrowed-tab-exclusion',
-        'stale-page',
-        'stale-tab-reference',
-        'abort-cleanup',
-        'exact-provider',
-        'exact-origin',
-      ],
-    }),
+    body: JSON.stringify({ ok: true }),
   })
-  document.querySelector('#status')!.textContent = 'Passed'
 }
 
 void main().catch(async (error: unknown) => {
-  document.querySelector('#status')!.textContent = String(error)
   await fetch('/report', {
     method: 'POST',
     body: JSON.stringify({

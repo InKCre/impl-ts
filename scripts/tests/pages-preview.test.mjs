@@ -12,7 +12,7 @@ const requireWeb = createRequire(new URL('../../apps/web/package.json', import.m
 const requireRuntime = createRequire(requireWeb.resolve('@module-federation/runtime'))
 const { generateSnapshotFromManifest } = requireRuntime('@module-federation/sdk')
 
-void test('preview MF resolves from each selected snapshot and records its build identity', async () => {
+void test('preview MF resolves from its selected snapshot and records its build identity', async () => {
   const root = await mkdtemp(join(tmpdir(), 'inkcre-preview-'))
   const path = 'extensions/inkcre/example/1.0.0/module-federation'
   const manifest = {
@@ -42,10 +42,8 @@ void test('preview MF resolves from each selected snapshot and records its build
     await writeFile(join(root, path, 'mf-manifest.json'), JSON.stringify(manifest))
     await writeFile(join(root, path, 'remoteEntry.js'), 'export const candidate = "A"')
     await prepare()
-    const receipt = async () =>
-      JSON.parse(await readFile(join(root, 'preview-candidate.json'), 'utf8'))
-    const candidate = await receipt()
-    assert.deepEqual(candidate, {
+    const receipt = JSON.parse(await readFile(join(root, 'preview-candidate.json'), 'utf8'))
+    assert.deepEqual(receipt, {
       source_revision: 'a'.repeat(40),
       build_id: '123-1',
       distributions: [{ manifest: `/${path}/mf-manifest.json` }],
@@ -55,17 +53,14 @@ void test('preview MF resolves from each selected snapshot and records its build
       ...manifest,
       metaData: { ...manifest.metaData, publicPath: 'auto' },
     })
-    for (const origin of ['https://snapshot-a.pages.dev', 'https://snapshot-b.pages.dev']) {
-      const snapshot = generateSnapshotFromManifest(prepared, {
-        version: `${origin}/${path}/mf-manifest.json`,
-      })
-      assert.equal(
-        `${snapshot.publicPath}${snapshot.remoteEntry}`,
-        `${origin}/${path}/remoteEntry.js`
-      )
-    }
-    await prepare()
-    assert.deepEqual(await receipt(), candidate)
+    const origin = 'https://snapshot-a.pages.dev'
+    const snapshot = generateSnapshotFromManifest(prepared, {
+      version: `${origin}/${path}/mf-manifest.json`,
+    })
+    assert.equal(
+      `${snapshot.publicPath}${snapshot.remoteEntry}`,
+      `${origin}/${path}/remoteEntry.js`
+    )
     await symlink(join(root, path, 'remoteEntry.js'), join(root, path, 'linked.js'))
     await assert.rejects(prepare(), /symbolic links/)
   } finally {

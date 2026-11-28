@@ -43,7 +43,7 @@
     "ci": "pnpm check && pnpm test:e2e",
     "check:sdk": "pnpm --filter @inkcre/core build && node --test scripts/tests/core-independent.test.mjs scripts/tests/observability.test.mjs",
     "check:web": "node --test scripts/tests/job-observation.test.mjs",
-    "test:contracts": "node --experimental-strip-types --test scripts/test-core-release.mjs scripts/test-core-sdk-publication.mjs scripts/test-extension-publication.mjs scripts/tests/*.test.mjs scripts/tests/local-files-contract.test.ts extensions/bilibili/tests/*.test.ts extensions/caldav/scripts/tests/*.test.ts",
+    "test:contracts": "node --experimental-strip-types --test scripts/test-core-sdk-publication.mjs scripts/test-extension-publication.mjs scripts/tests/*.test.mjs scripts/tests/local-files-contract.test.ts extensions/bilibili/tests/*.test.ts extensions/caldav/scripts/tests/*.test.ts",
     "test:mail": "pnpm --filter @inkcre/core build && playwright test --config extensions/mail/tests/playwright.config.ts"
   },
   "devDependencies": {

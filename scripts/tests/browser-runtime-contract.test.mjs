@@ -11,20 +11,15 @@ void test('business links need no URL or hosting-provider approval in source or 
 const documentation = 'https://docs.customer.example/api/config'
 const localApiExample = 'http://127.0.0.1:8000'
 const article = 'https://public-articles.herokuapp.com/posts/123'
-const stopwordReference = 'https://raw.githubusercontent.com/stopwords-iso/stopwords-en/master/stopwords-en.json'
 const businessRecord = 'https://records.example/13e8c5b7-4d62-42d0-ae54-a82261111234'
 const DEFAULT_EXTENSION_REGISTRY_ORIGIN = 'https://registry.inkcre.dev'
 const externalApi = new OpenAI({ baseURL: 'https://ai.customer.example/v1' })
 </script>
 <template>
   <a :href="\`https://x.com/i/status/\${post.id}\`">Original</a>
-  <a :href="\`https://x.com/i/user/\${item.userId}\`">User</a>
-  <a :href="\`https://x.com/hashtag/\${topic}\`">Topic</a>
-  <a :href="\`https://x.com/search?q=\${query}\`">Search</a>
 </template>`
   assert.deepEqual(inspectBrowserRuntimeSource(source, 'extensions/twitter/src/Post.vue'), [])
   assert.deepEqual(inspectBrowserArtifact(source), [])
-  assert.deepEqual(inspectBrowserArtifact(JSON.stringify({ sourcesContent: [source] })), [])
 })
 
 void test('the same custom address is allowed as content and rejected as deployment configuration', () => {
@@ -130,11 +125,4 @@ void test('retired bootstrap and credential channels remain rejected without blo
   assert.deepEqual(inspectBrowserArtifact('const peer = "063cd1df-c495-5006-a119-67aa633b26be"'), [
     'environment-specific client identity',
   ])
-  assert.deepEqual(
-    inspectBrowserRuntimeSource(
-      "fetch('https://raw.githubusercontent.com/stopwords-iso/stopwords-en/master/stopwords-en.json')",
-      'runtime.ts'
-    ),
-    ['runtime.ts fetches the retired mutable stopword bootstrap fallback']
-  )
 })

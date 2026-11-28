@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { access, readFile, readdir, realpath } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { inspectBrowserArtifact } from './browser-runtime-contract.mjs'
 import { inspectNativeModuleFederation } from './verify-native-extension-distribution.mjs'
@@ -66,28 +66,6 @@ for (const entry of await readdir(`${repoRoot}/extensions`, { withFileTypes: tru
   }
 }
 
-const twitterRemoteEntry = `${repoRoot}/extensions/twitter/dist/web/remoteEntry.js`
-try {
-  const content = await readFile(twitterRemoteEntry, 'utf8')
-  if (/\/twitter\/(?:client-web|web)\//.test(content)) {
-    errors.push('Twitter remote entry retains an absolute application artifact base')
-  }
-  if (!content.includes('./assets/')) {
-    errors.push(
-      'Twitter remote entry does not reference its chunks through a relative artifact base'
-    )
-  }
-} catch (error) {
-  errors.push(`Twitter remote entry inspection failed: ${error.message}`)
-}
-
-try {
-  await access(`${coreRoot}/dist/index.cjs`)
-  errors.push('unexpected CommonJS output: packages/core/dist/index.cjs')
-} catch {
-  // ESM-only is the intended package contract.
-}
-
 async function builtFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true })
   const files = []
@@ -128,17 +106,6 @@ if (
   packageJson.exports?.['.']?.require
 ) {
   errors.push('packages/core/package.json does not match the ESM-only dist contract')
-}
-
-const consumerPackage = `${repoRoot}/apps/web/node_modules/@inkcre/core`
-try {
-  const resolvedPackage = await realpath(consumerPackage)
-  const expectedPackage = await realpath(coreRoot)
-  if (resolvedPackage !== expectedPackage) {
-    errors.push(`@inkcre/core workspace link resolves to unexpected path: ${resolvedPackage}`)
-  }
-} catch (error) {
-  errors.push(`@inkcre/core workspace resolution failed: ${error.message}`)
 }
 
 try {

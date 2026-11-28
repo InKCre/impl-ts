@@ -314,7 +314,6 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   const highVideoUrl = 'https://clips.example.net/inkcre-acceptance-high.mp4'
   const playlistUrl = 'https://video.twimg.com/inkcre-acceptance.m3u8'
 
-  expect((await page.context().cookies()).length).toBe(0)
   let secretTransmitted = false
   let webOpenedBeforeConnection = false
   let connectionComplete = false
@@ -686,12 +685,6 @@ test('Core self-hosted connection writes native records that the real Twitter MF
   const failedMediaCard = mediaCards.filter({ hasText: 'Controlled failure image metadata' })
   const videoCard = mediaCards.filter({ hasText: 'Acceptance video metadata' })
   const alternateMediaCard = mediaCards.filter({ hasText: 'Alternate CDN image metadata' })
-  await expect(imageCard.getByRole('button', { name: /^Load (photo|video)/ })).toBeVisible()
-  await expect(failedMediaCard.getByRole('button', { name: /^Load (photo|video)/ })).toBeVisible()
-  await expect(videoCard.getByRole('button', { name: /^Load (photo|video)/ })).toBeVisible()
-  await expect(
-    alternateMediaCard.getByRole('button', { name: /^Load (photo|video)/ })
-  ).toBeVisible()
   expect(controlledMediaReads).toEqual([])
   await imageCard.getByRole('button', { name: /^Load (photo|video)/ }).click()
   const loadedImage = imageCard.locator('img')

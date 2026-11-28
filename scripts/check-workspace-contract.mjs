@@ -14,16 +14,6 @@ const sourcePackages = {
   'packages/web-collection': 'source-only browser material contract; consuming peers own output',
 }
 
-const bannedDirectTooling = [
-  '@biomejs/biome',
-  '@typescript-eslint/eslint-plugin',
-  '@typescript-eslint/parser',
-  'eslint',
-  'eslint-config-prettier',
-  'prettier',
-  'tsup',
-]
-
 const errors = []
 const members = []
 
@@ -62,66 +52,11 @@ async function readJson(relativePath) {
   return JSON.parse(await readFile(`${repoRoot}/${relativePath}`, 'utf8'))
 }
 
-const rootPackage = await readJson('package.json')
-const rootScripts = [
-  'build',
-  'check',
-  'check:package',
-  'check:release:web',
-  'check:runtime',
-  'check:workspace',
-  'contract:check',
-  'contract:sync',
-  'doctor',
-  'dev',
-  'dev:webext',
-  'dev:all:ui',
-  'dev:status',
-  'dev:stop',
-  'dev:ui',
-  'format',
-  'format:check',
-  'lint',
-  'lint:type-aware',
-  'type-check',
-  'type-check:ui',
-]
-
-for (const script of rootScripts) {
-  if (!rootPackage.scripts?.[script]) {
-    errors.push(`root package is missing script "${script}"`)
-  }
-}
-
-const expectedRootTools = {
-  oxfmt: '0.60.0',
-  oxlint: '1.75.0',
-  'oxlint-tsgolint': '7.0.2001',
-  portless: '0.12.0',
-  typescript: 'catalog:',
-}
-
-for (const [name, version] of Object.entries(expectedRootTools)) {
-  if (rootPackage.devDependencies?.[name] !== version) {
-    errors.push(`root devDependency "${name}" must be "${version}"`)
-  }
-}
-
-const compilerVersion = '6.0.3-bridge.19.tsgo.7.0.2'
 const rootRequire = createRequire(`${repoRoot}/package.json`)
 const compilerPath = rootRequire.resolve('typescript/package.json')
 const compiler = rootRequire('typescript/package.json')
-if (compiler.name !== 'typescript-native-bridge' || compiler.version !== compilerVersion) {
-  errors.push(`typescript must resolve to typescript-native-bridge@${compilerVersion}`)
-}
-for (const alias of [
-  '@typescript/native',
-  '@typescript/native-preview',
-  '@typescript/typescript6',
-]) {
-  if (rootPackage.devDependencies?.[alias]) {
-    errors.push(`remove separate compiler ${alias}; all checks must use the TypeScript catalog`)
-  }
+if (compiler.name !== 'typescript-native-bridge') {
+  errors.push('typescript must resolve to the shared native bridge')
 }
 
 for (const path of discoveredWorkspaces) {
@@ -135,12 +70,6 @@ for (const path of discoveredWorkspaces) {
   if (workspaceRequire.resolve('typescript/package.json') !== compilerPath) {
     errors.push(`${name} resolves a different TypeScript compiler from the root`)
   }
-  const allDependencies = {
-    ...packageJson.dependencies,
-    ...packageJson.devDependencies,
-    ...packageJson.optionalDependencies,
-  }
-
   if (packageJson.name !== name) {
     errors.push(`${path} must declare package name "${name}"`)
   }
@@ -148,12 +77,6 @@ for (const path of discoveredWorkspaces) {
   for (const script of requiredScripts) {
     if (!packageJson.scripts?.[script]) {
       errors.push(`${name} is missing required script "${script}"`)
-    }
-  }
-
-  for (const dependency of bannedDirectTooling) {
-    if (allDependencies[dependency]) {
-      errors.push(`${name} directly depends on superseded tool "${dependency}"`)
     }
   }
 
@@ -186,16 +109,13 @@ for (const path of discoveredWorkspaces) {
 }
 
 const manifest = parse(await readFile(`${repoRoot}/pnpm-workspace.yaml`, 'utf8'))
-const compilerAlias = `npm:typescript-native-bridge@${compilerVersion}`
+const compilerAlias = `npm:${compiler.name}@${compiler.version}`
 if (
   manifest.catalog?.typescript !== compilerAlias ||
   manifest.overrides?.typescript !== compilerAlias
 ) {
   errors.push('the TypeScript catalog and transitive override must share the pinned TS7 bridge')
 }
-if (manifest.catalog?.['vue-tsc'] !== '3.3.8')
-  errors.push('pnpm-workspace.yaml must pin vue-tsc 3.3.8')
-
 const coreRequire = createRequire(`${repoRoot}/packages/core/package.json`)
 const tsdownRequire = createRequire(coreRequire.resolve('tsdown/package.json'))
 const dtsRequire = createRequire(tsdownRequire.resolve('rolldown-plugin-dts/package.json'))

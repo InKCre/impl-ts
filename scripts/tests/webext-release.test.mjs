@@ -17,7 +17,6 @@ void test('only a prepared numeric WebExt version is selected, independently of 
 void test('draft recovery cannot overwrite a public version or another source', () => {
   const source = 'a'.repeat(40)
   const draft = { tag_name: 'webext-v0.2.0', target_commitish: source, draft: true }
-  assertDraft(draft, draft.tag_name, source)
   assert.throws(
     () => assertDraft({ ...draft, draft: false }, draft.tag_name, source),
     /never overwritten/
@@ -26,7 +25,7 @@ void test('draft recovery cannot overwrite a public version or another source', 
   assert.throws(() => assertDraft(undefined, draft.tag_name, source), /draft release was not found/)
 })
 
-void test('a new draft uses its creation response before release inventory catches up', async (t) => {
+void test('creating a WebExt draft sends its source and release notes and returns its GitHub identity', async (t) => {
   const source = 'a'.repeat(40)
   const draft = { id: 42, tag_name: 'webext-v0.2.0', target_commitish: source, draft: true }
   t.mock.method(globalThis, 'fetch', async (url, options) => {

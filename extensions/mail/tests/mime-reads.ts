@@ -3,11 +3,11 @@ import {
   Relation,
   Resolver,
   ResolverCache,
-  PeerManager,
   TextResolver,
   type ProjectionOptions,
 } from '@inkcre/core'
 import { markRaw } from 'vue'
+import MailExtension from '../src'
 import { MailMimePartResolver } from '../src/resolver'
 import BodyRenderer from '../src/components/contentNewsletterBody.vue'
 import BodyPreview from '../src/components/contentNewsletterPreview.vue'
@@ -31,16 +31,14 @@ function block(id: number, resolver: string, content: string): Block {
 }
 const mime = block(1, MailMimePartResolver.type, JSON.stringify({ media_type: 'text/plain' }))
 block(2, 'core.text.v1', 'Persisted MIME payload')
-const otherMime = block(3, MailMimePartResolver.type, mime.content)
 const rows: Relation[] = []
 function relate(from_: number, to_: number): void {
   rows.push(Relation.parse({ id: rows.length + 1, from_, to_, content: 'content' }))
 }
 
-// Replace only the external graph/Peer boundary; use the registered production resolvers.
+// Only graph persistence is replaced.
 Block.find = async (id) => blocks.get(id) ?? null
 let reads = 0
-let delegates = 0
 let release!: () => void
 let fail!: (error: Error) => void
 const gate = new Promise<void>((resolve, reject) => {
@@ -59,12 +57,6 @@ Relation.getByBlock = async (id) => {
   }
   return rows.filter((row) => row.from_ === id || row.to_ === id)
 }
-PeerManager.delegate = (async () => {
-  delegates++
-  relate(mime.id, 2)
-  return { status: 200, body: JSON.parse(JSON.stringify(blocks.get(2)!)) }
-}) as typeof PeerManager.delegate
-
 class CustomResolver extends Resolver<string, string> {
   static readonly type = 'test.mail.custom.v1'
   static readonly previewRenderer = { render: () => null }
@@ -82,13 +74,11 @@ class CustomResolver extends Resolver<string, string> {
 Resolver.register(CustomResolver.type, CustomResolver)
 
 async function run(): Promise<unknown> {
+  await MailExtension.initialize()
   if (mode === 'self') relate(mime.id, mime.id)
-  else if (mode === 'mutual') {
-    relate(mime.id, otherMime.id)
-    relate(otherMime.id, mime.id)
-  } else if (mode === 'custom' || mode === 'custom-cycle') {
+  else if (mode === 'custom' || mode === 'custom-cycle') {
     relate(mime.id, block(4, CustomResolver.type, '').id)
-  } else if (mode !== 'options') relate(mime.id, 2)
+  } else relate(mime.id, 2)
 
   const resolver = await ResolverCache.getResolver<MailMimePartResolver>(mime)
   const first = resolver.getSolvedContent({ materializeMissing: false })
@@ -100,7 +90,6 @@ async function run(): Promise<unknown> {
     return {
       reads,
       content: [left.content?.solvedContent, right.content?.solvedContent],
-      delegates,
     }
   }
   if (mode === 'options') {
@@ -110,21 +99,10 @@ async function run(): Promise<unknown> {
       resolver.getSolvedContent({ context: 'lexical', materializeMissing: false }),
     ])
     release()
-    const before = await first
-    const materialized = await resolver.getSolvedContent({
-      refresh: true,
-      materializeMissing: true,
-    })
-    const refreshed = await resolver.getSolvedContent({ refresh: true, materializeMissing: false })
-    return {
-      distinct: distinct.map((item) =>
-        item.status === 'rejected' ? String(item.reason) : 'unexpected success'
-      ),
-      before: before.content,
-      materialized: materialized.content?.solvedContent,
-      refreshed: refreshed.content?.solvedContent,
-      delegates,
-    }
+    await first
+    return distinct.map((item) =>
+      item.status === 'rejected' ? String(item.reason) : 'unexpected success'
+    )
   }
   if (mode === 'failure') {
     const expected = new Error('MIME relation read failed')

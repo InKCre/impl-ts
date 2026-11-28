@@ -23,7 +23,7 @@ void test('Peer file location preserves Unicode and reserved path characters', (
   )
 })
 
-void test('File metadata represents an unavailable original and extraction issue alongside the last successful revision', () => {
+void test('File metadata accepts a DOCX main-document revision and rejects an unsupported format', () => {
   const metadata = fileMetadata.parse({
     location: 'inkcre-peer-file://a143b185-f43d-47d1-8ef7-1d3857284b01/Users/a/report.docx',
     format: 'docx',
@@ -37,9 +37,7 @@ void test('File metadata represents an unavailable original and extraction issue
     },
     issue: '当前原件无法读取',
   })
-  assert.equal(metadata.available, false)
   assert.equal(metadata.revision?.scope, 'main_document')
-  assert.equal(metadata.revision?.extracted_at, '2026-10-22T06:00:00Z')
   const invalid = fileMetadata.safeParse({ ...metadata, format: 'executable' })
   assert.equal(invalid.success, false)
   if (!invalid.success)

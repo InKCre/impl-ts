@@ -35,7 +35,10 @@ void test('Tasks.org parent references and incomplete task status remain readabl
 })
 
 void test('a real Android vCard retains its two phones and embedded raster photo', () => {
-  const result = parseResource(resource(fixture('contact.vcf')), 'contact')
+  const contact = JSON.parse(fixture('semantic-graph.json')).find(
+    (sample: { kind: string }) => sample.kind === 'contact'
+  )
+  const result = parseResource(resource(contact.text), 'contact')
   assert.equal(result.kind, 'contact')
   if (result.kind !== 'contact') return
   assert.equal(result.title, 'InKCre Preview Photo Contact')

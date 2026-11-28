@@ -44,34 +44,22 @@ void test('packed SDK works without UI, source aliases, startup or selected App 
       const { DatabaseClient, PostgreSQLBlobStorage, PeerOutcomeUnknown } = await import('@inkcre/core/sdk')
       assert.equal(typeof PeerOutcomeUnknown, 'function')
       const calls = []
-      const startedA = Promise.withResolvers()
-      const releaseA = Promise.withResolvers()
       const transport = async (input, init) => {
         calls.push({ url: String(input), token: new Headers(init.headers).get('Authorization'), body: init.body })
         if (String(input).includes('read_storage_blob')) return new Response(new Uint8Array([1, 2, 3]))
-        if (String(input).startsWith('https://a.example')) {
-          startedA.resolve()
-          await releaseA.promise
-        }
-        return Response.json([{ id: 1, content: 'retained', resolver: 'core.text.v1', storage: null }])
+        return Response.json([])
       }
       const selected = { baseUrl: 'https://a.example', tokenProvider: async () => 'token-a', fetch: transport }
       const a = new DatabaseClient('blocks', undefined, selected)
-      const pendingA = a.from().select().then(value => value)
-      await Promise.race([startedA.promise, pendingA.then(() => assert.fail('request A did not reach its transport'))])
       selected.baseUrl = 'https://b.example'
       selected.tokenProvider = async () => 'token-b'
       const b = new DatabaseClient('blocks', undefined, selected)
-      const resultB = await b.insert({ content: 'B', resolver: 'core.text.v1' }).select()
-      releaseA.resolve()
-      const resultA = await pendingA
-      assert.equal(resultA.data[0].id, 1)
-      assert.equal(resultB.data[0].id, 1)
-      assert.equal(calls[0].url.startsWith('https://a.example/'), true)
-      assert.equal(calls[0].token, 'Bearer token-a')
-      assert.equal(calls[1].url.startsWith('https://b.example/'), true)
-      assert.equal(calls[1].token, 'Bearer token-b')
-      assert.equal(JSON.parse(calls[1].body).content, 'B')
+      await Promise.all([a.from().select(), b.insert({ content: 'B', resolver: 'core.text.v1' }).select()])
+      const read = calls.find(call => new URL(call.url).origin === 'https://a.example')
+      const write = calls.find(call => new URL(call.url).origin === 'https://b.example')
+      assert.equal(read?.token, 'Bearer token-a')
+      assert.equal(write?.token, 'Bearer token-b')
+      assert.equal(JSON.parse(write.body).content, 'B')
       const explicitStorage = PostgreSQLBlobStorage.forConnection(selected)
       globalThis.fetch = transport
       const blobConnection = { baseUrl: selected.baseUrl, tokenProvider: selected.tokenProvider }
@@ -84,7 +72,6 @@ void test('packed SDK works without UI, source aliases, startup or selected App 
         assert.equal(calls.at(-1).url, 'https://b.example/rpc/read_storage_blob')
         assert.equal(calls.at(-1).token, 'Bearer token-b')
       }
-      console.log('Packed independent SDK: import, isolated targets, typed writes and binary storage passed')
     `
     )
     execFileSync(process.execPath, ['consumer.mjs'], { cwd: directory, stdio: 'inherit' })

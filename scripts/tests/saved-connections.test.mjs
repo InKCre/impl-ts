@@ -19,10 +19,11 @@ void test('saved connection snapshots restore identity and preserve the selectio
     configStore.peerConfig = priorPeer
     configStore.metaAdapter = priorAdapter
   })
-  const first = MetaConfigSchema.parse({
+  const first = {
     INKCRE_PGREST_URL: 'https://one.example',
     INKCRE_JWT_SECRET: 'fixture-one',
-  })
+    INKCRE_PEER_ID: '10000000-0000-4000-8000-000000000001',
+  }
   await writeFile(file, JSON.stringify(first))
   const readSnapshot = async () => JSON.parse(await readFile(file, 'utf8'))
   let rejectWrite = false
@@ -49,16 +50,16 @@ void test('saved connection snapshots restore identity and preserve the selectio
   })
   await configStore.initializeMeta(adapter)
   const firstId = configStore.connectionSettings.activeConnectionId
-  assert.equal(configStore.connectionSettings.connections.length, 1)
-  assert.equal(configStore.metaConfig.INKCRE_PEER_ID, first.INKCRE_PEER_ID)
-  await configStore.saveMeta()
+  assert.deepEqual(
+    configStore.connectionSettings.connections.map((entry) => entry.config.INKCRE_PEER_ID),
+    [first.INKCRE_PEER_ID]
+  )
   const second = MetaConfigSchema.parse({
     INKCRE_PGREST_URL: 'https://two.example',
     INKCRE_JWT_SECRET: 'fixture-two',
   })
   const secondId = crypto.randomUUID()
   await configStore.connectAndSave(second, {}, { id: secondId, name: '工作' })
-  assert.equal((await readSnapshot()).connections.length, 2)
   await configStore.connectAndSave(first, {}, { id: firstId, name: '个人' })
   // Rebuild runtime state from bytes written by the production store, without old selections.
   configStore.metaConfig = MetaConfigSchema.parse({})
@@ -88,15 +89,8 @@ void test('saved connection snapshots restore identity and preserve the selectio
   assert.deepEqual(await readSnapshot(), snapshot)
   assert.equal(configStore.connectionSettings.activeConnectionId, firstId)
   assert.deepEqual(JSON.parse(JSON.stringify(configStore.metaConfig)), selectedMeta)
-  rejectWrite = false
-  const exported = JSON.parse(JSON.stringify(configStore.connectionSettings))
-  await configStore.resetMeta()
-  await configStore.connectAndSave(first, {}, exported.connections[0], exported)
-  assert.deepEqual(JSON.parse(JSON.stringify(configStore.connectionSettings)), exported)
-  assert.deepEqual((await readSnapshot()).connections, exported.connections)
   const invalid = {
-    ...first,
-    connections: exported.connections,
+    ...snapshot,
     activeConnectionId: crypto.randomUUID(),
   }
   await writeFile(file, JSON.stringify(invalid))

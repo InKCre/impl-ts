@@ -100,7 +100,7 @@ export async function captureCandidates({
   deliveryDirectory,
   registryUrl,
   provenance,
-  pendingPackages = new Set(),
+  pendingPackages,
 }) {
   await mkdir(deliveryDirectory, { recursive: true })
   const candidates = []
@@ -155,7 +155,6 @@ export async function captureCandidates({
   }
   const plan = { ...provenance, registry_url: registryUrl, candidates }
   await writeJson(path.join(deliveryDirectory, 'plan.json'), plan)
-  return plan
 }
 
 export async function checkCandidates({ workspace, deliveryDirectory, registryUrl, provenance }) {

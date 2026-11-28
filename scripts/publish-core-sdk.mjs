@@ -88,7 +88,7 @@ async function assetBytes(asset, authenticated = false) {
   return Buffer.from(await response.arrayBuffer())
 }
 
-export async function verifyRelease(release, version, expected) {
+async function verifyRelease(release, version, expected) {
   assert.ok(!release.draft && !release.prerelease, 'SDK release is not public and final')
   const receiptAsset = release.assets.find((asset) => asset.name === 'source.json')
   assert.ok(receiptAsset, 'SDK source receipt is missing')
@@ -106,7 +106,6 @@ export async function verifyRelease(release, version, expected) {
     receipt.sha256,
     'SDK public bytes differ from receipt'
   )
-  return receipt
 }
 
 async function checkCandidate() {

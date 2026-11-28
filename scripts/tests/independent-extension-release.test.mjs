@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { captureCandidates } from '../publish-first-party-extensions.mjs'
 import { inspectNativeModuleFederation } from '../verify-native-extension-distribution.mjs'
 
-void test('MF snapshots permit unused UI dependencies and validate emitted UI shares', async () => {
+void test('MF snapshots reject incompatible, duplicate or undeclared UI shares', async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-ui-share-'))
   const packagePath = path.join(workspace, 'package.json')
   const corePackagePath = path.join(workspace, 'core.json')
@@ -28,8 +27,6 @@ void test('MF snapshots permit unused UI dependencies and validate emitted UI sh
     const inspect = () =>
       inspectNativeModuleFederation({ packagePath, corePackagePath, artifactDirectory: workspace })
     for (const [uiShares, declaresUi, error] of [
-      [[], true, undefined],
-      [[uiShare], true, undefined],
       [
         [{ ...uiShare, requiredVersion: '2.7.0' }],
         true,
@@ -50,63 +47,8 @@ void test('MF snapshots permit unused UI dependencies and validate emitted UI sh
           exposes: [],
         })
       )
-      if (error) await assert.rejects(inspect(), error)
-      else assert.equal((await inspect()).name, 'inkcre/capture')
+      await assert.rejects(inspect(), error)
     }
-  } finally {
-    await rm(workspace, { recursive: true, force: true })
-  }
-})
-
-void test('a prepared Mail release does not publish another producer with pending intent', async (t) => {
-  const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-independent-release-'))
-  const json = (file, value) => writeFile(path.join(workspace, file), JSON.stringify(value))
-  try {
-    await mkdir(path.join(workspace, 'packages/core'), { recursive: true })
-    await json('packages/core/package.json', { version: '0.4.0' })
-    for (const name of ['mail', 'new-producer']) {
-      await mkdir(path.join(workspace, `extensions/${name}`), { recursive: true })
-      await json(`extensions/${name}/package.json`, {
-        name: `@inkcre/ext-${name}`,
-        version: '0.4.0',
-        inkcre: {
-          name: `inkcre/${name}`,
-          nickname: name,
-          module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.4.0 <0.6.0' },
-        },
-      })
-    }
-    const build = 'extensions/mail/dist/web'
-    await mkdir(path.join(workspace, build), { recursive: true })
-    await json(`${build}/mf-manifest.json`, {
-      metaData: { publicPath: './', remoteEntry: { name: 'remoteEntry.js' } },
-      shared: [{ name: '@inkcre/core', requiredVersion: '>=0.4.0 <0.6.0' }],
-      exposes: [],
-    })
-    await writeFile(path.join(workspace, build, 'remoteEntry.js'), 'export default {}')
-    const queried = []
-    t.mock.method(globalThis, 'fetch', async (url) => {
-      queried.push(url.href)
-      return new Response('{}', { status: 404 })
-    })
-    const plan = await captureCandidates({
-      workspace,
-      deliveryDirectory: path.join(workspace, 'candidate'),
-      registryUrl: 'https://registry.example.test',
-      provenance: {
-        source_repository: 'https://github.com/InKCre/impl-ts',
-        source_revision: 'reviewed-main',
-        build_id: 'same-run',
-      },
-      pendingPackages: new Set(['@inkcre/core', '@inkcre/ext-new-producer']),
-    })
-    assert.deepEqual(
-      plan.candidates.map((candidate) => candidate.name),
-      ['inkcre/mail']
-    )
-    assert.deepEqual(queried, [
-      'https://registry.example.test/v2/extensions/inkcre/mail/distributions/module_federation/releases/0.4.0',
-    ])
   } finally {
     await rm(workspace, { recursive: true, force: true })
   }

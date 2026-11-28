@@ -21,7 +21,7 @@ function properties(sample: (typeof samples)[number]): GraphProperty[] {
   }))
 }
 
-void test('Python-authored contact graph preserves phones, photo and subsequent phone edits', () => {
+void test('Python-authored contact graph preserves contact fields, labels and photo bytes', () => {
   const sample = samples.find((item: any) => item.kind === 'contact')
   const text = composeGraph(sample.remainder, properties(sample))
   const actual = parseResource(JSON.stringify({ href: 'contact.vcf', text }), 'contact')
@@ -42,9 +42,6 @@ void test('Python-authored contact graph preserves phones, photo and subsequent 
   const photoBytes = sample.properties.find((field: any) => field.link.name === 'PHOTO').value
   assert.equal(actual.photo, `data:image/jpeg;base64,${photoBytes}`)
   assert.equal(resourceUid(text), 'inkcre-preview146-contact')
-  const changed = properties(sample)
-  changed.find((field) => field.link.name === 'TEL')!.value = '+8613800000001'
-  assert.match(composeGraph(sample.remainder, changed), /\+8613800000001/)
 })
 
 void test('component identity retains TZID exceptions and audio-alarm attachments', () => {

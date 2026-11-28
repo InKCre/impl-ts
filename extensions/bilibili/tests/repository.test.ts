@@ -61,7 +61,6 @@ class Query {
 }
 class Database {
   rows: Record<Table, Row[]> = { blocks: [], relations: [], sources: [] }
-  events: { table: Table; action: string; values: Values }[] = []
   failBefore: ((query: Query) => boolean) | null = null
   failAfter: ((query: Query) => boolean) | null = null
   pageLimit = 500
@@ -83,11 +82,6 @@ class Database {
     }
   }
   execute(query: Query) {
-    this.events.push({
-      table: query.table,
-      action: query.action,
-      values: structuredClone(query.values),
-    })
     if (this.failBefore?.(query)) throw new Error('write failed')
     const table = this.rows[query.table]
     let result = table
@@ -316,17 +310,11 @@ void test('a lost create response is not replayed and a later execution reuses t
   )
   const created = database.rows.blocks.find((row) => row.resolver === resolverTypes.video)!.id
   assert.deepEqual(value.state, { kept: true })
-  const creates = () =>
-    database.events.filter(
-      (event) => event.action === 'insert' && event.values.resolver === resolverTypes.video
-    ).length
-  assert.equal(creates(), 1)
   database.failAfter = null
   await new BilibiliRepository().reconcilePage(value, favoriteGraph(account, page()), next(value))
-  assert.equal(creates(), 1)
-  assert.equal(
-    database.rows.blocks.find((row) => row.resolver === resolverTypes.video)!.id,
-    created
+  assert.deepEqual(
+    database.rows.blocks.filter((row) => row.resolver === resolverTypes.video).map((row) => row.id),
+    [created]
   )
   savedGraph(database, value)
 })

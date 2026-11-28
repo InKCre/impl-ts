@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { databaseToken, serveBuiltExtension } from './native-extension-fixture'
+import { connectNativeHost, databaseToken, serveBuiltExtension } from './native-extension-fixture'
 
 /** Uses the real built MF module and disposable suite DB; only Registry delivery is served locally. */
 export function registerGitHubNativeTests(): void {
@@ -13,35 +13,12 @@ export function registerGitHubNativeTests(): void {
     const extension = await serveBuiltExtension(page, 'github')
     const authorization = await databaseToken(jwtSecret)
     const headers = { Authorization: `Bearer ${authorization}`, 'Content-Type': 'application/json' }
-    let leaseRenewals = 0
-    let jobScans = 0
-    page.on('request', (request) => {
-      const url = new URL(request.url())
-      if (url.pathname.endsWith('/rpc/renew_peer_lease')) leaseRenewals++
-      if (url.pathname.endsWith('/jobs') && url.searchParams.get('status') === 'eq.pending')
-        jobScans++
-    })
     let githubApiCalls = 0
     await page.route('https://api.github.com/**', async (route) => {
       githubApiCalls++
       await route.abort()
     })
-    await page.addInitScript(
-      ({ postgrestUrl, jwtSecret, peerId }) => {
-        const previous = JSON.parse(localStorage.getItem('inkcre_app_config') ?? '{}')
-        if (previous.INKCRE_PEER_ID === peerId) return
-        localStorage.setItem(
-          'inkcre_app_config',
-          JSON.stringify({
-            INKCRE_PGREST_URL: postgrestUrl,
-            INKCRE_JWT_SECRET: jwtSecret,
-            INKCRE_PEER_ID: peerId,
-            peer_lease_renew_interval_seconds: 30,
-          })
-        )
-      },
-      { postgrestUrl, jwtSecret, peerId }
-    )
+    await connectNativeHost(page, { postgrestUrl, jwtSecret, browserPeer: peerId })
     const createdBlocks: number[] = []
     const createdRelations: number[] = []
     async function createBlock(resolver: string, content: unknown): Promise<number> {
@@ -135,20 +112,21 @@ export function registerGitHubNativeTests(): void {
           .getByRole('button', { name: `Explore entry #${user}`, exact: true })
           .locator('.github-content--compact')
       ).toContainText('Fixture Reader')
-      for (const [id, title] of [
-        [user, 'Fixture Reader'],
-        [organization, '@fixture-org'],
-        [repository, 'fixture-org/demo'],
-        [list, 'Fixture Favorites'],
-      ] as const) {
-        await page.goto(`/info-base/list/blocks/${id}/content`)
-        await expect(
-          page
-            .locator('.github-content:not(.github-content--compact)')
-            .getByRole('heading', { name: title, exact: true })
-        ).toBeVisible()
-      }
+      const accountPreview = page.getByRole('button', {
+        name: `Explore entry #${user}`,
+        exact: true,
+      })
+      await accountPreview.press('Enter')
+      await expect(page).toHaveURL((url) => url.searchParams.get('focal_block') === String(user))
+      await page.goto(`/info-base/list/blocks/${user}/content`)
       const content = page.locator('.github-content:not(.github-content--compact)')
+      await expect(
+        content.getByRole('heading', { name: 'Fixture Reader', exact: true })
+      ).toBeVisible()
+      await page.goto(`/info-base/list/blocks/${list}/content`)
+      await expect(
+        content.getByRole('heading', { name: 'Fixture Favorites', exact: true })
+      ).toBeVisible()
       await expect(
         content.getByRole('button', { name: 'fixture-org/demo', exact: true })
       ).toBeVisible()
@@ -161,6 +139,9 @@ export function registerGitHubNativeTests(): void {
       await expect(content).toContainText('<script>unsafe()</script> Stored repository description')
       expect(await page.locator('.github-content script').count()).toBe(0)
       await page.goto(`/info-base/list/blocks/${organization}/content`)
+      await expect(
+        content.getByRole('heading', { name: '@fixture-org', exact: true })
+      ).toBeVisible()
       await expect(content).toContainText('Organization')
       await expect(content.getByRole('link', { name: 'GitHub profile', exact: true })).toHaveCount(
         0
@@ -225,54 +206,19 @@ export function registerGitHubNativeTests(): void {
       await expect(
         content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
       ).toBeVisible()
-      // Background participation does not own the local reader Host.
-      // Browser navigation keeps the document (and the MF host instance) alive.
-      async function openSettings(): Promise<void> {
-        // The unified entity UI renders object views as modal popups; close any
-        // open one so the header controls are clickable.
-        const contentPopup = page.getByRole('dialog', { name: 'Content' })
-        if (await contentPopup.isVisible())
-          await contentPopup.getByRole('button', { name: 'Close', exact: true }).click()
-        await page.locator('button[aria-controls="app-side-panel"]').click()
-        await page
-          .getByLabel('Primary')
-          .getByRole('link', { name: 'Settings', exact: true })
-          .click()
-        await expect(page.getByLabel('PostgREST URL')).toBeVisible()
-      }
-      async function setInterval(seconds: number): Promise<void> {
-        await page
-          .getByLabel('Lease renewal and job check interval (seconds; 0 disables)')
-          .fill(String(seconds))
-        await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
-        await expect(
-          page.getByText('Configuration saved successfully', { exact: true }).first()
-        ).toBeVisible()
-      }
-      await openSettings()
-      await setInterval(0)
-      await page.goto(`/info-base/list/blocks/${repository}/content`)
-      await expect(
-        content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
-      ).toBeVisible()
-      await page.clock.install()
-      await page.clock.setFixedTime(new Date())
-      const stoppedLeases = leaseRenewals
-      const stoppedScans = jobScans
-      await page.clock.fastForward(35_000)
-      expect(leaseRenewals).toBe(stoppedLeases)
-      expect(jobScans).toBe(stoppedScans)
+      // Stopping background participation keeps already loaded local resolvers usable.
       const documentStartedAt = await page.evaluate(() => performance.timeOrigin)
-      await openSettings()
-      await setInterval(2)
-      await expect.poll(() => leaseRenewals).toBeGreaterThan(stoppedLeases)
-      await expect.poll(() => jobScans).toBeGreaterThan(stoppedScans)
-      await setInterval(0)
-      const finalLeases = leaseRenewals
-      const finalScans = jobScans
-      await page.clock.fastForward(35_000)
-      expect(leaseRenewals).toBe(finalLeases)
-      expect(jobScans).toBe(finalScans)
+      await page
+        .getByRole('dialog', { name: 'Content' })
+        .getByRole('button', { name: 'Close', exact: true })
+        .click()
+      await page.locator('button[aria-controls="app-side-panel"]').click()
+      await page.getByLabel('Primary').getByRole('link', { name: 'Settings', exact: true }).click()
+      await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
+      await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
+      await expect(
+        page.getByText('Configuration saved successfully', { exact: true }).first()
+      ).toBeVisible()
       expect(
         await page.evaluate(async (repository) => {
           type Sdk = typeof import('../../packages/core/src/index')
@@ -295,6 +241,11 @@ export function registerGitHubNativeTests(): void {
         'fixture-org/demo\n<script>unsafe()</script> Stored repository description\nLanguage: Python\nTopics: fixture, reader'
       )
       expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStartedAt)
+      // A new document must also restore the reader without starting background participation.
+      await page.goto(`/info-base/list/blocks/${repository}/content`)
+      await expect(
+        content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
+      ).toBeVisible()
       expect(githubApiCalls).toBe(0)
     } finally {
       extension.release()

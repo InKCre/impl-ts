@@ -13,7 +13,6 @@ const mode = ref('comparison')
 const dark = ref(false)
 document.documentElement.dataset.theme = 'light'
 const popup = ref<number | null>(null)
-const focused = ref<number | null>(null)
 const current = ref<InfoBaseRoute | null>(null)
 setInfoBaseRouter({
   current,
@@ -85,11 +84,8 @@ function changeTheme() {
     </div>
     <div v-else class="specimen-graph">
       <VueFlow v-model:nodes="nodes" :min-zoom="0.5" :max-zoom="1.5">
-        <template #node-block="props"
-          ><BlockNode v-bind="props" @focus="focused = $event" @inspect="popup = $event"
-        /></template>
+        <template #node-block="props"><BlockNode v-bind="props" /></template>
       </VueFlow>
-      <output v-if="focused">Focused Block #{{ focused }}</output>
     </div>
     <SolvedContentPopup v-if="popup !== null" :key="popup" :block="popup" />
   </main>
@@ -159,11 +155,6 @@ select {
 .specimen-graph {
   height: 820px;
   width: 100%;
-}
-.specimen-graph output {
-  position: fixed;
-  bottom: 16px;
-  left: 16px;
 }
 @media (max-width: 760px) {
   .specimen-comparison {

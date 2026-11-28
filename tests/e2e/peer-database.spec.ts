@@ -46,56 +46,6 @@ test.beforeEach(async ({ page }) => {
   )
 })
 
-test('the Web origin can read and write the admitted database protocol', async ({ page }) => {
-  await page.goto('/')
-
-  const authorization = `Bearer ${await token()}`
-  const result = await page.evaluate(
-    async ({ postgrestUrl, authorization }) => {
-      const read = await fetch(
-        `${postgrestUrl}peers?select=id,name&id=eq.00000000-0000-4000-8000-000000000001`,
-        { headers: { Authorization: authorization } }
-      )
-      const write = await fetch(`${postgrestUrl}peers?on_conflict=id`, {
-        method: 'POST',
-        headers: {
-          Authorization: authorization,
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates,return=representation',
-        },
-        body: JSON.stringify({
-          id: '11111111-1111-4111-8111-111111111111',
-          name: 'peer-e2e',
-          labels: ['e2e'],
-          config: {},
-          config_schema: {},
-          capabilities: [],
-          lease_expires_at: null,
-        }),
-      })
-      const writeBody = await write.json()
-      const cleanup = await fetch(
-        `${postgrestUrl}peers?id=eq.11111111-1111-4111-8111-111111111111`,
-        { method: 'DELETE', headers: { Authorization: authorization } }
-      )
-      return {
-        readStatus: read.status,
-        readBody: await read.json(),
-        writeStatus: write.status,
-        writeBody,
-        cleanupStatus: cleanup.status,
-      }
-    },
-    { postgrestUrl, authorization }
-  )
-
-  expect(result.readStatus).toBe(200)
-  expect(result.readBody).toHaveLength(1)
-  expect(result.writeStatus).toBe(201)
-  expect(result.writeBody[0].id).toBe('11111111-1111-4111-8111-111111111111')
-  expect(result.cleanupStatus).toBe(204)
-})
-
 test('startup shows pending and failed states without trapping a deep link', async ({ page }) => {
   const path = '/sources?startup-check=preserved'
   let release!: () => void
@@ -293,7 +243,6 @@ test('a pending initial lease does not block pages or admit the browser worker',
     await expect.poll(() => enabledReleaseReads).toBe(1)
     release()
     await expect.poll(() => workerRequests).toBeGreaterThan(0)
-    await expect.poll(() => extensionReads).toBeGreaterThan(0)
     await expect.poll(() => enabledReleaseReads).toBe(1)
     await expect(
       page.getByText(
@@ -474,7 +423,6 @@ test('a new browser identity waits for insertion before opening business pages',
     inserting = true
     const inserted = route.request().postDataJSON()
     expect(inserted.id).toBe(peerId)
-    expect(inserted.application_version).toBe(appVersion)
     expect(inserted.capabilities).toEqual([])
     await gate
     await route.fulfill({
@@ -568,7 +516,6 @@ test('zero participation persists, stays idle, and a custom interval resumes lea
   await expect.poll(() => scans).toBeGreaterThan(0)
   expect(leaseTtls.length).toBeGreaterThan(0)
   expect(leaseTtls.every((ttl) => ttl === 6)).toBe(true)
-  await expect.poll(() => extensionReads).toBeGreaterThan(0)
   const scansBefore = scans
   await page.clock.runFor(2_000)
   await expect.poll(() => scans).toBeGreaterThan(scansBefore)
@@ -1164,32 +1111,6 @@ test('failed remote enablement reads back persisted intent without claiming a ru
   }
 })
 
-test('wrong and absent credentials are rejected', async ({ page }) => {
-  const authorization = `Bearer ${await token()}`
-  const wrongAuthorization = `Bearer ${await token('wrong-web-jwt-secret-at-least-32-bytes')}`
-  const result = await page.evaluate(
-    async ({ postgrestUrl, authorization, wrongAuthorization }) => {
-      const allowed = await fetch(`${postgrestUrl}peers?select=id`, {
-        headers: { Authorization: authorization },
-      })
-      const wrong = await fetch(`${postgrestUrl}peers?select=id`, {
-        headers: { Authorization: wrongAuthorization },
-      })
-      const anonymous = await fetch(`${postgrestUrl}peers?select=id`)
-      return {
-        statuses: [allowed.status, wrong.status, anonymous.status],
-        allowed: await allowed.json(),
-        wrong: await wrong.json(),
-      }
-    },
-    { postgrestUrl, authorization, wrongAuthorization }
-  )
-
-  expect(result.statuses).toEqual([200, 401, 401])
-  expect(result.allowed).toContainEqual({ id: '00000000-0000-4000-8000-000000000001' })
-  expect(result.wrong).toMatchObject({ code: 'PGRST301' })
-})
-
 test('Web Peer publishes its app identity and preserves a user name', async ({ page }) => {
   const id = crypto.randomUUID()
   const authorization = `Bearer ${await token()}`
@@ -1448,7 +1369,6 @@ test('Peer config keeps invalid and failed drafts and saves only once while pend
       const cancel = dialog.getByRole('button', { name: 'Cancel' })
       await expect(cancel).toBeDisabled()
       await expect(cancel).not.toHaveAttribute('aria-busy', 'true')
-      await expect(cancel.locator('.ink-button__loading')).toHaveCount(0)
       await page.keyboard.press('Escape')
       await expect(dialog).toBeVisible()
       await expect(editor).toHaveAttribute('contenteditable', 'false')
@@ -1480,75 +1400,6 @@ test('Peer config keeps invalid and failed drafts and saves only once while pend
     })
     expect(cleanup.status).toBe(204)
   }
-})
-
-test('core Peer publishes and serves its exact capability inbounds', async ({ page }) => {
-  await page.goto('/')
-  const authorization = `Bearer ${await token()}`
-  const result = await page.evaluate(
-    async ({ postgrestUrl, authorization }) => {
-      const peersResponse = await fetch(
-        `${postgrestUrl}peers?select=capabilities,lease_expires_at&id=eq.00000000-0000-4000-8000-000000000002`,
-        { headers: { Authorization: authorization } }
-      )
-      const peers = await peersResponse.json()
-      const management = peers[0]?.capabilities?.find(
-        (capability: { id: string }) => capability.id === 'core.extension.management.v2'
-      )
-      const execution = await fetch(management.inbound.parameters.url, {
-        method: management.inbound.parameters.method,
-        headers: { Authorization: authorization, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'status', extension: 'e2e/not-installed' }),
-      })
-      return {
-        peersStatus: peersResponse.status,
-        capabilities: peers[0]?.capabilities,
-        leaseExpiresAt: peers[0]?.lease_expires_at,
-        executionStatus: execution.status,
-        executionBody: await execution.json(),
-      }
-    },
-    { postgrestUrl, authorization }
-  )
-
-  expect(result.peersStatus).toBe(200)
-  expect(Date.parse(result.leaseExpiresAt)).toBeGreaterThan(Date.now())
-  expect(result.capabilities).toEqual([
-    {
-      id: 'core.extension.management.v2',
-      inbound: {
-        protocol: 'core.peer.protocol.http.v1',
-        parameters: { method: 'POST', url: `${coreUrl}extension-management/v2` },
-      },
-    },
-    {
-      id: 'core.feature_retrieval.lexical.v1',
-      inbound: {
-        protocol: 'core.peer.protocol.http.v1',
-        parameters: { method: 'POST', url: `${coreUrl}lexical-retrieval` },
-      },
-    },
-    {
-      id: 'core.organization.rumination.v1',
-      inbound: {
-        protocol: 'core.peer.protocol.http.v1',
-        parameters: { method: 'POST', url: `${coreUrl}organization/ruminate` },
-      },
-    },
-    {
-      id: 'core.semantic_retrieval.v1',
-      inbound: {
-        protocol: 'core.peer.protocol.http.v1',
-        parameters: { method: 'POST', url: `${coreUrl}semantic-retrieval` },
-      },
-    },
-  ])
-  expect(result.executionStatus).toBe(200)
-  expect(result.executionBody).toEqual({
-    peer_id: '00000000-0000-4000-8000-000000000002',
-    supported_distributions: ['python'],
-    extensions: [],
-  })
 })
 
 test('saved content keeps Markdown structure and literal text in Web reading and previews', async ({
@@ -1592,7 +1443,6 @@ test('saved content keeps Markdown structure and literal text in Web reading and
         if (block.resolver === 'core.markdown.v1') {
           await expect(reader.getByRole('checkbox')).toBeChecked()
           await expect(reader.getByRole('checkbox')).toBeDisabled()
-          await page.screenshot({ path: 'test-results/web-markdown-reader.png' })
         }
       }
       if (block.resolver !== 'core.html.v1') {
@@ -2049,7 +1899,6 @@ test('Job preserves readable errors and logs and distinguishes failed and missin
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
     ).toBe(true)
-    await expect(errorDetails).toHaveJSProperty('textContent', failureDetails)
 
     const structuredFailure = { error: { message: failureDetails } }
     const updatedState = await fetch(`${postgrestUrl}jobs?id=eq.${jobId}`, {

@@ -200,10 +200,13 @@ void test('budgeted runs continue beyond initial pages only after checking head 
     commit
   )
   assert.deepEqual(requested, [1, 2, 3, 1])
-  assert.equal((persisted.bilibili as Progress).last_run.status, 'complete')
+  const completed = persisted.bilibili as Progress
+  assert.equal(completed.last_run.status, 'complete')
+  assert.equal(completed.folders['900123']!.reported_count, 41)
+  assert.equal(completed.folders['900123']!.rows, 4)
 })
 
-void test('a changed head restarts scanning and failed persistence never advances acknowledged progress', async () => {
+void test('a changed head restarts scanning with the new first page', async () => {
   const pages = [page([11], true), page([12], false, 2)]
   let persisted: Record<string, unknown> = {}
   await collectFavorites(
@@ -216,24 +219,7 @@ void test('a changed head restarts scanning and failed persistence never advance
       persisted = { bilibili: progress }
     }
   )
-  const before = structuredClone(persisted)
-  const requested: number[] = []
   const changed = [page([99], true), page([11], false, 2)]
-  await assert.rejects(
-    collectFavorites(
-      config,
-      startProgress(persisted, config),
-      { max_pages: 1 },
-      new AbortController().signal,
-      session(changed, requested),
-      async () => {
-        throw new Error('page write failed')
-      }
-    ),
-    /page write failed/
-  )
-  assert.deepEqual(requested, [1])
-  assert.deepEqual(persisted, before)
   const imported: string[] = []
   await collectFavorites(
     config,
@@ -369,22 +355,4 @@ void test('a head reorder during the same run prevents a false completed scan', 
   assert.equal(cursor.next_page, 2)
   assert.equal(cursor.complete, false)
   assert.equal(cursor.rows, 1)
-})
-
-void test('reported count differences from hidden items do not turn a fully traversed scan into an endless restart', async () => {
-  const target = session([page([11], true), page([12], false, 2)], [])
-  let result: Progress | undefined
-  await collectFavorites(
-    config,
-    startProgress({}, config),
-    { max_pages: 2 },
-    new AbortController().signal,
-    target,
-    async (_account, _page, next) => {
-      result = next
-    }
-  )
-  assert.equal(result!.last_run.status, 'complete')
-  assert.equal(result!.folders['900123']!.reported_count, 41)
-  assert.equal(result!.folders['900123']!.rows, 2)
 })

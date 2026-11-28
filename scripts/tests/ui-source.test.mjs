@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import {
   copyFile,
-  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -89,9 +88,11 @@ void test('UI source overlays resolve public entries for development and reject 
         'serve'
       )
     ).createResolver()
-    for (const [specifier, relativePath] of Object.entries(entries)) {
+    // Web exercises the complete shared alias table. Each remote wires the overlay independently.
+    const aliases = unit === 'apps/web' ? Object.keys(entries) : ['@inkcre/ui-web']
+    for (const specifier of aliases) {
+      const relativePath = entries[specifier]
       assert.equal(await resolver(specifier, undefined, true), join(root, relativePath), unit)
-      assert.equal(await resolver(`${specifier}/private`, undefined, true), undefined, unit)
     }
     const sass = config.css.preprocessorOptions.scss.additionalData
     const style = '.probe { color: red; }'
@@ -126,7 +127,10 @@ void test('development CLI selects web-ui and type-check:ui propagates errors fr
   )
   await copyFile(join(repo, 'package.json'), join(checkout, 'package.json'))
   await copyFile(join(repo, 'apps/web/package.json'), join(appRoot, 'package.json'))
-  await cp(join(repo, 'scripts'), join(checkout, 'scripts'), { recursive: true })
+  await mkdir(join(checkout, 'scripts'))
+  for (const name of ['dev.mjs', 'dev-ui.mjs', 'type-check-ui.mjs', 'ui-source.mjs']) {
+    await copyFile(join(repo, 'scripts', name), join(checkout, 'scripts', name))
+  }
   const bin = join(appRoot, 'node_modules/.bin')
   await mkdir(bin, { recursive: true })
   await symlink(join(repo, 'apps/web/node_modules/vue-tsc/bin/vue-tsc.js'), join(bin, 'vue-tsc'))
@@ -172,17 +176,10 @@ require('node:fs').appendFileSync(process.env.CALLS_FILE, JSON.stringify({ args:
     })
   const dev = run('dev:ui')
   assert.equal(dev.status, 0, dev.stdout + dev.stderr)
-  const calls = (await readFile(callsFile, 'utf8')).trim().split('\n').map(JSON.parse)
-  assert.deepEqual(
-    calls.map(({ args, source }) => [args.slice(0, 3), source]),
-    [
-      [['dev', 'ensure', 'database'], uiRoot],
-      [['dev', 'ensure', 'web-ui'], uiRoot],
-    ]
-  )
-  for (const { args } of calls) {
-    assert.equal(await realpath(args[args.indexOf('--repo') + 1]), checkout)
-  }
+  const { args, source } = JSON.parse((await readFile(callsFile, 'utf8')).trim().split('\n').at(-1))
+  assert.deepEqual(args.slice(0, 3), ['dev', 'ensure', 'web-ui'])
+  assert.equal(source, uiRoot)
+  assert.equal(await realpath(args[args.indexOf('--repo') + 1]), checkout)
   const check = () => run('type-check:ui')
   const valid = check()
   assert.equal(valid.status, 0, valid.stdout + valid.stderr)

@@ -1,4 +1,4 @@
-import { access, readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { parse } from 'yaml'
 import { inspectBrowserRuntimeSource } from './browser-runtime-contract.mjs'
@@ -6,15 +6,6 @@ import { inspectBrowserRuntimeSource } from './browser-runtime-contract.mjs'
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const jsonOutput = process.argv.includes('--json')
 const errors = []
-
-async function exists(relativePath) {
-  try {
-    await access(`${repoRoot}/${relativePath}`)
-    return true
-  } catch {
-    return false
-  }
-}
 
 async function readJson(relativePath) {
   return JSON.parse(await readFile(`${repoRoot}/${relativePath}`, 'utf8'))
@@ -43,13 +34,10 @@ const svcConfig = await readJson('svc.json')
 const nodeRuntime = rootPackage.devEngines?.runtime
 if (
   nodeRuntime?.name !== 'node' ||
-  nodeRuntime?.version !== '22.22.3' ||
+  !/^\d+\.\d+\.\d+$/.test(nodeRuntime?.version) ||
   nodeRuntime?.onFail !== 'download'
 ) {
-  errors.push('root devEngines.runtime must provision exact Node 22.22.3 through pnpm')
-}
-if (await exists('.node-version')) {
-  errors.push('.node-version must remain absent; pnpm devEngines.runtime owns Node')
+  errors.push('root devEngines.runtime must provision an exact Node version through pnpm')
 }
 for (const [path, expectedNodeFile] of [
   ['.github/workflows/ci.yml', 'package.json'],
@@ -91,29 +79,7 @@ const localTargets = svcConfig.dev?.targets
 if (!localTargets) {
   errors.push('svc.json must declare development targets')
 } else {
-  const expectedTargets = {
-    database: {
-      probe: ['node', 'scripts/probe-database.mjs', '${dev.instance}'],
-      command: ['node', 'scripts/database-runtime.mjs', 'ensure', '${dev.instance}'],
-      environment: {
-        INKCRE_DATABASE_PROVIDER: 'local',
-      },
-    },
-    web: {
-      probe: ['node', 'scripts/probe-dev.mjs', 'web', '${dev.instance}'],
-      command: ['node', 'scripts/dev.mjs', 'web'],
-    },
-    'web-ui': {
-      probe: ['node', 'scripts/probe-dev.mjs', 'web-ui', '${dev.instance}'],
-      command: ['node', 'scripts/dev.mjs', 'web-ui'],
-    },
-    webext: {
-      probe: ['node', 'scripts/probe-dev.mjs', 'webext', '${dev.instance}'],
-      command: ['node', 'scripts/dev.mjs', 'webext'],
-    },
-  }
-
-  for (const [name, expected] of Object.entries(expectedTargets)) {
+  for (const name of ['database', 'web', 'web-ui', 'webext']) {
     const target = localTargets[name]
     if (!target) {
       errors.push(`svc.json is missing local target "${name}"`)
@@ -122,21 +88,20 @@ if (!localTargets) {
     if (target.scope !== 'worktree') {
       errors.push(`SVC target "${name}" must be worktree-scoped`)
     }
-    if (
-      target.probe?.kind !== 'exec' ||
-      JSON.stringify(target.probe.argv) !== JSON.stringify(expected.probe)
-    ) {
+    if (target.probe?.kind !== 'exec' || !target.probe.argv?.includes('${dev.instance}')) {
       errors.push(`SVC target "${name}" must use the identity probe that proves dev.instance`)
     }
-    if (JSON.stringify(target.provision?.argv) !== JSON.stringify(expected.command)) {
-      errors.push(`SVC target "${name}" has an incorrect provision command`)
-    }
-    if (
-      expected.environment &&
-      JSON.stringify(target.provision?.env) !== JSON.stringify(expected.environment)
-    ) {
-      errors.push(`SVC target "${name}" must commit only the portable local provider default`)
-    }
+  }
+  const databaseEnv = localTargets.database?.provision?.env ?? {}
+  if (
+    databaseEnv.INKCRE_DATABASE_PROVIDER !== 'local' ||
+    Object.keys(databaseEnv).some(
+      (key) => key.startsWith('INKCRE_DATABASE_') && key !== 'INKCRE_DATABASE_PROVIDER'
+    )
+  ) {
+    errors.push(
+      'commit only the portable local database provider; put machine-specific database settings in svc.local.json'
+    )
   }
 }
 

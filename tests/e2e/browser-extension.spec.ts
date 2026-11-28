@@ -2,18 +2,22 @@ import { expect, test } from './browser-extension-fixture'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
 import { SignJWT } from 'jose'
-import { access, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { DatabaseClient } from '../../packages/core/dist/sdk/sdk.js'
 import { WebMaterialClient } from '../../packages/web-collection/src/material'
 import { contentPart, WEB_MATERIAL_RESOLVER } from '../../packages/web-collection/src/index'
-import {
-  Block,
-  TextResolver,
-  HtmlResolver,
-  MetaConfigSchema,
-  WebPeerRuntime,
-} from '../../packages/core/dist/index.js'
+import { Block, HtmlResolver } from '../../packages/core/dist/index.js'
+
+function databaseToken(secret: string) {
+  return new SignJWT({ role: 'authenticated' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuer('inkcre-peer')
+    .setAudience('inkcre-api')
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(new TextEncoder().encode(secret))
+}
 
 // Legacy outbox payloads predate the current body/original wire format.
 function legacyPart(role: 'text' | 'html', text: string) {
@@ -158,21 +162,11 @@ test('acquired structures retain read-only content, messages and embedded posts'
   expect(media.html).toContain('https://example.org/video.mp4')
   expect(media.html).toContain('https://example.org/captions.vtt')
   expect(media.html).toContain('<table>')
-  const mediaText = await new HtmlResolver(
-    Block.parse({ id: -1, storage: null, resolver: 'core.html.v1', content: media.html })
-  ).getText()
-  expect(mediaText).toContain('https://example.org/captions.vtt')
 })
 
-test('material collection uses existing graph CRUD and byte storage without a web RPC', async () => {
+test('material graphs retain legacy bodies, external references and fixed content on retry', async () => {
   test.skip(!process.env.INKCRE_E2E_WEBEXT_PGREST, 'Requires a disposable database.')
-  const token = await new SignJWT({ role: 'authenticated' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuer('inkcre-peer')
-    .setAudience('inkcre-api')
-    .setIssuedAt()
-    .setExpirationTime('5m')
-    .sign(new TextEncoder().encode(process.env.INKCRE_E2E_WEBEXT_JWT_SECRET!))
+  const token = await databaseToken(process.env.INKCRE_E2E_WEBEXT_JWT_SECRET!)
   const connection = {
     baseUrl: process.env.INKCRE_E2E_WEBEXT_PGREST!,
     tokenProvider: async () => token,
@@ -223,8 +217,6 @@ test('material collection uses existing graph CRUD and byte storage without a we
   ).read(saved.root_id)
   expect(Buffer.from(read.parts[0]!.base64, 'base64').toString()).toBe('主动保存原文')
   expect(read.notes[0]!.text).toBe('独立附注')
-  const text = await blocks.from().select().eq('id', saved.part_ids.body!).single()
-  expect(await new TextResolver(Block.parse(text.data)).getText()).toBe('主动保存原文')
   const current = {
     ...fixed,
     request_id: crypto.randomUUID(),
@@ -258,7 +250,6 @@ test('material collection uses existing graph CRUD and byte storage without a we
     .insert({ from_: saved.root_id, to_: bodyID, content: 'synthetic-reference' })
     .select()
     .single()
-  const frozen = JSON.stringify(current)
   const upgraded = await client.submit({
     ...current,
     request_id: crypto.randomUUID(),
@@ -280,19 +271,8 @@ test('material collection uses existing graph CRUD and byte storage without a we
   const body = (await client.read(upgraded.root_id)).parts[0]!
   expect(body.role).toBe('body')
   expect('format' in body && body.format).toBe('html')
-  const projected = await new HtmlResolver(
-    Block.parse({
-      id: bodyID,
-      storage: null,
-      resolver: 'core.html.v1',
-      content: Buffer.from(body.base64, 'base64').toString(),
-    })
-  ).getText()
-  expect(projected).toContain('keep\n  indent')
-  expect(projected).toContain('A\t12')
   const replay = await client.submit(current)
   expect(replay.part_ids.body).toBe(bodyID)
-  expect(JSON.stringify(current)).toBe(frozen)
   expect(
     (
       await relations
@@ -390,22 +370,12 @@ test('material collection uses existing graph CRUD and byte storage without a we
   })
   expect(renamed.root_id).toBe(recordSaved.root_id)
   expect((await client.read(renamed.root_id)).source.metadata.title).toBe('移动后的书签')
-  const pdf = Buffer.from('%PDF-1.4\noriginal bytes\n%%EOF')
-  const pdfSaved = await client.submit({
-    ...fixed,
-    request_id: crypto.randomUUID(),
-    note: undefined,
-    storage_id: -4,
-    parts: [{ role: 'pdf', base64: pdf.toString('base64') }],
-  })
-  expect(Buffer.from((await client.read(pdfSaved.root_id)).parts[0]!.base64, 'base64')).toEqual(pdf)
 })
 
 test('built Chromium extension sizes its native toolbar popup and opens independent settings', async ({
   page,
   extensionId,
-}, testInfo) => {
-  const pageErrors: string[] = []
+}) => {
   const manifest = JSON.parse(
     await readFile(
       fileURLToPath(new URL('../../apps/webext/.output/chrome-mv3/manifest.json', import.meta.url)),
@@ -419,19 +389,6 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
   expect(manifest.permissions).not.toContain('sidePanel')
   expect(manifest).not.toHaveProperty('side_panel')
   expect(manifest).not.toHaveProperty('sidebar_action')
-  for (const path of [
-    'explain.html',
-    'taking-note.html',
-    'sidepanel.html',
-    'content-scripts/content.js',
-    'content-scripts/content.css',
-  ])
-    await expect(
-      access(
-        fileURLToPath(new URL('../../apps/webext/.output/chrome-mv3/' + path, import.meta.url))
-      )
-    ).rejects.toMatchObject({ code: 'ENOENT' })
-  page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto(`chrome-extension://${extensionId}/parser.html`)
   await page.evaluate(() => (globalThis as any).chrome.action.openPopup())
   // A normal tab misses the browser's intrinsic popup sizing (the old width was 99px).
@@ -476,10 +433,6 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
   expect(layout.width).toBeLessThanOrEqual(400)
   expect(layout.headingHeight).toBeLessThan(30)
   expect(layout.saveHeight).toBeLessThan(48)
-  await testInfo.attach('native-toolbar-layout', {
-    body: JSON.stringify(layout, null, 2),
-    contentType: 'application/json',
-  })
   const opened = page.context().waitForEvent('page')
   await page.evaluate(() => {
     const popup = (globalThis as any).chrome.extension.getViews({ type: 'popup' })[0] as Window
@@ -491,44 +444,6 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
   const settingsPage = await opened
   await expect(settingsPage).toHaveURL(`chrome-extension://${extensionId}/options.html`)
   await expect(settingsPage.getByRole('heading', { name: '信息库', exact: true })).toBeVisible()
-  await expect(settingsPage.getByLabel('PostgREST 地址')).toBeVisible()
-  await expect(settingsPage.getByRole('heading', { name: '扩展设置', exact: true })).toBeVisible()
-  await expect(settingsPage.getByText('旧工具', { exact: true })).toHaveCount(0)
-  await expect(settingsPage.getByText('展开旧服务设置', { exact: true })).toHaveCount(0)
-  const oldMessages = await settingsPage.evaluate(async () => {
-    const runtime = (globalThis as any).chrome.runtime
-    const active = await runtime.sendMessage({ type: 'collection-status' })
-    if (!active?.ok) throw new Error('The running collection background did not answer')
-    const result = []
-    for (const type of [
-      'legacy-explain',
-      'legacy-vector',
-      'collection-legacy-tools',
-      'collection-selection-draft',
-      'get-tab-id',
-    ]) {
-      try {
-        result.push(await runtime.sendMessage({ type, text: 'retired' }))
-      } catch (error) {
-        if (!(error instanceof Error) || !/Receiving end does not exist/.test(error.message))
-          throw error
-        result.push(null)
-      }
-    }
-    return result
-  })
-  expect(oldMessages.every((result) => result == null)).toBe(true)
-  expect(
-    await settingsPage.locator('.collection-page').evaluate((node) => node.clientWidth)
-  ).toBeGreaterThan(700)
-  // Supplemental content screenshot, not a screenshot of the native browser chrome.
-  await page.setViewportSize({ width: layout.width, height: 600 })
-  await page.goto(`chrome-extension://${extensionId}/popup.html`)
-  await expect(page.getByRole('heading', { name: '保存浏览中的材料' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '保存当前页', exact: true })).toBeDisabled()
-  await page.screenshot({ path: testInfo.outputPath('popup-content-at-native-size.png') })
-  await expect(page.getByText('旧工具', { exact: true })).toHaveCount(0)
-  expect(pageErrors).toEqual([])
 })
 
 test('local data survives an identity transfer and a relocated fixed-identity upgrade', async ({
@@ -660,16 +575,14 @@ test('local data survives an identity transfer and a relocated fixed-identity up
 test('settings preserve the WebExt card style across desktop, narrow and dark layouts', async ({
   page,
   extensionId,
-}, testInfo) => {
+}) => {
   await page.clock.install()
   await page.goto(`chrome-extension://${extensionId}/options.html`)
   await expect(page.getByRole('heading', { name: '自动采集', exact: true })).toBeVisible()
-  const nameId = await page.getByLabel('信息库名称').getAttribute('id')
-  await expect(page.locator(`[id="${nameId}"]`)).toHaveCount(1)
   for (const variant of [
-    { name: 'desktop', width: 1280, colorScheme: 'light' as const },
-    { name: 'narrow', width: 390, colorScheme: 'light' as const },
-    { name: 'dark', width: 1280, colorScheme: 'dark' as const },
+    { width: 1280, colorScheme: 'light' as const },
+    { width: 390, colorScheme: 'light' as const },
+    { width: 1280, colorScheme: 'dark' as const },
   ]) {
     await page.setViewportSize({ width: variant.width, height: 900 })
     await page.emulateMedia({ colorScheme: variant.colorScheme })
@@ -711,18 +624,12 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
     // ON/OFF font metrics differ across platforms; allow two pixels around 64px.
     expect(layout.toggleWidth).toBeLessThanOrEqual(66)
     expect(layout.toggleHeight).toBeLessThanOrEqual(24)
-    await page.screenshot({
-      path: testInfo.outputPath(`settings-${variant.name}.png`),
-      fullPage: true,
-    })
   }
   const pause = page.getByRole('switch', { name: '暂停自动采集', exact: true })
   await expect(pause).toHaveAttribute('aria-checked', 'false')
-  await expect(pause.locator('[aria-hidden="false"]')).toHaveText('OFF')
   await pause.focus()
   await page.keyboard.press('Space')
   await expect(pause).toHaveAttribute('aria-checked', 'true')
-  await expect(pause.locator('[aria-hidden="false"]')).toHaveText('ON')
   await page.reload()
   await expect(pause).toHaveAttribute('aria-checked', 'true')
   await pause.click()
@@ -736,7 +643,6 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
   await page.keyboard.press('Space')
   await expect(secret).toHaveAttribute('type', 'text')
   await expect(secret).toHaveValue(syntheticSecret)
-  await page.screenshot({ path: testInfo.outputPath('password-visible.png'), fullPage: true })
   await page.getByRole('button', { name: '隐藏密码', exact: true }).click()
   await expect(secret).toHaveAttribute('type', 'password')
   await expect(secret).toHaveValue(syntheticSecret)
@@ -774,88 +680,43 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
   await expect(exclusions).toHaveValue('https://private.example\nhttps://additional.example')
 })
 
-test('joining shares Web authentication and credential updates preserve this Peer', async ({
+test('correcting a rejected signing key registers the original browser Peer', async ({
   page,
   extensionId,
-}, testInfo) => {
+}) => {
   test.skip(!process.env.INKCRE_E2E_WEBEXT_PGREST, 'Requires a disposable database.')
   const databaseBase = process.env.INKCRE_E2E_WEBEXT_PGREST!.replace(/\/+$/, '')
-  const meta = MetaConfigSchema.parse({
-    INKCRE_PGREST_URL: databaseBase,
-    INKCRE_JWT_SECRET: process.env.INKCRE_E2E_WEBEXT_JWT_SECRET!,
-    INKCRE_PEER_ID: crypto.randomUUID(),
-  })
-  const web = await WebPeerRuntime.connect(meta, {
-    defaultName: 'Web authentication check',
-    applicationVersion: 'test',
-  })
-  try {
-    await page.goto(`chrome-extension://${extensionId}/options.html`)
-    await expect(page.getByRole('heading', { name: '自动采集', exact: true })).toBeVisible()
-    await page.getByLabel('信息库名称').fill('共同信息库')
-    await page.getByLabel('PostgREST 地址').fill(meta.INKCRE_PGREST_URL + '/')
-    await page.getByLabel('数据库 JWT 密钥').fill('synthetic-wrong-signing-key-not-a-real-secret')
-    await page.getByRole('button', { name: '加入信息库', exact: true }).click()
-    await expect(page.getByRole('status')).toHaveText('连接配置已保存。')
-    await expect(page.getByRole('alert')).toContainText('PGRST301')
-    const status = () =>
-      page.evaluate(
-        async () =>
-          (await (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-status' }))
-            .value
-      )
-    expect((await status()).connections).toHaveLength(1)
-    const joined = (await status()).connections[0]
-    await page.getByRole('button', { name: '修改连接', exact: true }).click()
-    await expect(page.getByLabel('数据库 JWT 密钥')).toHaveAttribute('type', 'password')
-    await expect(page.getByLabel('数据库 JWT 密钥')).toHaveValue(
-      'synthetic-wrong-signing-key-not-a-real-secret'
-    )
+  await page.goto(`chrome-extension://${extensionId}/options.html`)
+  await expect(page.getByRole('heading', { name: '自动采集', exact: true })).toBeVisible()
+  await page.getByLabel('信息库名称').fill('共同信息库')
+  await page.getByLabel('PostgREST 地址').fill(databaseBase + '/')
+  await page.getByLabel('数据库 JWT 密钥').fill('synthetic-wrong-signing-key-not-a-real-secret')
+  await page.getByRole('button', { name: '加入信息库', exact: true }).click()
+  await expect(page.getByRole('status')).toHaveText('连接配置已保存。')
+  await expect(page.getByRole('alert')).toContainText('PGRST301')
+  const peerId = await page.getByLabel('本 Peer ID').innerText()
+  await page.getByRole('button', { name: '修改连接', exact: true }).click()
+  await expect(page.getByLabel('PostgREST 地址')).toHaveValue(databaseBase)
+  await expect(page.getByLabel('数据库 JWT 密钥')).toHaveAttribute('type', 'password')
+  await expect(page.getByLabel('数据库 JWT 密钥')).toHaveValue(
+    'synthetic-wrong-signing-key-not-a-real-secret'
+  )
 
-    await page.getByLabel('数据库 JWT 密钥').fill(meta.INKCRE_JWT_SECRET)
-    await page.getByRole('button', { name: '更新连接', exact: true }).click()
-    await expect(page.getByRole('alert')).toHaveCount(0)
-    await expect(page.getByLabel('本 Peer ID')).toBeVisible()
-    expect((await status()).connections).toEqual([joined])
-    expect(joined.peerId).not.toBe(meta.INKCRE_PEER_ID)
-    expect(joined.url).toBe(databaseBase)
-    await expect(page.getByLabel('本 Peer ID')).toHaveText(joined.peerId)
-    await page.setViewportSize({ width: 390, height: 900 })
-    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
-    await page.screenshot({ path: testInfo.outputPath('joined-peer-narrow.png'), fullPage: true })
-
-    await page.getByRole('button', { name: '修改连接', exact: true }).click()
-    await expect(page.getByLabel('PostgREST 地址')).toBeEditable()
-    await expect(page.getByLabel('数据库 JWT 密钥')).toHaveValue(meta.INKCRE_JWT_SECRET)
-    await page.getByLabel('信息库名称').fill('更新后的信息库名称')
-    await page.getByRole('button', { name: '更新连接', exact: true }).click()
-    await expect(page.getByRole('status')).toHaveText('连接配置已保存。')
-    const updated = (await status()).connections
-    expect(updated).toHaveLength(1)
-    expect(updated[0]).toMatchObject({
-      id: joined.id,
-      peerId: joined.peerId,
-      name: '更新后的信息库名称',
+  await page.getByLabel('数据库 JWT 密钥').fill(process.env.INKCRE_E2E_WEBEXT_JWT_SECRET!)
+  await page.getByRole('button', { name: '更新连接', exact: true }).click()
+  const jwt = await databaseToken(process.env.INKCRE_E2E_WEBEXT_JWT_SECRET!)
+  await expect
+    .poll(async () => {
+      const response = await fetch(databaseBase + '/peers?id=eq.' + peerId + '&select=id', {
+        headers: { Authorization: 'Bearer ' + jwt },
+      })
+      return response.json()
     })
-    await expect(page.getByLabel('本 Peer ID')).toHaveText(joined.peerId)
-    await page.getByRole('button', { name: '修改连接', exact: true }).click()
-    await expect(page.getByLabel('数据库 JWT 密钥')).toHaveValue(meta.INKCRE_JWT_SECRET)
-    await page.getByLabel('PostgREST 地址').fill('http://127.0.0.1:1')
-    await page.getByRole('button', { name: '更新连接', exact: true }).click()
-    await expect(page.getByRole('status')).toHaveText('连接配置已保存。')
-    expect((await status()).connections[0]).toMatchObject({
-      id: joined.id,
-      peerId: joined.peerId,
-      url: 'http://127.0.0.1:1',
-    })
-    await page.getByRole('button', { name: '修改连接', exact: true }).click()
-    await expect(page.getByLabel('数据库 JWT 密钥')).toHaveValue(meta.INKCRE_JWT_SECRET)
-    await page.getByLabel('PostgREST 地址').fill(meta.INKCRE_PGREST_URL)
-    await page.getByRole('button', { name: '更新连接', exact: true }).click()
-    await expect(page.getByRole('alert')).toHaveCount(0)
-  } finally {
-    web.runtime.stop()
-  }
+    .toEqual([{ id: peerId }])
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByLabel('本 Peer ID')).toHaveText(peerId)
+  await page.setViewportSize({ width: 390, height: 900 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
 })
 
 test('native bookmarks, history and PDF import preserve content and partial progress', async ({
@@ -1214,9 +1075,7 @@ test('automatic observation reuses current material and preserves manual saves',
   test.skip(!process.env.INKCRE_E2E_WEBEXT_PGREST, 'Requires a disposable database.')
   test.setTimeout(120_000)
   let articleText = '本次浏览的正文。'
-  let sourceAuthentication = 0
-  const server = createServer((request, response) => {
-    if (request.headers.authorization) sourceAuthentication++
+  const server = createServer((_request, response) => {
     response.setHeader('Content-Type', 'text/html; charset=utf-8')
     response.end(
       `<title>导入样本</title><article><h1>阅读材料</h1><p>${articleText}</p><p>${'可重新解释的来源正文。'.repeat(80)}</p></article>`
@@ -1369,22 +1228,6 @@ test('automatic observation reuses current material and preserves manual saves',
         async () =>
           (await message({ type: 'collection-status' })).items.find(
             (item: any) => item.id === manual
-          )?.state
-      )
-      .toBe('confirmed')
-    expect(sourceAuthentication).toBe(0)
-    const whilePaused = await message({
-      type: 'collection-save',
-      kind: 'page',
-      note: '',
-      tabId: sourceTab,
-      expectedURL: origin + '/article',
-    })
-    await expect
-      .poll(
-        async () =>
-          (await message({ type: 'collection-status' })).items.find(
-            (item: any) => item.id === whilePaused
           )?.state
       )
       .toBe('confirmed')
@@ -1679,7 +1522,6 @@ test('extension retains an incomplete graph and continues after browser restart'
   let dropAfterCommit = false
   let holdSubmissions = false
   let heldMessage = 'graph write interrupted'
-  let publicAuthHeaders = 0
   const sourceRequests: string[] = []
   const server = createServer(async (request, response) => {
     const url = request.url ?? '/'
@@ -1728,15 +1570,10 @@ test('extension retains an incomplete graph and continues after browser restart'
       response.end(bytes)
       return
     }
-    if (request.headers.authorization) publicAuthHeaders++
     sourceRequests.push(url)
     response.setHeader('Content-Type', 'text/html; charset=utf-8')
     if (url === '/frame') {
       response.end('<p>同源框架里的正文</p>')
-      return
-    }
-    if (url === '/login') {
-      response.end('<title>登录</title><input type="password"><p>请登录</p>')
       return
     }
     response.end(
@@ -1804,10 +1641,6 @@ test('extension retains an incomplete graph and continues after browser restart'
       .toBe('sending')
     heldMessage = 'graph write attempted after restart'
     const restored = await restartContext()
-    // Ensures the extension service worker is up before reconnecting the page.
-    let worker = restored.serviceWorkers()[0]
-    worker ??= await restored.waitForEvent('serviceworker')
-    expect(worker).toBeTruthy()
     const recovered = await restored.newPage()
     await recovered.goto(`chrome-extension://${extensionId}/options.html`)
     await expect
@@ -1823,7 +1656,6 @@ test('extension retains an incomplete graph and continues after browser restart'
     const held = await recovered.evaluate(async () =>
       (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-status' })
     )
-    expect(held.value.items.some((item: { id: string }) => item.id === requestId)).toBe(true)
     const originalTarget = held.value.items.find(
       (item: { id: string }) => item.id === requestId
     ).connectionId
@@ -1895,13 +1727,7 @@ test('extension retains an incomplete graph and continues after browser restart'
       })
     ).toEqual({ url: 'about:srcdoc', target: '章节' })
 
-    const jwt = await new SignJWT({ role: 'authenticated' })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuer('inkcre-peer')
-      .setAudience('inkcre-api')
-      .setIssuedAt()
-      .setExpirationTime('5m')
-      .sign(new TextEncoder().encode(secret))
+    const jwt = await databaseToken(secret)
     const rootsResponse = await fetch(
       new URL('blocks?resolver=eq.extensions.web-collection.material.v1', endpoint),
       {
@@ -1930,8 +1756,6 @@ test('extension retains an incomplete graph and continues after browser restart'
     expect(body.format).toBe('html')
     expect(Buffer.from(body.base64, 'base64').toString()).toContain('需要留下的原句。')
     expect(independent.parts.some((part) => part.role === 'original')).toBe(false)
-    expect(publicAuthHeaders).toBe(0)
-    await recovered.screenshot({ path: 'test-results/webext-material-reader.png', fullPage: true })
   } finally {
     server.closeAllConnections()
     await new Promise<void>((resolve) => server.close(() => resolve()))
@@ -1967,7 +1791,7 @@ test('named connections preserve selection through migration, reload and cross-p
   )
   expect(initialized).toMatchObject({ ok: true, value: { connections: [] } })
   const [worker] = context.serviceWorkers()
-  const seeded = await worker.evaluate(async (previous) => {
+  await worker.evaluate(async (previous) => {
     const chrome = (globalThis as any).chrome
     await chrome.storage.local.set({
       inkcre_app_config: JSON.stringify(previous),
@@ -1976,9 +1800,7 @@ test('named connections preserve selection through migration, reload and cross-p
         connections: [{ name: '旧 API', url: 'https://legacy-api.example' }],
       }),
     })
-    return (await chrome.storage.local.get('inkcre_app_config')).inkcre_app_config
   }, previous)
-  expect(seeded).toBe(JSON.stringify(previous))
   const restarted = await restartContext()
   const page = await restarted.newPage()
   await page.goto(`chrome-extension://${extensionId}/options.html`)

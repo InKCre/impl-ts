@@ -18,7 +18,7 @@ void test('a rerun cannot replace a missing or expired release candidate', () =>
   const candidate = { id: 42, name: 'first-party-extension-candidate', expired: false }
   const unrelated = { id: 43, name: 'other-artifact', expired: false }
   assert.equal(selectSavedCandidate([unrelated], '1'), undefined)
-  assert.equal(selectSavedCandidate([unrelated, candidate], '2'), candidate)
+  assert.equal(selectSavedCandidate([unrelated, candidate], '2').id, candidate.id)
   assert.throws(() => selectSavedCandidate([unrelated], '2'), /missing on a rerun/)
   assert.throws(() => selectSavedCandidate([{ ...candidate, expired: true }], '2'), /expired/)
   assert.throws(() => selectSavedCandidate([candidate, candidate], '2'), /multiple/)
@@ -61,6 +61,8 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
           manifest_url: `${prefix}mf-manifest.json`,
         },
       })
+      if (req.url.includes('/test/pending/'))
+        return json(500, { detail: 'pending producer must not be consulted during capture' })
       if (req.method === 'POST') {
         writes++
         assert.equal(req.headers.authorization, 'Bearer test-only')
@@ -129,23 +131,26 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
   try {
     await mkdir(path.join(build, '.vite'), { recursive: true })
     await mkdir(path.join(workspace, 'extensions/.agents'))
-    await mkdir(path.join(workspace, 'extensions/guidance'))
+    await mkdir(path.join(workspace, 'extensions/pending'))
     await mkdir(path.join(workspace, 'packages/core'), { recursive: true })
     await writeFile(
       path.join(workspace, 'packages/core/package.json'),
       JSON.stringify({ version: '0.3.0' })
     )
-    await writeFile(
-      path.join(workspace, 'extensions/source/package.json'),
-      JSON.stringify({
-        version: '1.0.0',
-        inkcre: {
-          name: 'test/source',
-          nickname: 'Source',
-          module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.2.0 <0.4.0' },
-        },
-      })
-    )
+    for (const name of ['source', 'pending']) {
+      await writeFile(
+        path.join(workspace, `extensions/${name}/package.json`),
+        JSON.stringify({
+          name: `@test/${name}`,
+          version: '1.0.0',
+          inkcre: {
+            name: `test/${name}`,
+            nickname: name === 'source' ? 'Source' : 'Pending',
+            module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.2.0 <0.4.0' },
+          },
+        })
+      )
+    }
     await writeFile(
       path.join(build, 'mf-manifest.json'),
       JSON.stringify({
@@ -166,6 +171,7 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
       registryUrl,
       deliveryDirectory: path.join(workspace, 'candidate'),
       token: 'test-only',
+      pendingPackages: new Set(['@inkcre/core', '@test/pending']),
       provenance: {
         source_repository: 'https://github.com/InKCre/impl-ts',
         source_revision: 'exact-source',
@@ -230,16 +236,15 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
     await assert.rejects(publishCandidates(options), /saved ZIP digest differs/)
     assert.equal(writes, beforeInvalid, 'invalid saved candidates must fail before Registry writes')
     await rm(build, { recursive: true })
-    const historical = await captureCandidates({
-      ...options,
-      deliveryDirectory: path.join(workspace, 'later-run'),
-    })
+    const laterDirectory = path.join(workspace, 'later-run')
+    await captureCandidates({ ...options, deliveryDirectory: laterDirectory })
+    const historical = JSON.parse(await readFile(path.join(laterDirectory, 'plan.json'), 'utf8'))
     assert.deepEqual(
       historical.candidates,
       [],
       'unrelated builds must not claim to verify historical releases'
     )
-    await writeFile(path.join(workspace, 'extensions/guidance/package.json'), '{invalid')
+    await writeFile(path.join(workspace, 'extensions/pending/package.json'), '{invalid')
     await assert.rejects(
       captureCandidates({ ...options, deliveryDirectory: path.join(workspace, 'invalid-run') }),
       SyntaxError,
