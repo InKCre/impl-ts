@@ -17,20 +17,29 @@ function pending(id, type, abortRequested) {
   })
 }
 
-function database(t, job, abortWhenClaimed) {
+function database(t, job, abortWhenClaimed, claimSucceeded = true) {
   const updates = []
   t.mock.method(Job, 'get', async () => job)
   t.mock.method(Job.dbApi, 'update', (fields) => ({
-    eq() {
+    filters: {},
+    eq(key, value) {
+      this.filters[key] = value
       return this
     },
     select() {
       if (fields.status === JobStatus.RUNNING)
         return {
-          maybeSingle: async () => ({
-            data: { ...job, status: JobStatus.RUNNING, abort_requested: abortWhenClaimed },
-          }),
+          maybeSingle: async () => {
+            assert.deepEqual(this.filters, { id: job.id, status: JobStatus.PENDING })
+            updates.push(JobStatus.RUNNING)
+            return {
+              data: claimSucceeded
+                ? { ...job, status: JobStatus.RUNNING, abort_requested: abortWhenClaimed }
+                : null,
+            }
+          },
         }
+      assert.deepEqual(this.filters, { id: job.id, status: JobStatus.RUNNING })
       updates.push(fields.status)
       return Promise.resolve({ data: [{ id: job.id }] })
     },
@@ -49,7 +58,7 @@ void test('an already cancelled pending Job closes without asking business eligi
     assert.equal(await JobManager.run(job.id), true)
     assert.equal(canHandle.mock.callCount(), 0)
     assert.equal(handle.mock.callCount(), 0)
-    assert.deepEqual(updates, [JobStatus.ABORTED])
+    assert.deepEqual(updates, [JobStatus.RUNNING, JobStatus.ABORTED])
   } finally {
     JobManager.unregisterHandler(type)
   }
@@ -64,7 +73,7 @@ void test('a cancellation arriving during atomic claim prevents the handler from
   try {
     assert.equal(await JobManager.run(job.id), true)
     assert.equal(handle.mock.callCount(), 0)
-    assert.deepEqual(updates, [JobStatus.ABORTED])
+    assert.deepEqual(updates, [JobStatus.RUNNING, JobStatus.ABORTED])
   } finally {
     JobManager.unregisterHandler(type)
   }
@@ -80,6 +89,21 @@ void test('ordinary ineligible work remains pending', async (t) => {
     assert.equal(await JobManager.run(job.id), false)
     assert.equal(handle.mock.callCount(), 0)
     assert.deepEqual(updates, [])
+  } finally {
+    JobManager.unregisterHandler(type)
+  }
+})
+
+void test('work claimed by another Peer never starts or closes locally', async (t) => {
+  const type = `test.cancel.${crypto.randomUUID()}`
+  const job = pending(4, type, false)
+  const updates = database(t, job, false, false)
+  const handle = t.mock.fn(async () => undefined)
+  JobManager.registerHandler(type, { parameters: MetaConfigSchema, canHandle: () => true, handle })
+  try {
+    assert.equal(await JobManager.run(job.id), false)
+    assert.equal(handle.mock.callCount(), 0)
+    assert.deepEqual(updates, [JobStatus.RUNNING])
   } finally {
     JobManager.unregisterHandler(type)
   }

@@ -21,20 +21,27 @@ function properties(sample: (typeof samples)[number]): GraphProperty[] {
   }))
 }
 
-void test('Python-authored contact graph composes the same phones, photo and unknown properties', () => {
+void test('Python-authored contact graph preserves phones, photo and subsequent phone edits', () => {
   const sample = samples.find((item: any) => item.kind === 'contact')
   const text = composeGraph(sample.remainder, properties(sample))
   const actual = parseResource(JSON.stringify({ href: 'contact.vcf', text }), 'contact')
-  const expected = parseResource(
-    JSON.stringify({ href: 'contact.vcf', text: sample.text }),
-    'contact'
-  )
-  assert.notEqual(actual.kind, 'invalid')
-  if (actual.kind !== 'contact' || expected.kind !== 'contact') return
-  assert.equal(actual.title, expected.title)
-  assert.deepEqual(actual.fields, expected.fields)
-  assert.equal(actual.photo, expected.photo)
-  assert.equal(resourceUid(text), resourceUid(sample.text))
+  assert.equal(actual.kind, 'contact')
+  if (actual.kind !== 'contact') return
+  assert.equal(actual.title, 'InKCre Preview Photo Contact')
+  assert.deepEqual(actual.fields, [
+    {
+      name: 'tel',
+      values: [
+        { value: '+8613800000000', label: 'cell' },
+        { value: '+8613900000000', label: 'work' },
+      ],
+    },
+    { name: 'email', values: [{ value: 'preview146@example.invalid', label: '' }] },
+    { name: 'note', values: [{ value: 'PR 146 HTTPS acceptance test', label: '' }] },
+  ])
+  const photoBytes = sample.properties.find((field: any) => field.link.name === 'PHOTO').value
+  assert.equal(actual.photo, `data:image/jpeg;base64,${photoBytes}`)
+  assert.equal(resourceUid(text), 'inkcre-preview146-contact')
   const changed = properties(sample)
   changed.find((field) => field.link.name === 'TEL')!.value = '+8613800000001'
   assert.match(composeGraph(sample.remainder, changed), /\+8613800000001/)

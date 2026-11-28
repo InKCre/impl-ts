@@ -132,12 +132,18 @@ void test('selected external backend delegates query and writes using Peer autho
 })
 
 void test('unknown selection, missing capability, external failure and backend disagreement never fall back', async () => {
-  for (const failure of ['selection', 'capability', 'request', 'mismatch']) {
+  for (const [failure, message, expectedActions] of [
+    ['selection', 'Unsupported observability configuration version.', []],
+    ['capability', 'No live Peer provides the selected observability backend.', []],
+    ['request', 'Observability backend request failed (503).', ['status', 'query']],
+    ['mismatch', 'Observability backend changed during this query.', ['status', 'query']],
+  ]) {
     let queriedDatabase = false
+    const actions = []
     const client = new ObservabilityClient({
       baseUrl: 'https://db.example',
       tokenProvider: async () => 'token',
-      fetch: async (input) => {
+      fetch: async (input, init) => {
         const url = new URL(input)
         if (url.pathname === '/configs')
           return Response.json(
@@ -148,23 +154,46 @@ void test('unknown selection, missing capability, external failure and backend d
           queriedDatabase = true
           return Response.json([])
         }
+        assert.equal(url.href, 'https://peer.example/observability')
+        const body = JSON.parse(init.body)
+        actions.push(body.action)
+        if (body.action === 'status')
+          return Response.json({
+            backend: 'loki',
+            configured: true,
+            recording: true,
+            queryable: true,
+            scope: 'selected_backend',
+            history: '',
+            dropped: null,
+            error: null,
+          })
+        assert.equal(body.action, 'query')
+        assert.equal(body.expected_backend, 'loki')
         return failure === 'request'
           ? new Response('unavailable', { status: 503 })
           : Response.json({ ...range, records: [], truncated: false, backend: 'postgresql' })
       },
     })
-    await assert.rejects(client.query(range), ObservabilityUnavailableError)
+    await assert.rejects(client.query(range), {
+      name: 'ObservabilityUnavailableError',
+      message,
+    })
+    assert.deepEqual(actions, expectedActions, failure)
     assert.equal(queriedDatabase, false)
   }
 })
 
 void test('database ingestion preserves portable identity, kind and event metadata', async () => {
   let stored
+  let writes = 0
   const client = new ObservabilityClient({
     baseUrl: 'https://db.example',
     tokenProvider: async () => 'token',
     fetch: async (input, init) => {
       if (new URL(input).pathname === '/configs') return Response.json(null)
+      assert.equal(new URL(input).pathname, '/logs')
+      writes++
       stored = JSON.parse(init.body)
       return new Response(null, { status: 201 })
     },
@@ -174,20 +203,39 @@ void test('database ingestion preserves portable identity, kind and event metada
   assert.equal(stored.attributes['inkcre.record.kind'], 'event')
   assert.equal(stored.attributes['inkcre.event.name'], 'job.closed')
   assert.equal(stored.id, undefined)
-  await assert.rejects(client.emit({ ...record, body: 'x'.repeat(8193) }))
-  for (const [key, length] of [
-    ['event_name', 128],
-    ['severity_text', 32],
-    ['trace_id', 128],
-    ['span_id', 128],
+  const rejectsField = (field, message) => (error) => {
+    assert.equal(error.name, 'ZodError')
+    assert.ok(
+      error.issues.some(
+        (issue) => issue.path.join('.') === field && (!message || issue.message === message)
+      ),
+      error.message
+    )
+    return true
+  }
+  for (const [input, field] of [
+    [{ ...record, body: 'x'.repeat(8193) }, 'body'],
+    [{ ...record, event_name: 'x'.repeat(129) }, 'event_name'],
+    [{ ...record, severity_text: 'x'.repeat(33) }, 'severity_text'],
+    [{ ...record, trace_id: 'x'.repeat(129) }, 'trace_id'],
+    [{ ...record, span_id: 'x'.repeat(129) }, 'span_id'],
+    [{ ...record, attributes: { nested: { value: 1 } } }, 'attributes.nested'],
+    [{ ...record, attributes: { large: 'x'.repeat(1025) } }, 'attributes.large'],
+    [{ ...record, attributes: { large: Array(33).fill(1) } }, 'attributes.large'],
   ])
-    await assert.rejects(client.emit({ ...record, [key]: 'x'.repeat(length + 1) }))
-  await assert.rejects(client.emit({ ...record, attributes: { nested: { value: 1 } } }))
-  await assert.rejects(client.emit({ ...record, attributes: { large: 'x'.repeat(1025) } }))
-  await assert.rejects(client.emit({ ...record, attributes: { large: Array(33).fill(1) } }))
+    await assert.rejects(client.emit(input), rejectsField(field))
+  for (const [input, field, message] of [
+    [{ ...range, until: range.since }, '', 'Observation time range must end after it starts.'],
+    [{ ...range, limit: 501 }, 'limit'],
+    [
+      { since: '2026-01-01T00:00:00Z', until: '2026-11-01T00:00:00Z' },
+      '',
+      'Observation time range must not exceed 31 days.',
+    ],
+  ])
+    await assert.rejects(client.query(input), rejectsField(field, message))
+  assert.equal(writes, 1, 'invalid input must fail before database I/O')
   assert.equal(stored.body, record.body)
-  await assert.rejects(client.query({ ...range, until: range.since }))
-  await assert.rejects(client.query({ ...range, limit: 501 }))
 })
 
 void test('an initialized instance keeps its selected backend until a new instance is created', async () => {
@@ -216,10 +264,9 @@ void test('an initialized instance keeps its selected backend until a new instan
     new ObservabilityClient(connection).query(range),
     ObservabilityUnavailableError
   )
-  await assert.rejects(old.query({ since: '2026-01-01T00:00:00Z', until: '2026-11-01T00:00:00Z' }))
 })
 
-void test('a not-ready Peer is skipped before dispatch and writes carry atomic backend expectation', async () => {
+void test('external writes skip unready Peers, carry backend expectation, and never retry rejected dispatch', async () => {
   const stale = {
     ...peer,
     id: '00000000-0000-4000-8000-000000000000',
@@ -233,34 +280,59 @@ void test('a not-ready Peer is skipped before dispatch and writes carry atomic b
       },
     ],
   }
-  let stored = false
-  const client = new ObservabilityClient({
-    baseUrl: 'https://db.example',
-    tokenProvider: async () => 'token',
-    fetch: async (input, init) => {
-      const url = new URL(input)
-      if (url.pathname === '/configs') return Response.json(selector)
-      if (url.pathname === '/peers') return Response.json([stale, peer])
-      const body = JSON.parse(init.body)
-      if (body.action === 'status')
-        return Response.json({
-          backend: 'loki',
-          configured: url.hostname !== 'stale.example',
-          recording: url.hostname !== 'stale.example',
-          queryable: url.hostname !== 'stale.example',
-          scope: 'selected_backend',
-          history: '',
-          dropped: null,
-          error: null,
-        })
-      assert.equal(url.hostname, 'peer.example')
-      assert.equal(body.expected_backend, 'loki')
-      stored = true
-      return Response.json({ accepted: 1, dropped: 0 })
-    },
-  })
-  await client.emit(record)
-  assert.equal(stored, true)
+  const alternative = {
+    ...peer,
+    id: '00000000-0000-4000-8000-000000000002',
+    capabilities: [
+      {
+        ...peer.capabilities[0],
+        inbound: {
+          ...peer.capabilities[0].inbound,
+          parameters: { method: 'POST', url: 'https://alternative.example/observability' },
+        },
+      },
+    ],
+  }
+  for (const [outcome, message] of [
+    ['accepted', null],
+    ['unavailable', 'Observability backend request failed (503).'],
+    ['dropped', 'The selected backend did not accept this observation.'],
+  ]) {
+    const writes = []
+    const client = new ObservabilityClient({
+      baseUrl: 'https://db.example',
+      tokenProvider: async () => 'token',
+      fetch: async (input, init) => {
+        const url = new URL(input)
+        if (url.pathname === '/configs') return Response.json(selector)
+        if (url.pathname === '/peers') return Response.json([stale, peer, alternative])
+        const body = JSON.parse(init.body)
+        if (body.action === 'status')
+          return Response.json({
+            backend: 'loki',
+            configured: url.hostname !== 'stale.example',
+            recording: url.hostname !== 'stale.example',
+            queryable: url.hostname !== 'stale.example',
+            scope: 'selected_backend',
+            history: '',
+            dropped: null,
+            error: null,
+          })
+        assert.equal(url.hostname, 'peer.example')
+        assert.equal(body.action, 'ingest')
+        assert.equal(body.expected_backend, 'loki')
+        writes.push(url.href)
+        if (outcome === 'unavailable') return new Response(null, { status: 503 })
+        return Response.json(
+          outcome === 'dropped' ? { accepted: 0, dropped: 1 } : { accepted: 1, dropped: 0 }
+        )
+      },
+    })
+    if (message)
+      await assert.rejects(client.emit(record), { name: 'ObservabilityUnavailableError', message })
+    else await client.emit(record)
+    assert.deepEqual(writes, ['https://peer.example/observability'], outcome)
+  }
 })
 
 void test('Job lifecycle and terminal severities are recorded without optional OTEL or raw content', async () => {
@@ -311,6 +383,7 @@ void test('Job lifecycle and terminal severities are recorded without optional O
     canHandle: () => true,
     handle: async (job, _parameters, signal) => {
       job.state = { count: 11 }
+      if (outcome === 'failed') throw new Error('private-handler-error-must-not-be-recorded')
       if (outcome === 'timed_out')
         await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }))
       if (outcome === 'aborted') {
@@ -336,6 +409,7 @@ void test('Job lifecycle and terminal severities are recorded without optional O
     )
     assert.equal(JSON.stringify(records).includes('must-not-be-recorded'), false)
     for (const [terminalStatus, severity, expectedOutcome] of [
+      ['failed', 17, 'error'],
       ['timed_out', 17, 'timeout'],
       ['aborted', 9, 'cancelled'],
     ]) {
@@ -352,6 +426,7 @@ void test('Job lifecycle and terminal severities are recorded without optional O
       assert.equal(closed.severity_number, severity)
       assert.equal(execution.severity_number, severity)
       assert.equal(execution.attributes.outcome, expectedOutcome)
+      assert.equal(JSON.stringify(records).includes('must-not-be-recorded'), false)
     }
     assert.equal(configReads, 1, 'all operations share one captured backend selection')
   } finally {

@@ -23,7 +23,7 @@ void test('the phone calendar retains the master, offline exception and all-day 
   assert.deepEqual(allDay.end, { value: '2026-10-21', zone: '', dateOnly: true })
 })
 
-void test('Tasks.org parent references and completion state remain readable', () => {
+void test('Tasks.org parent references and incomplete task status remain readable', () => {
   const result = parseResource(resource(fixture('tasks.ics')), 'calendar')
   assert.equal(result.kind, 'calendar')
   if (result.kind !== 'calendar') return

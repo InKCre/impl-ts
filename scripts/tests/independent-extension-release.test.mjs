@@ -27,12 +27,16 @@ void test('MF snapshots permit unused UI dependencies and validate emitted UI sh
     await writeFile(path.join(workspace, 'remoteEntry.js'), 'export default {}')
     const inspect = () =>
       inspectNativeModuleFederation({ packagePath, corePackagePath, artifactDirectory: workspace })
-    for (const [uiShares, declaresUi, valid] of [
-      [[], true, true],
-      [[uiShare], true, true],
-      [[{ ...uiShare, requiredVersion: '2.7.0' }], true, false],
-      [[uiShare, uiShare], true, false],
-      [[uiShare], false, false],
+    for (const [uiShares, declaresUi, error] of [
+      [[], true, undefined],
+      [[uiShare], true, undefined],
+      [
+        [{ ...uiShare, requiredVersion: '2.7.0' }],
+        true,
+        { code: 'ERR_ASSERTION', actual: '2.7.0', expected: '2.3.0' },
+      ],
+      [[uiShare, uiShare], true, /must not duplicate @inkcre\/ui-web shares/],
+      [[uiShare], false, /shared @inkcre\/ui-web must declare the producer UI version/],
     ]) {
       await writeFile(
         packagePath,
@@ -46,8 +50,8 @@ void test('MF snapshots permit unused UI dependencies and validate emitted UI sh
           exposes: [],
         })
       )
-      if (valid) assert.equal((await inspect()).name, 'inkcre/capture')
-      else await assert.rejects(inspect(), assert.AssertionError)
+      if (error) await assert.rejects(inspect(), error)
+      else assert.equal((await inspect()).name, 'inkcre/capture')
     }
   } finally {
     await rm(workspace, { recursive: true, force: true })

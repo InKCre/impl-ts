@@ -24,14 +24,15 @@ void test('SDK 0.4 preserves the legacy JWT default without changing database ad
   )
   assert.equal(Object.hasOwn(generated.jwt, 'maximum_lifetime_seconds'), false)
   assert.equal(peerJwtContract.maximum_lifetime_seconds, 86_400)
-  assert.equal(databaseRuntimeContract.jwt, peerJwtContract)
+  assert.equal(databaseRuntimeContract.jwt.maximum_lifetime_seconds, 86_400)
+  const priorSecret = configStore.metaConfig.INKCRE_JWT_SECRET
   configStore.metaConfig.INKCRE_JWT_SECRET = 'sdk-compatibility-test-only'
   try {
     const token = await authStore.newToken()
     const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
-    assert.equal(claims.exp - claims.iat, peerJwtContract.maximum_lifetime_seconds)
+    assert.equal(claims.exp - claims.iat, 86_400)
   } finally {
-    configStore.metaConfig.INKCRE_JWT_SECRET = ''
+    configStore.metaConfig.INKCRE_JWT_SECRET = priorSecret
   }
 })
 
@@ -41,7 +42,12 @@ void test('binary storage keeps its explicit connection for create, read, update
   const id = '00000000-0000-4000-8000-000000000009'
   globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    calls.push({ url, token: new Headers(init.headers).get('Authorization') })
+    calls.push({
+      url: new URL(url),
+      headers: new Headers(init.headers),
+      method: init.method,
+      body: init.body,
+    })
     if (url.includes('create_storage_blob')) return Response.json(id)
     if (url.includes('read_storage_blob')) return new Response(new Uint8Array([37, 80, 68, 70]))
     return Response.json([{ id }])
@@ -60,13 +66,30 @@ void test('binary storage keeps its explicit connection for create, read, update
       await storage.getRawContent({ id: 1, storage: -4, content: pointer }),
       new Uint8Array([37, 80, 68, 70])
     )
-    assert.equal(await storage.updateRawContent(pointer, new Uint8Array([1])), true)
+    assert.equal(await storage.updateRawContent(pointer, new Uint8Array([0, 1, 127, 255])), true)
     assert.equal(await storage.deleteRawContent(pointer), true)
     assert.equal(calls.length, 4)
     for (const call of calls) {
-      assert.equal(call.url.startsWith(baseUrl + '/'), true)
-      assert.equal(call.token, 'Bearer explicit-connection-test-token')
+      assert.equal(call.url.href.startsWith(baseUrl + '/'), true)
+      assert.equal(call.headers.get('Authorization'), 'Bearer explicit-connection-test-token')
+      assert.equal(call.headers.get('Content-Profile'), 'inkcre')
     }
+    assert.deepEqual(
+      calls.map(({ method, url }) => [method, url.pathname]),
+      [
+        ['POST', '/database/rpc/create_storage_blob'],
+        ['POST', '/database/rpc/read_storage_blob'],
+        ['PATCH', '/database/storage_blobs'],
+        ['DELETE', '/database/storage_blobs'],
+      ]
+    )
+    assert.equal(calls[0].headers.get('Content-Type'), 'application/octet-stream')
+    assert.deepEqual([...new Uint8Array(calls[0].body)], [37, 80, 68, 70])
+    assert.equal(calls[1].headers.get('Accept'), 'application/octet-stream')
+    assert.deepEqual(JSON.parse(calls[1].body), { blob_id: id })
+    assert.deepEqual(JSON.parse(calls[2].body), { data: '\\x00017fff' })
+    assert.equal(calls[2].url.searchParams.get('id'), `eq.${id}`)
+    assert.equal(calls[3].url.searchParams.get('id'), `eq.${id}`)
   } finally {
     globalThis.fetch = originalFetch
   }

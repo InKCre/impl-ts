@@ -239,17 +239,23 @@ void test('a changed head restarts scanning and failed persistence never advance
 
 void test('cancellation and repeated pagination fail without a false completed checkpoint', async () => {
   const controller = new AbortController()
-  controller.abort()
+  const reason = new Error('collection cancelled before starting')
+  let writes = 0
+  controller.abort(reason)
   await assert.rejects(
     collectFavorites(
       config,
       startProgress({}, config),
       { max_pages: 2 },
       controller.signal,
-      session([], []),
-      async () => assert.fail('must not write')
-    )
+      session([page([11], false)], []),
+      async () => {
+        writes++
+      }
+    ),
+    (error) => error === reason
   )
+  assert.equal(writes, 0)
   let persisted: Record<string, unknown> = {}
   await assert.rejects(
     collectFavorites(
@@ -302,9 +308,11 @@ void test('a changed committed boundary restarts even when the first page has no
 
 void test('an abort during page reading prevents dispatching an uncommitted batch', async () => {
   const controller = new AbortController()
+  const reason = new Error('collection cancelled during page reading')
+  let writes = 0
   const target = session([page([11], false)], [])
   target.read = async () => {
-    controller.abort()
+    controller.abort(reason)
     return page([11], false)
   }
   await assert.rejects(
@@ -314,9 +322,13 @@ void test('an abort during page reading prevents dispatching an uncommitted batc
       { max_pages: 1 },
       controller.signal,
       target,
-      async () => assert.fail('must not write an aborted batch')
-    )
+      async () => {
+        writes++
+      }
+    ),
+    (error) => error === reason
   )
+  assert.equal(writes, 0)
 })
 
 void test('a head reorder during the same run prevents a false completed scan', async () => {

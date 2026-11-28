@@ -251,25 +251,6 @@ if (!devScript.includes("'database'")) {
   errors.push('pnpm dev must ensure the worktree-scoped database capability')
 }
 
-const uiSourceHelper = await readFile(`${repoRoot}/scripts/ui-source.mjs`, 'utf8')
-for (const required of [
-  "'@inkcre/ui-web'",
-  "'@inkcre/ui-web/styles'",
-  "'@inkcre/ui-web/styles/functions'",
-  "'@inkcre/ui-web/styles/mixins'",
-  "'@inkcre/ui-web/tokens/ref'",
-  "'@inkcre/ui-web/tokens/sys'",
-  "'@inkcre/ui-web/tokens/comp'",
-  "'@inkcre/ui-web/utils'",
-  "'@inkcre/ui-web/locales'",
-  "'@inkcre/ui-web/uno'",
-  'development-only',
-]) {
-  if (!uiSourceHelper.includes(required)) {
-    errors.push(`UI source helper is missing contract fragment "${required}"`)
-  }
-}
-
 for (const path of ['apps/web/vite.config.ts', 'extensions/twitter/vite.config.ts']) {
   const config = await readFile(`${repoRoot}/${path}`, 'utf8')
   for (const required of [

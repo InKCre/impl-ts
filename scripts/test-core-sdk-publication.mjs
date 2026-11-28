@@ -43,6 +43,7 @@ void test('draft recovery uploads missing saved assets without replacing an exis
   try {
     await mkdir(`${root}/packages/core`, { recursive: true })
     await mkdir(`${root}/.core-sdk-delivery`)
+    await mkdir(`${root}/remote-assets`)
     await writeFile(`${root}/packages/core/package.json`, JSON.stringify({ version: '0.5.0' }))
     await writeFile(`${root}/.core-sdk-delivery/source.json`, JSON.stringify(receipt))
     await writeFile(`${root}/.core-sdk-delivery/${receipt.asset}`, bytes)
@@ -56,10 +57,10 @@ const route = args[1];
 const method = args[args.indexOf('--method') + 1];
 let response;
 const asset = (name) => ({ name, url: 'https://api.github.com/' + (name.endsWith('.tgz') ? 'archive' : 'receipt'), browser_download_url: 'https://api.github.com/' + (name.endsWith('.tgz') ? 'archive' : 'receipt') });
-const release = () => ({ id: 12, tag_name: 'core-v0.4.0', target_commitish: process.env.SOURCE_REVISION, draft: !fs.existsSync('published'), assets: [fs.existsSync('archiveUploaded') && asset('inkcre-core-0.4.0.tgz'), fs.existsSync('uploaded') && asset('source.json')].filter(Boolean) });
+const release = () => ({ id: 12, tag_name: 'core-v0.4.0', target_commitish: process.env.SOURCE_REVISION, draft: !fs.existsSync('published'), assets: ['inkcre-core-0.4.0.tgz', 'source.json'].filter((name) => fs.existsSync('remote-assets/' + name)).map(asset) });
 if (route.startsWith('https://uploads.github.com/')) {
   const name = new URL(route).searchParams.get('name');
-  fs.writeFileSync(name.endsWith('.tgz') ? 'archiveUploaded' : 'uploaded', 'yes');
+  fs.writeFileSync('remote-assets/' + name, fs.readFileSync(args[args.indexOf('--input') + 1]));
   response = asset(name);
 } else if (method === 'POST') {
   fs.writeFileSync('created', 'yes');
@@ -73,14 +74,15 @@ process.stdout.write(JSON.stringify(response));
     )
     await chmod(`${root}/gh`, 0o700)
     await writeFile(`${root}/created`, 'yes')
-    await writeFile(`${root}/archiveUploaded`, 'yes')
+    await writeFile(`${root}/remote-assets/${receipt.asset}`, bytes)
     process.chdir(root)
     process.env.PATH = `${root}:${originalPath}`
     process.env.SOURCE_REVISION = source
     delete process.env.GITHUB_STEP_SUMMARY
     globalThis.fetch = async (url) => {
-      if (url.endsWith('/archive')) return new Response(bytes)
-      if (url.endsWith('/receipt')) return new Response(JSON.stringify(receipt))
+      if (url.endsWith('/archive'))
+        return new Response(await readFile(`remote-assets/${receipt.asset}`))
+      if (url.endsWith('/receipt')) return new Response(await readFile('remote-assets/source.json'))
       if (url.includes('/git/ref/'))
         return Response.json({ object: { type: 'commit', sha: source } })
       const exists = async (file) =>
@@ -90,13 +92,13 @@ process.stdout.write(JSON.stringify(response));
         )
       if (!(await exists('created')) || (await exists('invisibleList'))) return Response.json([])
       const assets = []
-      if (await exists('archiveUploaded'))
+      if (await exists(`remote-assets/${receipt.asset}`))
         assets.push({
           name: receipt.asset,
           url: 'https://api.github.com/archive',
           browser_download_url: 'https://api.github.com/archive',
         })
-      if (await exists('uploaded'))
+      if (await exists('remote-assets/source.json'))
         assets.push({
           name: 'source.json',
           url: 'https://api.github.com/receipt',
@@ -118,13 +120,16 @@ process.stdout.write(JSON.stringify(response));
     assert.equal(calls.length, 2)
     assert.match(calls[0][1], /releases\/12\/assets\?name=source.json$/)
     assert.ok(calls[1].includes('PATCH'))
+    assert.deepEqual(await readFile(`remote-assets/${receipt.asset}`), bytes)
+    assert.deepEqual(JSON.parse(await readFile('remote-assets/source.json', 'utf8')), receipt)
     await main('publish')
     assert.equal(
       await readFile('calls.jsonl', 'utf8'),
       calls.map((args) => JSON.stringify(args)).join('\n') + '\n'
     )
-    for (const file of ['created', 'archiveUploaded', 'uploaded', 'published', 'calls.jsonl'])
-      await rm(file)
+    for (const file of ['created', 'published', 'calls.jsonl']) await rm(file)
+    await rm('remote-assets', { recursive: true })
+    await mkdir('remote-assets')
     await writeFile('invisibleList', 'yes')
     await main('publish')
     const freshCalls = (await readFile('calls.jsonl', 'utf8')).trim().split('\n').map(JSON.parse)
@@ -136,6 +141,8 @@ process.stdout.write(JSON.stringify(response));
     assert.match(freshCalls[1][1], /releases\/12\/assets/)
     assert.match(freshCalls[2][1], /releases\/12\/assets/)
     assert.ok(freshCalls[3].includes('PATCH'))
+    assert.deepEqual(await readFile(`remote-assets/${receipt.asset}`), bytes)
+    assert.deepEqual(JSON.parse(await readFile('remote-assets/source.json', 'utf8')), receipt)
   } finally {
     process.chdir(originalDirectory)
     process.env.PATH = originalPath
