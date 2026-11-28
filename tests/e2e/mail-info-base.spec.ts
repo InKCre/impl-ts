@@ -327,7 +327,8 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
       expect.objectContaining({ from_: mimePart.id, to_: materialized!.id, content: 'content' }),
     ])
 
-    // A new document discards Resolver caches; content is rehydrated from the saved relation and bytes.
+    // The saved MIME child lies beyond the email's graph neighborhood. A new document must
+    // reload its complete relations and bytes, rather than reuse only the visible graph edges.
     await page.reload()
     await expect(content.getByRole('heading', { name: subject, exact: true })).toBeVisible()
     await expect(html.getByAltText('Architecture map')).toHaveJSProperty('naturalWidth', 1)

@@ -129,6 +129,10 @@ cancels pending ownership, including node drag start. Refocus waits for the same
 node-measurement boundary; later dimension changes can repair automatic positions and edge handles
 but cannot reacquire the viewport.
 
+图谱场景的关系只描述当前有限导航结果，不是节点的完整关系集合。预览仍使用
+`materializeMissing=false`；关系由各 Resolver 按需读取，不把可见边预装入共享 Resolver 缓存。
+因此详情与重新打开的内容可以读取当前场景之外的已持久化关系。
+
 Application Recall/Search is not part of an InfoBase View, but an active View may realize its selected
 destination. Recall defaults to List outside a View; Find path supplies two Block references to Graph.
 The retired `sink/graph` community/MDS layer is not a compatibility surface.
