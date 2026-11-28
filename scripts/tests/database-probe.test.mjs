@@ -14,9 +14,15 @@ void test('database probe distinguishes stale provenance from transport failure 
   const directory = await mkdtemp(join(tmpdir(), 'inkcre-probe-'))
   let coreStatus = 200
   let postgrestStatus = 401
+  let advertisements = []
   const requests = []
   const server = createServer((request, response) => {
     requests.push([request.method, request.url])
+    if (request.url.startsWith('/postgrest/peers?') && advertisements.length) {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify([advertisements.shift()]))
+      return
+    }
     const statuses = { '/core/readyz': coreStatus, '/postgrest/': postgrestStatus }
     response.writeHead(statuses[request.url] ?? 404)
     response.end()
@@ -129,6 +135,34 @@ void test('database probe distinguishes stale provenance from transport failure 
     assert.equal(ready.runtime_instance, descriptor.identity)
     assert.equal(ready.source_fingerprint, descriptor.source_fingerprint)
     const runtime = new URL('../database-runtime.mjs', import.meta.url).pathname
+    const capabilities = [
+      ['core.extension.management.v2', 'extension-management/v2'],
+      ['core.organization.rumination.v1', 'organization/ruminate'],
+      ['core.semantic_retrieval.v1', 'semantic-retrieval'],
+      ['core.feature_retrieval.lexical.v1', 'lexical-retrieval'],
+    ].map(([id, path]) => ({
+      id,
+      inbound: {
+        protocol: 'core.peer.protocol.http.v1',
+        parameters: { method: 'POST', url: origin + '/core/' + path },
+      },
+    }))
+    const future = new Date(Date.now() + 60_000).toISOString()
+    advertisements = [
+      { capabilities, lease_expires_at: null },
+      { capabilities: capabilities.slice(0, 3), lease_expires_at: future },
+      { capabilities, lease_expires_at: future },
+    ]
+    await writeFile(
+      join(directory, 'credential.json'),
+      JSON.stringify({ JWT_SECRET: 'isolated-test-signing-key-for-probe-only' })
+    )
+    await run(process.execPath, [runtime, 'ensure', 'probe-fixture'], { env, timeout: 5000 })
+    assert.equal(
+      advertisements.length,
+      0,
+      'ensure returned before a leased Peer advertised all required inbounds'
+    )
     for (const [args, refusal] of [
       [['stop', 'probe-fixture'], /owned by impl-py; web cannot stop it/],
       [['reset', 'probe-fixture', '--yes'], /owned by impl-py; reset it through the owner/],

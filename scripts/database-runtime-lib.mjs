@@ -29,6 +29,7 @@ const BROWSER_PEER_ID = '00000000-0000-4000-8000-000000000001'
 const CORE_PEER_ID = '00000000-0000-4000-8000-000000000002'
 
 const CORE_CAPABILITIES = new Map([
+  ['core.feature_retrieval.lexical.v1', { method: 'POST', path: '/lexical-retrieval' }],
   ['core.semantic_retrieval.v1', { method: 'POST', path: '/semantic-retrieval' }],
   ['core.organization.rumination.v1', { method: 'POST', path: '/organization/ruminate' }],
   ['core.extension.management.v2', { method: 'POST', path: '/extension-management/v2' }],
@@ -393,7 +394,7 @@ function expectedCapabilityUrl(baseUrl, path) {
 }
 
 function hasExpectedCapabilities(peer, baseUrl) {
-  if (!Array.isArray(peer?.capabilities) || Date.parse(peer.lease_expires_at) <= Date.now()) {
+  if (!Array.isArray(peer?.capabilities) || !(Date.parse(peer.lease_expires_at) > Date.now())) {
     return false
   }
   return [...CORE_CAPABILITIES].every(([id, expected]) => {
