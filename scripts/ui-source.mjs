@@ -32,7 +32,7 @@ export function isPathInside(directory, path) {
   )
 }
 
-export function readUiSourceInput(argv, environment = process.env) {
+export function readUiSourceInput(argv) {
   let argument
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -49,11 +49,11 @@ export function readUiSourceInput(argv, environment = process.env) {
     throw new Error(`Unknown UI source option "${current}"`)
   }
 
-  if (argument && environment[uiSourceEnvironmentVariable]) {
+  if (argument && process.env[uiSourceEnvironmentVariable]) {
     throw new Error(`Use either --ui-source or ${uiSourceEnvironmentVariable}, not both`)
   }
 
-  const input = argument ?? environment[uiSourceEnvironmentVariable]
+  const input = argument ?? process.env[uiSourceEnvironmentVariable]
   if (!input) {
     throw new Error(`Pass --ui-source <package-root> or set ${uiSourceEnvironmentVariable}`)
   }
@@ -105,8 +105,8 @@ export async function resolveUiSourcePackage(input, options = {}) {
   }
 }
 
-export async function resolveUiSourceFromEnvironment(environment = process.env) {
-  const input = environment[uiSourceEnvironmentVariable]
+export async function resolveUiSourceFromEnvironment() {
+  const input = process.env[uiSourceEnvironmentVariable]
   if (!input) return null
   if (!isAbsolute(input)) {
     throw new Error(`${uiSourceEnvironmentVariable} must be an absolute package root`)
@@ -114,8 +114,8 @@ export async function resolveUiSourceFromEnvironment(environment = process.env) 
   return resolveUiSourcePackage(input)
 }
 
-export async function resolveUiSourceForVite(command, environment = process.env) {
-  const uiSource = await resolveUiSourceFromEnvironment(environment)
+export async function resolveUiSourceForVite(command) {
+  const uiSource = await resolveUiSourceFromEnvironment()
   if (!uiSource) return null
   if (command !== 'serve') {
     throw new Error(
