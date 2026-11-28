@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { compileFunction } from 'node:vm'
 import ts from 'typescript'
 
 const source = await readFile(
@@ -68,7 +69,7 @@ function fixture(failure) {
     },
   }
   const exports = {}
-  new Function('require', 'exports', outputText)((name) => {
+  compileFunction(outputText, ['require', 'exports'])((name) => {
     assert.ok(Object.hasOwn(modules, name), `Unexpected dependency: ${name}`)
     return modules[name]
   }, exports)
@@ -81,7 +82,7 @@ for (const failure of [
   new DatabaseFailure(503),
   new Error('offline'),
 ]) {
-  test(`${failure.message} retries on the next wake with the original request and material`, async () => {
+  void test(`${failure.message} retries on the next wake with the original request and material`, async () => {
     const run = fixture(failure)
     const attempted = new Set()
     assert.equal(await run.deliverBatch(attempted), 1)
@@ -105,7 +106,7 @@ for (const failure of [
 }
 
 for (const status of [400, 401, 403, 404, 409, 422]) {
-  test(`HTTP ${status} keeps the original material blocked for manual recovery`, async () => {
+  void test(`HTTP ${status} keeps the original material blocked for manual recovery`, async () => {
     const run = fixture(new DatabaseFailure(status))
     assert.equal(await run.deliverBatch(new Set()), 1)
     assert.equal(run.current().state, 'blocked')
