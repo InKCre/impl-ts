@@ -17,7 +17,6 @@ void test('MF snapshots permit unused UI dependencies and validate emitted UI sh
     devDependencies: { '@inkcre/ui-web': '2.3.0' },
     inkcre: {
       name: 'inkcre/capture',
-      nickname: 'Capture',
       module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.4.0 <0.5.0' },
     },
   }
@@ -47,8 +46,16 @@ void test('MF snapshots permit unused UI dependencies and validate emitted UI sh
           exposes: [],
         })
       )
-      if (valid) assert.equal((await inspect()).name, 'inkcre/capture')
-      else await assert.rejects(inspect(), assert.AssertionError)
+      if (valid) {
+        const producer = await inspect()
+        assert.equal(producer.name, 'inkcre/capture')
+        assert.equal(Object.hasOwn(producer, 'nickname'), false)
+        await writeFile(corePackagePath, JSON.stringify({ version: '0.5.0' }))
+        await assert.rejects(inspect(), /@inkcre\/core 0\.5\.0 does not satisfy/)
+        await writeFile(corePackagePath, JSON.stringify({ version: '0.4.3' }))
+      } else {
+        await assert.rejects(inspect(), assert.AssertionError)
+      }
     }
   } finally {
     await rm(workspace, { recursive: true, force: true })
@@ -80,7 +87,6 @@ void test('a prepared Mail release does not publish another producer with pendin
         version: '0.4.0',
         inkcre: {
           name: `inkcre/${name}`,
-          nickname: name,
           module_federation: { host_sdk: '@inkcre/core', host_sdk_version: '>=0.4.0 <0.6.0' },
         },
       })

@@ -97,9 +97,6 @@ export function readAssociation(extensionPackage, corePackage) {
     'package.json inkcre metadata is required'
   )
   assert.match(association.name, EXTENSION_NAME_PATTERN, 'invalid canonical Extension Name')
-  const nickname = corePackage ? association.nickname : (association.nickname ?? association.name)
-  assert.equal(typeof nickname, 'string', 'Extension Nickname is required')
-  assert.ok(nickname.length > 0, 'Extension Nickname is required')
   assert.equal(
     validSemVer(extensionPackage.version),
     extensionPackage.version,
@@ -118,7 +115,6 @@ export function readAssociation(extensionPackage, corePackage) {
 
   return {
     name: association.name,
-    nickname,
     version: extensionPackage.version,
     module_federation: {
       host_sdk: distribution.host_sdk,
@@ -165,10 +161,10 @@ export async function inspectNativeModuleFederation({
   assert.equal(coreShare.length, 1, 'manifest must contain exactly one @inkcre/core shared module')
   const sharedRange = coreShare[0].requiredVersion?.replaceAll(',', ' ')
   assert.ok(validRange(sharedRange), 'manifest @inkcre/core requiredVersion is invalid')
-  const registryRange = association.module_federation.host_sdk_version.replaceAll(',', ' ')
+  const producerRange = association.module_federation.host_sdk_version.replaceAll(',', ' ')
   assert.ok(
-    subset(sharedRange, registryRange) && subset(registryRange, sharedRange),
-    'manifest @inkcre/core range must match the Registry Host SDK range'
+    subset(sharedRange, producerRange) && subset(producerRange, sharedRange),
+    'manifest @inkcre/core range must match the producer Host SDK range'
   )
   assert.ok(
     !corePackage || satisfies(corePackage.version, sharedRange),
@@ -219,7 +215,6 @@ export async function verifyPublicModuleFederation({
   assert.deepEqual(
     {
       name: release.name,
-      nickname: release.nickname,
       version: release.version,
       state: release.state,
       distribution: release.distribution,
@@ -230,7 +225,6 @@ export async function verifyPublicModuleFederation({
     },
     {
       name: local.name,
-      nickname: local.nickname,
       version: local.version,
       state: 'published',
       distribution: 'module_federation',
@@ -311,6 +305,12 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, 'utf8'))
 }
 
+function requireRegistryNickname(nickname) {
+  assert.equal(typeof nickname, 'string', 'Extension Nickname is required')
+  assert.ok(nickname.length > 0, 'Extension Nickname is required')
+  return nickname
+}
+
 export function prepareBody(local, provenance) {
   assert.ok(provenance && typeof provenance === 'object', 'MF provenance is required')
   assert.equal(
@@ -336,7 +336,7 @@ export function prepareBody(local, provenance) {
   }
 
   return {
-    nickname: local.nickname,
+    nickname: requireRegistryNickname(local.nickname),
     version: local.version,
     module_federation: {
       ...local.module_federation,
@@ -350,7 +350,7 @@ export function prepareBody(local, provenance) {
 export function previewRelease(local) {
   return {
     name: local.name,
-    nickname: local.nickname,
+    nickname: requireRegistryNickname(local.nickname),
     version: local.version,
     state: 'published',
     distribution: 'module_federation',
@@ -404,19 +404,21 @@ async function main() {
     await writeResult(options.output, await inspectNativeModuleFederation(shared))
     return
   }
-  if (command === 'prepare-body') {
-    await writeResult(
-      options.output,
-      prepareBody(await inspectNativeModuleFederation(shared), {
-        source_repository: requireOption(options, 'source-repository'),
-        source_revision: requireOption(options, 'source-revision'),
-        ...(options['build-id'] === undefined ? {} : { build_id: options['build-id'] }),
-      })
-    )
-    return
-  }
-  if (command === 'preview-release') {
-    await writeResult(options.output, previewRelease(await inspectNativeModuleFederation(shared)))
+  if (command === 'prepare-body' || command === 'preview-release') {
+    const [local, extensionPackage] = await Promise.all([
+      inspectNativeModuleFederation(shared),
+      readJson(shared.packagePath),
+    ])
+    const registryRelease = { ...local, nickname: extensionPackage.inkcre?.nickname }
+    const result =
+      command === 'preview-release'
+        ? previewRelease(registryRelease)
+        : prepareBody(registryRelease, {
+            source_repository: requireOption(options, 'source-repository'),
+            source_revision: requireOption(options, 'source-revision'),
+            ...(options['build-id'] === undefined ? {} : { build_id: options['build-id'] }),
+          })
+    await writeResult(options.output, result)
     return
   }
   if (command === 'verify-public') {

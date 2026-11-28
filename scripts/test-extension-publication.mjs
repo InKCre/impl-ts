@@ -266,7 +266,7 @@ void test('a publisher script release uploads one JavaScript asset without pushi
       sourceRevision,
       format: 'script',
     })
-    const association = readAssociation(extensionPackage)
+    const association = { ...readAssociation(extensionPackage), nickname: 'Fixture' }
     assert.equal(previewRelease(association).module_federation.python_repository, undefined)
     assert.equal(
       prepareBody(association, {
