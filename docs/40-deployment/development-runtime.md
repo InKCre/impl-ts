@@ -18,6 +18,23 @@
 
 规则例外必须说明真实合同。Twitter 可见区间使用 Unicode 码点，不能为了消除告警改成字素索引。顶层 `node:test` 注册显式丢弃返回 Promise，失败仍由测试运行器处理；子测试与业务异步操作仍须等待或处理失败。
 
+## 测试与验收入口
+
+`pnpm check` 依次执行格式、lint、类型、全部工作区构建和 `pnpm test:contracts`。CI 的 Workspace contract 在准备待发布的兼容版本后调用同一个 `test:contracts`，不另维护一份测试文件清单。该入口运行 `scripts/tests/*.test.mjs`、三个发布/准入测试入口，以及 Bilibili、CalDAV 和本地文件的 TypeScript 契约。`test:contracts` 需要本次源码对应的 Core `dist`；独立执行前先构建 Core。它包含 tarball 消费、声明编译、外部格式、故障注入和受控 HTTP 合同，不证明真实数据库或浏览器行为。
+
+| 入口                        | 证明与执行边界                                                                                                                                                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test:e2e:web`         | 创建并清理独占数据库，构建 Web、GitHub/Mail MF，运行浏览器数据库、已连接页面无障碍、Mail Host 读取与恢复。保留真实写入、重新读取及数据库 reset 后的基线核对。                                                                                      |
+| `pnpm test:e2e:webext`      | 构建 Chromium/Firefox 产物并验证身份与图标合同，运行真实浏览器自动化桥，再创建独占数据库执行采集、连接、部分进度和浏览器重启恢复；默认入口必须提供数据库，不能把缺少环境导致的跳过计为通过。Firefox 此处是构建/产物合同，不是 Firefox 运行时 E2E。 |
+| `pnpm test:mail`            | 真实 Mail renderer/Resolver 的浏览器阅读、键盘、窄屏、内容隔离和阅读位置恢复；图数据来自合成 I/O fixture，不代表 Python 邮箱采集或共享数据库持久化。                                                                                               |
+| `pnpm test:e2e` / `pnpm ci` | 前者执行以上三个浏览器入口；后者先执行 `pnpm check`。                                                                                                                                                                                              |
+
+两个数据库 E2E 共享实例准备、就绪、失败证据和清理 owner，但各自持有独立实例。CI 两个浏览器 job 使用同次解析的不可变 Core 镜像。本机 `local` 与 `ssh` provider 沿用运行时配置；选择 `external` 时，E2E 转用 `INKCRE_E2E_DATABASE_PROVIDER`（缺省 `ssh`），拒绝继续附着共享外部数据库。失败输出在 `test-results/database/<lane>/`，浏览器输出在 `test-results/playwright/`；清理失败保留 descriptor 并以非零退出，不能当作通过。
+
+聚焦复验可传 Playwright 参数，例如 `pnpm test:e2e:web --project accessibility` 或 `pnpm test:e2e:webext --grep "browser restart"`。显式 `--project` 替换 Web 默认项目集合；App 的 `test:a11y` 转发到同一个隔离入口，不启动日常 SVC/Portless 环境。根配置在 CI 拒绝 `test.only`。直接调用 Playwright 的专项/子集结果不代替上述完整入口。
+
+测试主要归属于产生承诺的 owner：SDK 打包与请求字节、Job 执行资格、采集检查点、格式兼容、浏览器存储与跨进程恢复、产物分发各保留独立风险。故障注入需要到达目标检查并核对具体诊断；读取恢复必须消费生产代码写下的状态。新增用例应说明已有证明漏掉的可信回归；删除或合并前先确认剩余 keeper。静态配置、慢速、负向或测试接缝本身不是删除理由。
+
 ## Capability Contract
 
 The committed [`svc.json`](../../svc.json) declares four worktree-scoped capabilities: `database`,
@@ -93,7 +110,7 @@ Vite 变量、Cloudflare bindings 或浏览器产物。业务链接、第三方 
 数据库签名凭据及浏览器扩展 API 默认值。它分析 JavaScript、TypeScript 和 Vue script 中的语法，
 跟踪同文件字符串常量与 schema 默认值。同一个自定义域名用作业务链接时通过，写入部署配置时拒绝；
 URL 路径和托管商域名都不是部署身份。跨模块导入的常量及任意跨模块数据流仍由代码审查负责。
-`pnpm check:runtime` 先运行判定规则的行为回归，再检查所有浏览器消费者和原生扩展。
+`pnpm check:runtime` 检查所有浏览器消费者和原生扩展；判定规则的行为回归由 `pnpm test:contracts` 统一执行。
 产物检查和正式 Web release 检查也先执行源码检查，再验证静态产物结构及已知凭据、旧配置通道的泄漏特征，
 不根据托管商域名封锁业务链接。
 
@@ -170,7 +187,7 @@ pnpm contract:sync
 pnpm test:e2e
 ```
 
-Twitter 与本地 Core 镜像的候选验收保存在 `scripts/tests/`，不加入默认 `check`、`test:e2e` 或 CI 门禁。可独立执行：
+本地 Core 镜像的准入契约已纳入 `test:contracts`，也可用 `verify:core-release` 单独复验。Twitter 跨部署验收需要下文指定的独占环境，按需执行。
 
 ```bash
 pnpm verify:core-release

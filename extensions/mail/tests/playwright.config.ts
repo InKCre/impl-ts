@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
+  forbidOnly: !!process.env.CI,
   testDir: '.',
   testMatch: '*.spec.ts',
   outputDir: new URL('../../../test-results/mail-newsletter', import.meta.url).pathname,
