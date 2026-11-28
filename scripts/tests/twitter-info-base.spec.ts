@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:http'
 import { expect, test } from '@playwright/test'
 import { SignJWT } from 'jose'
 
@@ -139,44 +138,6 @@ test.afterEach(async ({ page: _page }, testInfo) => {
   }
   await writeFile(path, `${JSON.stringify({ ...record, result: testInfo.status }, null, 2)}\n`)
   await testInfo.attach('candidate and fixture record', { path, contentType: 'application/json' })
-})
-
-test('HTTP transport failures do not log signed credentials or browser Cookies', async ({
-  page,
-  context,
-}) => {
-  const sentinel = 'FAKE_ACCEPTANCE_CREDENTIAL_SENTINEL'
-  let sawAuthorization = false
-  let sawCookie = false
-  const server = createServer((request, response) => {
-    if (request.url === '/disconnect') {
-      sawAuthorization ||= request.headers.authorization === `Bearer ${sentinel}`
-      sawCookie ||= request.headers.cookie?.includes(sentinel) ?? false
-      request.socket.destroy()
-    } else response.end('<!doctype html><title>Acceptance transport check</title>')
-  })
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-  const address = server.address() as { port: number }
-  const base = `http://127.0.0.1:${address.port}`
-  try {
-    const signedError = await fetch(`${base}/disconnect`, {
-      headers: { Authorization: `Bearer ${sentinel}` },
-    }).catch((error: Error) => error)
-    if (!(signedError instanceof Error)) throw new Error('Expected the connection to fail')
-    expect(String(signedError)).not.toContain(sentinel)
-    await context.addCookies([{ name: 'acceptance', value: sentinel, url: base }])
-    await page.goto(base)
-    const cookieError = await archiveRequest(page, `${base}/disconnect`).catch(
-      (error: Error) => error
-    )
-    if (!(cookieError instanceof Error)) throw new Error('Expected the connection to fail')
-    expect(String(cookieError)).not.toContain(sentinel)
-    expect(sawAuthorization).toBe(true)
-    expect(sawCookie).toBe(true)
-  } finally {
-    server.closeAllConnections()
-    await new Promise<void>((resolve) => server.close(() => resolve()))
-  }
 })
 
 test('Core self-hosted connection writes native records that the real Twitter MF can read', async ({

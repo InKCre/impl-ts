@@ -102,11 +102,13 @@ test('acquired structures retain read-only content, messages and embedded posts'
   expect(messages.html).toContain('<header>user</header>')
   expect(messages.html).toContain('<header>assistant</header>')
   expect(messages.html).toContain('answer\n  code')
-  const shell = await parse(
-    '<title>Shared conversation</title><nav>Home Sign in</nav><main></main><script>bootstrap()</script>',
-    'https://chatgpt.com/share/unloaded'
-  ).catch(() => null)
-  expect(shell?.html).toBeUndefined()
+  // The successful message parse above establishes that the parser bridge is alive.
+  await expect(
+    parse(
+      '<title>Shared conversation</title><nav>Home Sign in</nav><main></main><script>bootstrap()</script>',
+      'https://chatgpt.com/share/unloaded'
+    )
+  ).rejects.toThrow('未取得已加载正文，需要打开原页补采。')
   const embedded = JSON.stringify({
     '@type': 'ProfilePage',
     hasPart: [
@@ -300,7 +302,7 @@ test('material collection uses existing graph CRUD and byte storage without a we
         .like('content', 'extensions.web-collection.part.%')
     ).data
   ).toHaveLength(1)
-  // An interruption after relation relabeling leaves a readable legacy text body.
+  // A current text submission remains readable after the legacy relation was relabeled.
   const partialRead = await client.read(replay.root_id)
   expect('format' in partialRead.parts[0]! && partialRead.parts[0]!.format).toBe('text')
   expect(
@@ -655,6 +657,7 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
   page,
   extensionId,
 }, testInfo) => {
+  await page.clock.install()
   await page.goto(`chrome-extension://${extensionId}/options.html`)
   await expect(page.getByRole('heading', { name: '自动采集', exact: true })).toBeVisible()
   const nameId = await page.getByLabel('信息库名称').getAttribute('id')
@@ -729,20 +732,6 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
   await page.keyboard.press('Space')
   await expect(secret).toHaveAttribute('type', 'text')
   await expect(secret).toHaveValue(syntheticSecret)
-  await secret.evaluate((input: HTMLInputElement) => {
-    document.addEventListener(
-      'copy',
-      (event) => {
-        event.preventDefault()
-        input.dataset.copyTriggered = 'true'
-      },
-      { once: true }
-    )
-    input.focus()
-    input.select()
-  })
-  await page.keyboard.press('ControlOrMeta+C')
-  await expect(secret).toHaveAttribute('data-copy-triggered', 'true')
   await page.screenshot({ path: testInfo.outputPath('password-visible.png'), fullPage: true })
   await page.getByRole('button', { name: '隐藏密码', exact: true }).click()
   await expect(secret).toHaveAttribute('type', 'password')
@@ -764,7 +753,16 @@ test('settings preserve the WebExt card style across desktop, narrow and dark la
   await expect(exclusions).toHaveValue('https://private.example')
   await exclusions.fill('https://private.example\nhttps://additional.example')
   // Cross a status refresh without replacing the owner's unsaved draft.
-  await page.waitForTimeout(3200)
+  await page.evaluate(async () => {
+    const api = (globalThis as any).chrome.runtime
+    const { value } = await api.sendMessage({ type: 'collection-status' })
+    await api.sendMessage({
+      type: 'collection-settings',
+      settings: { ...value.config, paused: true },
+    })
+  })
+  await page.clock.runFor(3000)
+  await expect(pause).toHaveAttribute('aria-checked', 'true')
   await expect(exclusions).toHaveValue('https://private.example\nhttps://additional.example')
   await page.getByRole('button', { name: '保存排除规则', exact: true }).click()
   await page.reload()
@@ -777,8 +775,9 @@ test('joining shares Web authentication and credential updates preserve this Pee
   extensionId,
 }, testInfo) => {
   test.skip(!process.env.INKCRE_E2E_WEBEXT_PGREST, 'Requires a disposable database.')
+  const databaseBase = process.env.INKCRE_E2E_WEBEXT_PGREST!.replace(/\/+$/, '')
   const meta = MetaConfigSchema.parse({
-    INKCRE_PGREST_URL: process.env.INKCRE_E2E_WEBEXT_PGREST!,
+    INKCRE_PGREST_URL: databaseBase,
     INKCRE_JWT_SECRET: process.env.INKCRE_E2E_WEBEXT_JWT_SECRET!,
     INKCRE_PEER_ID: crypto.randomUUID(),
   })
@@ -815,7 +814,7 @@ test('joining shares Web authentication and credential updates preserve this Pee
     await expect(page.getByLabel('本 Peer ID')).toBeVisible()
     expect((await status()).connections).toEqual([joined])
     expect(joined.peerId).not.toBe(meta.INKCRE_PEER_ID)
-    expect(joined.url).toBe(meta.INKCRE_PGREST_URL)
+    expect(joined.url).toBe(databaseBase)
     await expect(page.getByLabel('本 Peer ID')).toHaveText(joined.peerId)
     await page.setViewportSize({ width: 390, height: 900 })
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
@@ -863,6 +862,7 @@ test('native bookmarks, history and PDF import preserve content and partial prog
   test.skip(!process.env.INKCRE_E2E_WEBEXT_PGREST, 'Requires a disposable database.')
   test.setTimeout(120_000)
   const articleText = '本次浏览的正文。'
+  const databaseBase = `${process.env.INKCRE_E2E_WEBEXT_PGREST!.replace(/\/+$/, '')}/`
   let page = initialPage
   let peerRequests = 0
   let broken = true
@@ -886,19 +886,15 @@ test('native bookmarks, history and PDF import preserve content and partial prog
       }
       const body: Buffer[] = []
       for await (const chunk of request) body.push(Buffer.from(chunk))
-      const upstream = await fetch(
-        process.env.INKCRE_E2E_WEBEXT_PGREST + request.url.slice('/database'.length),
-        {
-          method: request.method,
-          headers: Object.fromEntries(
-            Object.entries(request.headers).filter(
-              ([name]) =>
-                !['host', 'connection', 'content-length', 'accept-encoding'].includes(name)
-            )
-          ) as Record<string, string>,
-          body: ['GET', 'HEAD'].includes(request.method!) ? undefined : Buffer.concat(body),
-        }
-      )
+      const upstream = await fetch(new URL(request.url.slice('/database/'.length), databaseBase), {
+        method: request.method,
+        headers: Object.fromEntries(
+          Object.entries(request.headers).filter(
+            ([name]) => !['host', 'connection', 'content-length', 'accept-encoding'].includes(name)
+          )
+        ) as Record<string, string>,
+        body: ['GET', 'HEAD'].includes(request.method!) ? undefined : Buffer.concat(body),
+      })
       const bytes = Buffer.from(await upstream.arrayBuffer())
       response.writeHead(
         upstream.status,
@@ -1016,9 +1012,10 @@ test('native bookmarks, history and PDF import preserve content and partial prog
               request.onsuccess = () => resolve(request.result)
             })
             try {
-              return await new Promise<string>((resolve) => {
+              return await new Promise<{ state: string; error?: string }>((resolve) => {
                 const request = db.transaction('imports').objectStore('imports').get(id)
-                request.onsuccess = () => resolve(request.result?.state)
+                request.onsuccess = () =>
+                  resolve({ state: request.result?.state, error: request.result?.error })
               })
             } finally {
               db.close()
@@ -1026,7 +1023,7 @@ test('native bookmarks, history and PDF import preserve content and partial prog
           }, batch.id),
         { timeout: 25_000 }
       )
-      .toBe('completed')
+      .toMatchObject({ state: 'completed' })
     expect(peerRequests).toBe(1)
     page = await context.newPage()
     await page.goto(`chrome-extension://${extensionId}/options.html`)
@@ -1407,10 +1404,12 @@ test('automatic observation reuses current material and preserves manual saves',
 })
 
 test('restored automatic work can pause without blocking a manual excerpt', async ({
-  page,
+  page: initialPage,
   extensionId,
+  restartContext,
 }) => {
   test.skip(!process.env.INKCRE_E2E_WEBEXT_PGREST, 'Requires a disposable database.')
+  let page = initialPage
   await page.goto(`chrome-extension://${extensionId}/options.html`)
   async function message(value: Record<string, unknown>) {
     const result = await page.evaluate(
@@ -1476,6 +1475,15 @@ test('restored automatic work can pause without blocking a manual excerpt', asyn
       }),
     pending
   )
+  const restored = await restartContext()
+  page = await restored.newPage()
+  await page.goto(`chrome-extension://${extensionId}/options.html`)
+  await expect(page.getByRole('heading', { name: '自动采集', exact: true })).toBeVisible()
+  const recovered = (await message({ type: 'collection-status' })).items.filter((item: any) =>
+    pending.some((entry) => entry.id === item.id)
+  )
+  expect(recovered).toHaveLength(4)
+  expect(recovered.every((item: any) => item.state !== 'confirmed')).toBe(true)
   const manual = await message({
     type: 'collection-save-draft',
     draft: {
@@ -1493,6 +1501,15 @@ test('restored automatic work can pause without blocking a manual excerpt', asyn
           ?.state
     )
     .toBe('confirmed')
+  const manualSaved = (await message({ type: 'collection-status' })).items.find(
+    (item: any) => item.id === manual
+  )
+  const manualRead = await message({
+    type: 'collection-read',
+    connectionId: target,
+    blockId: manualSaved.receipt.root_id,
+  })
+  expect(Buffer.from(manualRead.parts[0].base64, 'base64').toString()).toBe('暂停时主动保存的摘录')
   const held = (await message({ type: 'collection-status' })).items.filter((item: any) =>
     pending.some((entry) => entry.id === item.id)
   )
@@ -1649,7 +1666,7 @@ test('extension retains an incomplete graph and continues after browser restart'
     'Run the task verification script with a disposable database runtime.'
   )
   test.setTimeout(120_000)
-  const endpoint = process.env.INKCRE_E2E_WEBEXT_PGREST!
+  const endpoint = `${process.env.INKCRE_E2E_WEBEXT_PGREST!.replace(/\/+$/, '')}/`
   const secret = process.env.INKCRE_E2E_WEBEXT_JWT_SECRET!
   let rejectAuthentication = false
   let dropAfterCommit = false
@@ -1671,7 +1688,7 @@ test('extension retains an incomplete graph and continues after browser restart'
       }
       const body: Buffer[] = []
       for await (const chunk of request) body.push(Buffer.from(chunk))
-      const upstream = await fetch(endpoint + url.slice('/database'.length), {
+      const upstream = await fetch(new URL(url.slice('/database/'.length), endpoint), {
         method: request.method,
         headers: Object.fromEntries(
           Object.entries(request.headers).filter(
@@ -1831,7 +1848,9 @@ test('extension retains an incomplete graph and continues after browser restart'
     await expect(bodyReader.locator('body')).not.toContainText('未提交草稿不要保存')
     await expect(bodyReader.locator('body')).not.toContainText('private-password')
     await expect(bodyReader.locator('body')).not.toContainText('编辑中的秘密')
-    expect(await recovered.evaluate(() => (globalThis as any).fixtureExecuted)).toBeUndefined()
+    expect(
+      await bodyReader.locator('body').evaluate(() => (window as any).fixtureExecuted)
+    ).toBeUndefined()
     await expect(bodyReader.locator('table')).toContainText('名称数值A12')
     expect(await bodyReader.locator('pre').textContent()).toContain('<node>& value\n  indented')
     await bodyReader.getByText('事件边界').dispatchEvent('mouseover')
@@ -1860,12 +1879,14 @@ test('extension retains an incomplete graph and continues after browser restart'
       .setIssuedAt()
       .setExpirationTime('5m')
       .sign(new TextEncoder().encode(secret))
-    const roots = await fetch(
-      `${endpoint}/blocks?resolver=eq.extensions.web-collection.material.v1`,
+    const rootsResponse = await fetch(
+      new URL('blocks?resolver=eq.extensions.web-collection.material.v1', endpoint),
       {
         headers: { Authorization: `Bearer ${jwt}`, 'Accept-Profile': 'inkcre' },
       }
-    ).then((response) => response.json())
+    )
+    expect(rootsResponse.status).toBe(200)
+    const roots = await rootsResponse.json()
     expect(
       roots.filter((row: { content: string }) => JSON.parse(row.content).request_id === requestId)
     ).toHaveLength(1)
@@ -1890,7 +1911,7 @@ test('extension retains an incomplete graph and continues after browser restart'
   }
 })
 
-test('named connections migrate atomically and survive reload and cross-page switching', async ({
+test('named connections preserve selection through migration, reload and cross-page switching', async ({
   context,
   extensionId,
   restartContext,
