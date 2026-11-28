@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ResolverCache, type Block } from '@inkcre/core'
+import { ResolverCache, type Block, type ImageSolvedContent } from '@inkcre/core'
 import { InkButton } from '@inkcre/ui-web'
 import { HTML_BODIES, NEWSLETTER_HTML, NEWSLETTER_TEXT } from '../newsletter'
 import { isolateMailHtml } from '../mailHtml'
@@ -33,14 +33,16 @@ const html = computed(() => {
   const cidUrls = new Map<string, string>()
   for (const item of props.embedded ?? []) {
     if (item.body.id !== props.block.id) continue
-    const child = item.mimePart.solvedContent.content?.solvedContent
-    if (
-      child &&
-      typeof child === 'object' &&
-      'objectUrl' in child &&
-      typeof child.objectUrl === 'string'
+    const child = item.mimePart.solvedContent.content
+    if (child?.block.resolver !== 'core.image.v1') continue
+    const image = child.solvedContent as ImageSolvedContent
+    // Opaque email frames cannot read Blob URLs owned by the parent document.
+    let binary = ''
+    for (const byte of image.content) binary += String.fromCharCode(byte)
+    cidUrls.set(
+      item.reference.toLowerCase(),
+      `data:application/octet-stream;base64,${btoa(binary)}`
     )
-      cidUrls.set(item.reference.toLowerCase(), child.objectUrl)
   }
   return isolateMailHtml(content.value, cidUrls, newsletter.value && !showOriginal.value)
 })
