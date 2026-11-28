@@ -42,7 +42,8 @@ if (
 for (const [path, expectedNodeFile] of [
   ['.github/workflows/ci.yml', 'package.json'],
   ['.github/workflows/pages-cleanup.yml', 'controller/package.json'],
-  ['.github/workflows/pages-preview.yml', 'candidate/package.json'],
+  ['.github/workflows/pages-preview-build.yml', 'candidate/package.json'],
+  ['.github/workflows/pages-preview.yml', 'controller/package.json'],
   ['.github/workflows/pages-deploy.yml', 'release/package.json'],
 ]) {
   const workflow = parse(await readFile(`${repoRoot}/${path}`, 'utf8'))
