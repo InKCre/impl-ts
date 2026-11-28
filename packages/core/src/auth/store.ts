@@ -6,14 +6,19 @@ import { signDatabaseToken } from './sign'
 export { signDatabaseToken } from './sign'
 
 const token = ref<string | undefined>(undefined)
+let signingSecret: string | undefined
 let expiresAt = 0
 
 async function newToken(): Promise<string> {
+  const secret = configStore.metaConfig.INKCRE_JWT_SECRET
   try {
-    const signedToken = await signDatabaseToken(configStore.metaConfig.INKCRE_JWT_SECRET)
+    const signedToken = await signDatabaseToken(secret)
 
-    expiresAt = decodeJwt<{ exp: number }>(signedToken).exp * 1000
-    token.value = signedToken
+    if (secret === configStore.metaConfig.INKCRE_JWT_SECRET) {
+      signingSecret = secret
+      expiresAt = decodeJwt<{ exp: number }>(signedToken).exp * 1000
+      token.value = signedToken
+    }
     return signedToken
   } catch (error) {
     console.error('[Auth] Failed to sign a new token:', error)
@@ -22,7 +27,11 @@ async function newToken(): Promise<string> {
 }
 
 async function getToken(): Promise<string> {
-  if (!token.value || Date.now() >= expiresAt) {
+  if (
+    !token.value ||
+    signingSecret !== configStore.metaConfig.INKCRE_JWT_SECRET ||
+    Date.now() >= expiresAt
+  ) {
     return await newToken()
   }
   return token.value
@@ -36,14 +45,13 @@ async function refreshToken(): Promise<string> {
 watch(
   () => configStore.metaConfig.INKCRE_JWT_SECRET,
   async (newSecret) => {
-    if (newSecret) {
-      try {
-        await newToken()
-      } catch (error) {
-        console.error('[Auth] Failed to generate token on secret change:', error)
-      }
-    } else {
-      token.value = undefined
+    token.value = undefined
+    signingSecret = undefined
+    if (!newSecret) return
+    try {
+      await newToken()
+    } catch (error) {
+      console.error('[Auth] Failed to generate token on secret change:', error)
     }
   },
   { immediate: true }

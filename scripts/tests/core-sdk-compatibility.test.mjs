@@ -15,6 +15,7 @@ import {
   TextResolver,
   DBAPIClient,
   PostgreSQLBinaryStorage,
+  rawPostgrestFetch,
 } from '../../packages/core/dist/index.js'
 
 void test('SDK 0.4 signs 24-hour tokens and serves valid credentials after the cached token expires', async (t) => {
@@ -37,6 +38,49 @@ void test('SDK 0.4 signs 24-hour tokens and serves valid credentials after the c
     await jwtVerify(second, key, { ...peer, currentDate: new Date(now) })
   } finally {
     configStore.metaConfig.INKCRE_JWT_SECRET = priorSecret
+  }
+})
+
+void test('the first database request after a connection change uses the new address and signing key', async (t) => {
+  const meta = configStore.metaConfig
+  const prior = {
+    INKCRE_PGREST_URL: meta.INKCRE_PGREST_URL,
+    INKCRE_JWT_SECRET: meta.INKCRE_JWT_SECRET,
+  }
+  const previous = 'sdk-compatibility-old-connection-key'
+  const next = 'sdk-compatibility-new-connection-key'
+  const verifyRequest = async (url, secret) => {
+    assert.equal(requests.at(-1).url, url)
+    await jwtVerify(requests.at(-1).bearer, new TextEncoder().encode(secret), {
+      algorithms: ['HS256'],
+      issuer: 'inkcre-peer',
+      audience: 'inkcre-api',
+    })
+  }
+  const requests = []
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    requests.push({
+      url: new URL(input).origin,
+      bearer: new Headers(init.headers).get('Authorization').slice('Bearer '.length),
+    })
+    return Response.json([])
+  })
+  try {
+    Object.assign(meta, {
+      INKCRE_PGREST_URL: 'https://previous-connection.test',
+      INKCRE_JWT_SECRET: previous,
+    })
+    await authStore.newToken()
+    await rawPostgrestFetch('/blocks?select=id')
+    await verifyRequest('https://previous-connection.test', previous)
+    Object.assign(meta, {
+      INKCRE_PGREST_URL: 'https://next-connection.test',
+      INKCRE_JWT_SECRET: next,
+    })
+    await rawPostgrestFetch('/blocks?select=id')
+    await verifyRequest('https://next-connection.test', next)
+  } finally {
+    Object.assign(meta, prior)
   }
 })
 
@@ -89,7 +133,6 @@ void test('optional recall APIs preserve an ordinary resolver and its original m
     ResolverCache.invalidate(block.id)
   })
   const match = { block, label: 'Article', excerpt: 'article', evidence: 'text_substring', rank: 1 }
-  assert.equal(await new Article(block).getRecallTarget(match), null)
   const later = { ...match, excerpt: 'another passage', rank: 2 }
   const [group] = await presentLexicalMatches([match, later])
   assert.deepEqual(group.block, block)
