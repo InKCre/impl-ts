@@ -81,7 +81,7 @@ void test('floating and unknown TZID wall times are not converted; folded text a
   assert.equal(result.text, text)
 })
 
-void test('unsafe photos and links cannot become active content; remote photos remain explicit links', () => {
+void test('unsafe vCard photos cannot become active content; remote photos remain explicit links', () => {
   for (const [photo, embedded, link] of [
     ['javascript:alert(1)', null, null],
     ['https://user:secret@example.com/', null, null],

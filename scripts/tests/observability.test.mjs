@@ -208,16 +208,6 @@ void test('database ingestion preserves portable identity, kind and event metada
       return new Response(null, { status: 201 })
     },
   })
-  await client.emit(record)
-  assert.equal(stored.attributes['inkcre.record.id'], record.id)
-  assert.equal(stored.attributes['inkcre.record.kind'], 'event')
-  assert.equal(stored.attributes['inkcre.event.name'], 'job.closed')
-  assert.equal(stored.id, undefined)
-  assert.deepEqual(
-    requests.filter((path) => path === '/logs'),
-    ['/logs']
-  )
-  const requestCount = requests.length
   const rejectsField = (field, message) => (error) => {
     assert.equal(error.name, 'ZodError')
     assert.ok(
@@ -249,8 +239,18 @@ void test('database ingestion preserves portable identity, kind and event metada
     ],
   ])
     await assert.rejects(client.query(input), rejectsField(field, message))
-  assert.equal(requests.length, requestCount, 'invalid input must fail before database I/O')
+  assert.deepEqual(requests, [], 'invalid input must fail before database I/O')
+
+  await client.emit(record)
+  assert.equal(stored.attributes['inkcre.record.id'], record.id)
+  assert.equal(stored.attributes['inkcre.record.kind'], 'event')
+  assert.equal(stored.attributes['inkcre.event.name'], 'job.closed')
+  assert.equal(stored.id, undefined)
   assert.equal(stored.body, record.body)
+  assert.deepEqual(
+    requests.filter((path) => path === '/logs'),
+    ['/logs']
+  )
 })
 
 void test('external writes skip unready Peers, carry backend expectation, and never retry rejected dispatch', async () => {

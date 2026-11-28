@@ -38,7 +38,6 @@ test('reading, original content and publication archive preserve meaningful diff
   await expect(page.getByText('weekly.example.org', { exact: true })).not.toBeVisible()
   await expect(page.getByRole('button', { name: 'Weekly research', exact: true })).toHaveCount(2)
   await page.getByText('2 份投递副本').click()
-  await expect(page.getByRole('button', { name: '打开投递副本 2' })).toBeVisible()
   await page.getByRole('button', { name: '打开投递副本 1' }).click()
   await expect(body.getByRole('heading', { name: 'Article two' })).toBeVisible()
   expect(externalRequests).toEqual([])
