@@ -137,6 +137,11 @@ export async function outbox(): Promise<OutboxItem[]> {
       .sort((a, b) => a.createdAt - b.createdAt)
   )
 }
+export async function outboxItem(id: string): Promise<OutboxItem | undefined> {
+  return transaction(['outbox'], 'readonly', async (tx) =>
+    OutboxItemSchema.optional().parse(await idbResult(tx.objectStore('outbox').get(id)))
+  )
+}
 export async function updateOutbox(item: OutboxItem): Promise<void> {
   const parsed = OutboxItemSchema.parse(item)
   await transaction(['outbox'], 'readwrite', async (tx) => {

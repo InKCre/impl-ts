@@ -18,6 +18,7 @@ import {
   connection,
   connections,
   outbox,
+  outboxItem,
   saveConnection,
   setSettings,
   settings,
@@ -201,10 +202,15 @@ export async function initializeCollection() {
 export async function collectionStatus() {
   const config = await settings()
   const targets = (await connections()).map(({ secret: _secret, ...target }) => target)
+  let confirmed = 0
   const items = (await outbox())
-    .map(({ command: _command, ...item }) => item)
     .reverse()
-    .slice(0, 100)
+    .filter((item) => {
+      if (item.state !== 'confirmed') return true
+      confirmed += 1
+      return confirmed <= 100
+    })
+    .map(({ command: _command, ...item }) => item)
   const imports = (await importRuns()).map(({ remaining, failures, ...run }) => ({
     ...run,
     remainingCount: remaining.length,
@@ -335,13 +341,15 @@ export async function handleCollectionMessage(
       z.number().int().parse(message.blockId)
     )
   if (type === 'collection-retry') {
-    const item = (await outbox()).find((entry) => entry.id === message.id)
+    const id = message.id
+    if (typeof id !== 'string') return
+    const item = await outboxItem(id)
     if (!item || item.state === 'confirmed') return
     if (item.importId) await changeImport(item.importId, 'resume')
     else
       await coordinate(async () => {
-        const latest = (await outbox()).find((entry) => entry.id === item.id)
-        if (latest && latest.state !== 'confirmed')
+        const latest = await outboxItem(id)
+        if (latest?.state === 'blocked')
           await updateOutbox({ ...latest, state: 'pending', error: undefined })
       })
     void wakeWork()

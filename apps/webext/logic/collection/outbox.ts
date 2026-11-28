@@ -8,6 +8,7 @@ import {
   enqueue,
   importRunning,
   outbox,
+  outboxItem,
   settings,
   updateOutbox,
 } from './store'
@@ -57,27 +58,28 @@ export async function deliverBatch(attempted: Set<string>): Promise<number> {
           Number(!!b.importId) || a.createdAt - b.createdAt
     )
   let dispatched = 0
-  for (const original of candidates) {
+  for (const candidate of candidates) {
     if (dispatched >= 3) break
-    const item = { ...original }
-    const shouldSend = await coordinate(async () => {
+    const item = await coordinate(async () => {
+      // A queued observation can be replaced while the previous request is in flight.
+      const item = await outboxItem(candidate.id)
+      if (!item || (item.state !== 'pending' && item.state !== 'sending')) return
       if (item.automatic) {
-        if (!allowsAutomatic(await settings(), item.url)) return false
-        if (!(await browser.permissions.contains({ origins: [siteMatchPattern(item.url)] })))
-          return false
+        if (!allowsAutomatic(await settings(), item.url)) return
+        if (!(await browser.permissions.contains({ origins: [siteMatchPattern(item.url)] }))) return
       }
-      if (item.importId && !(await importRunning(item.importId))) return false
+      if (item.importId && !(await importRunning(item.importId))) return
       if (!item.command) throw new Error('待发送材料缺失，请保留本机数据并检查迁移结果。')
-      item.state = 'sending'
-      await updateOutbox(item)
-      return true
+      const sending = { ...item, state: 'sending' as const, command: item.command }
+      await updateOutbox(sending)
+      return sending
     })
-    if (!shouldSend) continue
+    if (!item) continue
     dispatched++
     attempted.add(item.id)
     try {
       const target = await connection(item.connectionId)
-      const receipt = await materialClient(target).submit(item.command!)
+      const receipt = await materialClient(target).submit(item.command)
       await coordinate(() =>
         updateOutbox({ ...item, state: 'confirmed', receipt, command: undefined, error: undefined })
       )

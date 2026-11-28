@@ -1406,6 +1406,57 @@ test('automatic observation reuses current material and preserves manual saves',
   }
 })
 
+test('a failed save stays retryable after 100 newer confirmations', async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html`)
+  await page.evaluate(() => chrome.runtime.sendMessage({ type: 'collection-status' }))
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('inkcre-webext-collection')
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const db = request.result
+          const tx = db.transaction('outbox', 'readwrite')
+          const connectionId = crypto.randomUUID()
+          const store = tx.objectStore('outbox')
+          for (let index = 0; index <= 101; index++) {
+            const id = crypto.randomUUID()
+            store.put(
+              {
+                id,
+                connectionId,
+                createdAt: index,
+                automatic: false,
+                url: `https://source.test/save-${index}`,
+                state: index === 0 ? 'blocked' : 'confirmed',
+                error: index === 0 ? '测试连接暂不可用' : undefined,
+              },
+              id
+            )
+          }
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+          tx.onabort = () => {
+            db.close()
+            reject(tx.error)
+          }
+        }
+      })
+  )
+  await page.reload()
+  const delivery = page.getByRole('region', { name: '最近保存与待发送' })
+  const failed = delivery.getByRole('article').filter({ hasText: 'https://source.test/save-0' })
+  await expect(failed.getByRole('button', { name: '重试' })).toBeVisible()
+  await expect(delivery.getByRole('article')).toHaveCount(101)
+  await expect(delivery.getByRole('article').first()).toContainText('https://source.test/save-101')
+  await expect(delivery.getByRole('article').last()).toContainText('https://source.test/save-0')
+})
+
 test('restored automatic work can pause without blocking a manual excerpt', async ({
   page,
   extensionId,
