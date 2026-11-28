@@ -20,6 +20,25 @@ export function captureDatabaseConnection({
   return { baseUrl, tokenProvider, fetch: fetcher }
 }
 
+export type AuthorizeDatabaseRequest = (
+  requestUrl: string
+) => Promise<{ token: string; assertCurrent?: () => void }>
+
+export function createPostgrestFetch(
+  fetcher: typeof globalThis.fetch,
+  authorizeRequest: AuthorizeDatabaseRequest
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    const authorization = await authorizeRequest(
+      input instanceof Request ? input.url : String(input)
+    )
+    const headers = new Headers(init?.headers)
+    headers.set('Authorization', `Bearer ${authorization.token}`)
+    authorization.assertCurrent?.()
+    return fetcher(input, { ...init, headers })
+  }
+}
+
 function encodeTransportValue<Value>(value: unknown): Value {
   const encoded = JSON.stringify(value)
   if (encoded === undefined) {
@@ -59,9 +78,14 @@ export type RawPostgrestRequestOptions = RequestInit & {
  * The regular PostgREST client remains the owner of relational/JSON queries;
  * this seam exists for admitted media contracts such as raw bytea RPCs.
  */
-export async function rawPostgrestFetch(
+export function rawPostgrestFetch(path: string, options: RawPostgrestRequestOptions) {
+  return rawPostgrestFetchWithAuthorization(path, options)
+}
+
+export async function rawPostgrestFetchWithAuthorization(
   path: string,
-  options: RawPostgrestRequestOptions
+  options: RawPostgrestRequestOptions,
+  authorizeRequest?: AuthorizeDatabaseRequest
 ): Promise<Response> {
   const {
     schema = 'inkcre',
@@ -79,13 +103,15 @@ export async function rawPostgrestFetch(
     ? configuredBaseUrl
     : `${configuredBaseUrl}/`
   const url = new URL(path.replace(/^\//, ''), normalizedBaseUrl)
-  const token = await tokenProvider()
   const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${token}`)
   headers.set('Accept-Profile', schema)
   headers.set('Content-Profile', schema)
 
-  const response = await fetcher(url, { ...init, headers })
+  const request = createPostgrestFetch(
+    fetcher,
+    authorizeRequest ?? (async () => ({ token: await tokenProvider() }))
+  )
+  const response = await request(url, { ...init, headers })
   if (!response.ok) {
     const errorResponse = response.clone()
     let details: unknown
@@ -120,11 +146,7 @@ export class DatabaseClient<
     }
     super(normalizePostgrestBaseUrl(url.href), {
       schema: 'inkcre',
-      fetch: async (input, init) => {
-        const headers = new Headers(init?.headers)
-        headers.set('Authorization', `Bearer ${await tokenProvider()}`)
-        return fetcher(input, { ...init, headers })
-      },
+      fetch: createPostgrestFetch(fetcher, async () => ({ token: await tokenProvider() })),
     })
   }
 
