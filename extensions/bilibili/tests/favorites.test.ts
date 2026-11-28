@@ -130,7 +130,9 @@ void test('a shared video has one identity and separate stable membership record
     second.records.find((entry) => entry.resolver.endsWith('.membership.v1'))!.key
   )
   assert.deepEqual(
-    first.relations.map(({ from_key, content, to_key }) => [from_key, content, to_key]).sort(),
+    first.relations
+      .toSorted((left, right) => left.from_key.localeCompare(right.from_key))
+      .map(({ from_key, content, to_key }) => [from_key, content, to_key]),
     [
       ['folder:900123', 'contains', 'membership:900123:11'],
       ['membership:900123:11', 'item', 'video:11'],

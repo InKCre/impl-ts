@@ -8,9 +8,9 @@ async function openSetup(
   slug: string,
   capabilities: string[],
   run: (fixture: {
-    address(capability: string): string
-    database(path: string, method?: string, data?: object): Promise<unknown[]>
-    open(): Promise<void>
+    address: (capability: string) => string
+    database: (path: string, method?: string, data?: object) => Promise<unknown[]>
+    open: () => Promise<void>
     mutations: string[]
   }) => Promise<void>
 ) {
@@ -326,7 +326,7 @@ test('Twitter setup preserves rejected credentials and polls the transaction ret
       await open()
       const setup = page.locator('.twitter-setup')
       const id = setup.getByRole('textbox', { name: 'Client ID', exact: true })
-      const secret = setup.getByLabel('Client Secret', { exact: true })
+      const secret = setup.getByLabel(/Client Secret/)
       await id.fill('fixture-client')
       await secret.fill('fixture-only')
       await setup.getByRole('button', { name: 'Save application' }).click()

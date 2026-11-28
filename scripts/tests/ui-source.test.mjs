@@ -119,15 +119,17 @@ void test('development CLI selects web-ui and type-check:ui propagates errors fr
   const appRoot = join(checkout, 'apps/web')
   const uiRoot = join(root, 'ui/packages/web')
   await mkdir(join(appRoot, 'src'), { recursive: true })
+  // The fixture invokes the compiler already installed by the real workspace.
+  await writeFile(
+    join(checkout, 'pnpm-workspace.yaml'),
+    'packages: [apps/web]\nverifyDepsBeforeRun: false\n'
+  )
   await copyFile(join(repo, 'package.json'), join(checkout, 'package.json'))
   await copyFile(join(repo, 'apps/web/package.json'), join(appRoot, 'package.json'))
   await cp(join(repo, 'scripts'), join(checkout, 'scripts'), { recursive: true })
-  for (const [owner, fixture] of [
-    [repo, checkout],
-    [join(repo, 'apps/web'), appRoot],
-  ]) {
-    await symlink(join(owner, 'node_modules'), join(fixture, 'node_modules'), 'dir')
-  }
+  const bin = join(appRoot, 'node_modules/.bin')
+  await mkdir(bin, { recursive: true })
+  await symlink(join(repo, 'apps/web/node_modules/vue-tsc/bin/vue-tsc.js'), join(bin, 'vue-tsc'))
   await writeUiPackage(uiRoot)
   const uiEntry = join(uiRoot, 'src/index.ts')
   await writeFile(
@@ -154,7 +156,11 @@ require('node:fs').appendFileSync(process.env.CALLS_FILE, JSON.stringify({ args:
 `,
     { mode: 0o700 }
   )
-  const env = { ...process.env, PATH: root + ':' + process.env.PATH, CALLS_FILE: callsFile }
+  const env = {
+    ...process.env,
+    PATH: [root, dirname(process.execPath), process.env.PATH].join(':'),
+    CALLS_FILE: callsFile,
+  }
   delete env.SVC_DEV_TARGET
   delete env.INKCRE_UI_SOURCE_ROOT
   const run = (script) =>
