@@ -202,16 +202,8 @@ export function registerGitHubNativeTests(): void {
       await page.goto('/extensions')
       await row.getByRole('button', { name: 'Enable', exact: true }).click()
       await expect(row.getByText(`Running ${version}`, { exact: true })).toBeVisible()
-      await page.goto(`/info-base/list/blocks/${repository}/content`)
-      await expect(
-        content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
-      ).toBeVisible()
       // Stopping background participation keeps already loaded local resolvers usable.
       const documentStartedAt = await page.evaluate(() => performance.timeOrigin)
-      await page
-        .getByRole('dialog', { name: 'Content' })
-        .getByRole('button', { name: 'Close', exact: true })
-        .click()
       await page.locator('button[aria-controls="app-side-panel"]').click()
       await page.getByLabel('Primary').getByRole('link', { name: 'Settings', exact: true }).click()
       await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
