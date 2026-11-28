@@ -1106,6 +1106,12 @@ test('legacy configuration and pending notes survive the private-storage migrati
 }) => {
   await page.goto(`chrome-extension://${extensionId}/options.html`)
   await expect(page.getByRole('heading', { name: '自动采集', exact: true })).toBeVisible()
+  // Static headings render before background migration finishes. Its cleanup must not
+  // race the fixture's writes representing data from the previous extension version.
+  const initialized = await page.evaluate(() =>
+    (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-status' })
+  )
+  expect(initialized).toMatchObject({ ok: true, value: { connections: [] } })
   const legacy = {
     inkcre_app_config: JSON.stringify({
       INKCRE_PGREST_URL: 'http://127.0.0.1:9',
@@ -1934,8 +1940,13 @@ test('named connections preserve selection through migration, reload and cross-p
   const initial = await context.newPage()
   await initial.goto(`chrome-extension://${extensionId}/options.html`)
   await expect(initial.getByRole('heading', { name: '信息库', exact: true })).toBeVisible()
+  // Complete the empty profile's startup before installing the previous version's data.
+  const initialized = await initial.evaluate(() =>
+    (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-status' })
+  )
+  expect(initialized).toMatchObject({ ok: true, value: { connections: [] } })
   const [worker] = context.serviceWorkers()
-  await worker.evaluate(async (previous) => {
+  const seeded = await worker.evaluate(async (previous) => {
     const chrome = (globalThis as any).chrome
     await chrome.storage.local.set({
       inkcre_app_config: JSON.stringify(previous),
@@ -1944,7 +1955,9 @@ test('named connections preserve selection through migration, reload and cross-p
         connections: [{ name: '旧 API', url: 'https://legacy-api.example' }],
       }),
     })
+    return (await chrome.storage.local.get('inkcre_app_config')).inkcre_app_config
   }, previous)
+  expect(seeded).toBe(JSON.stringify(previous))
   const restarted = await restartContext()
   const page = await restarted.newPage()
   await page.goto(`chrome-extension://${extensionId}/options.html`)
