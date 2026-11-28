@@ -5,56 +5,98 @@ import { configStore } from '../config'
 import { signDatabaseToken } from './sign'
 export { signDatabaseToken } from './sign'
 
-const token = ref<string | undefined>(undefined)
-let signingSecret: string | undefined
-let expiresAt = 0
+/** Create reactive authentication for the currently selected connection. */
+export function createAuthStore(configStoreIns = configStore) {
+  const token = ref<string | undefined>(undefined)
+  let current = snapshot()
 
-async function newToken(): Promise<string> {
-  const secret = configStore.metaConfig.INKCRE_JWT_SECRET
-  try {
-    const signedToken = await signDatabaseToken(secret)
-
-    if (secret === configStore.metaConfig.INKCRE_JWT_SECRET) {
-      signingSecret = secret
-      expiresAt = decodeJwt<{ exp: number }>(signedToken).exp * 1000
-      token.value = signedToken
+  function snapshot() {
+    return {
+      baseUrl: configStoreIns.metaConfig.INKCRE_PGREST_URL,
+      secret: configStoreIns.metaConfig.INKCRE_JWT_SECRET,
+      expiresAt: 0,
+      pending: undefined as Promise<string> | undefined,
     }
-    return signedToken
-  } catch (error) {
-    console.error('[Auth] Failed to sign a new token:', error)
-    throw new Error('Failed to sign a new token')
   }
-}
 
-async function getToken(): Promise<string> {
-  if (
-    !token.value ||
-    signingSecret !== configStore.metaConfig.INKCRE_JWT_SECRET ||
-    Date.now() >= expiresAt
-  ) {
-    return await newToken()
+  function assertCurrent(connection: typeof current, requestUrl?: string) {
+    if (connection !== current)
+      throw new Error('Database connection changed during authentication.')
+    if (!requestUrl) return
+    if (!connection.baseUrl) throw new Error('PostgREST URL is not configured.')
+    const base = new URL(connection.baseUrl)
+    const target = new URL(requestUrl)
+    const basePath = base.pathname.replace(/\/+$/, '')
+    const matchesPath = target.pathname === basePath || target.pathname.startsWith(`${basePath}/`)
+    if (target.origin !== base.origin || !matchesPath) {
+      throw new Error('Database request does not match the selected connection.')
+    }
   }
-  return token.value
-}
 
-async function refreshToken(): Promise<string> {
-  return await newToken()
-}
-
-// Watch for JWT secret changes and regenerate token
-watch(
-  () => configStore.metaConfig.INKCRE_JWT_SECRET,
-  async (newSecret) => {
+  async function sign(connection: typeof current): Promise<string> {
     token.value = undefined
-    signingSecret = undefined
-    if (!newSecret) return
+    connection.expiresAt = 0
     try {
-      await newToken()
-    } catch (error) {
-      console.error('[Auth] Failed to generate token on secret change:', error)
+      const signedToken = await signDatabaseToken(connection.secret)
+      assertCurrent(connection)
+      const { exp } = decodeJwt(signedToken)
+      if (typeof exp !== 'number') throw new Error('Database token has no expiration.')
+      connection.expiresAt = exp * 1000
+      token.value = signedToken
+      return signedToken
+    } catch {
+      // Signing failures must not retain a usable cache or expose signing credentials.
+      throw new Error('Failed to sign a new token')
     }
-  },
-  { immediate: true }
-)
+  }
 
-export const authStore = { token, newToken, getToken, refreshToken }
+  async function newToken(): Promise<string> {
+    const connection = current
+    if (!connection.pending) {
+      connection.pending = sign(connection).finally(() => {
+        connection.pending = undefined
+      })
+    }
+    return connection.pending
+  }
+
+  async function getToken(): Promise<string> {
+    const connection = current
+    const signedToken =
+      token.value && Date.now() < connection.expiresAt ? token.value : await newToken()
+    // A connection can change while WebCrypto signs or another caller awaits the same promise.
+    assertCurrent(connection)
+    return signedToken
+  }
+
+  function requestAuthorizer() {
+    const connection = current
+    return async (requestUrl: string) => {
+      const assertRequestConnection = () => assertCurrent(connection, requestUrl)
+      assertRequestConnection()
+      const signedToken = await getToken()
+      return { token: signedToken, assertCurrent: assertRequestConnection }
+    }
+  }
+
+  async function refreshToken(): Promise<string> {
+    return newToken()
+  }
+
+  watch(
+    () => [
+      configStoreIns.metaConfig.INKCRE_PGREST_URL,
+      configStoreIns.metaConfig.INKCRE_JWT_SECRET,
+    ],
+    () => {
+      current = snapshot()
+      token.value = undefined
+    },
+    { flush: 'sync' }
+  )
+
+  return { token, newToken, getToken, refreshToken, requestAuthorizer }
+}
+
+/** Global authentication for the application-selected connection. */
+export const authStore = createAuthStore()
