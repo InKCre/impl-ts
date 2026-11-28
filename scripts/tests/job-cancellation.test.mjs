@@ -35,6 +35,14 @@ for (const scenario of [
     handled: false,
     updates: ['running'],
   },
+  {
+    name: 'a terminal write that matches no row does not report success',
+    cancelled: true,
+    eligible: false,
+    onClose: { status: 'timed_out' },
+    closeConflict: true,
+    updates: ['running', 'aborted'],
+  },
 ]) {
   void test(scenario.name, async (t) => {
     const prior = { ...configStore.metaConfig }
@@ -59,6 +67,7 @@ for (const scenario of [
       if (init.method === 'GET') return Response.json([job])
       const fields = JSON.parse(init.body)
       if (fields.status === 'running') Object.assign(job, scenario.onClaim)
+      else Object.assign(job, scenario.onClose)
       const id = url.searchParams.get('id')
       const status = url.searchParams.get('status')
       updates.push({ method: init.method, id, status, next: fields.status })
@@ -75,7 +84,12 @@ for (const scenario of [
     const handle = t.mock.fn(async () => {})
     JobManager.registerHandler(job.type, { parameters: MetaConfigSchema, canHandle, handle })
     try {
-      assert.equal(await JobManager.run(job.id), scenario.handled)
+      if (scenario.closeConflict) {
+        await assert.rejects(JobManager.run(job.id), /Job 81 no longer matches a running row/)
+        assert.equal(job.status, 'timed_out')
+      } else {
+        assert.equal(await JobManager.run(job.id), scenario.handled)
+      }
       assert.equal(canHandle.mock.callCount(), scenario.cancelled ? 0 : 1)
       assert.equal(handle.mock.callCount(), 0)
       assert.deepEqual(

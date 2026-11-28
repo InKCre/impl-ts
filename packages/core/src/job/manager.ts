@@ -104,16 +104,16 @@ export class JobManager {
     return result.data ? Job.parse(result.data) : null
   }
 
-  private static async close(job: Job, status: TerminalJobStatus): Promise<boolean> {
+  private static async close(job: Job, status: TerminalJobStatus): Promise<void> {
     const result = await Job.dbApi
       .update({ status, state: job.state })
       .eq('id', job.id)
       .eq('status', JobStatus.RUNNING)
       .select('id')
       .throwOnError()
-    const closed = (result.data?.length ?? 0) > 0
-    if (closed) job.status = status
-    return closed
+    if (!result.data?.length)
+      throw new Error(`Job ${job.id} no longer matches a running row while writing ${status}`)
+    job.status = status
   }
 
   static run(id: JobRef): Promise<boolean> {

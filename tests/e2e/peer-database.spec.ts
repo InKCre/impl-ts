@@ -716,7 +716,7 @@ test('disabling participation drains a dispatched claim before saving configurat
   }
 })
 
-test('Job execution distinguishes a denied claim, a competing claim, and a lost close reply', async ({
+test('Job execution distinguishes denied or competing claims, a conflicting close, and a lost close reply', async ({
   page,
 }) => {
   const authorization = `Bearer ${await token()}`
@@ -774,7 +774,7 @@ test('Job execution distinguishes a denied claim, a competing claim, and a lost 
       }
     }, type)
 
-    for (const scenario of ['denied', 'competing', 'lost-reply'] as const) {
+    for (const scenario of ['denied', 'competing', 'close-conflict', 'lost-reply'] as const) {
       const created = await fetch(`${postgrestUrl}jobs`, {
         method: 'POST',
         headers: { ...headers, Prefer: 'return=representation' },
@@ -810,7 +810,19 @@ test('Job execution distinguishes a denied claim, a competing claim, and a lost 
           })
           expect(winner.ok).toBe(true)
           await route.continue()
-        } else if (status === 'finished') {
+        } else if (scenario === 'close-conflict' && status === 'finished') {
+          const winner = await fetch(`${jobUrl}&status=eq.running`, {
+            method: 'PATCH',
+            headers: { ...headers, Prefer: 'return=representation' },
+            body: JSON.stringify({ status: 'timed_out' }),
+          })
+          expect(winner.ok).toBe(true)
+          expect(await winner.json()).toMatchObject([{ status: 'timed_out' }])
+          const conflict = await route.fetch()
+          expect(conflict.status()).toBe(200)
+          expect(await conflict.json()).toEqual([])
+          await route.fulfill({ response: conflict })
+        } else if (scenario === 'lost-reply' && status === 'finished') {
           const committed = await route.fetch()
           expect(committed.ok()).toBe(true)
           await route.abort('failed')
@@ -837,6 +849,12 @@ test('Job execution distinguishes a denied claim, a competing claim, and a lost 
           expect(result).toEqual({ accepted: false })
           expect(writes).toEqual(['running'])
           expect(persisted).toEqual([{ status: 'running', state: {} }])
+        } else if (scenario === 'close-conflict') {
+          expect(result).toEqual({
+            error: `Job ${id} no longer matches a running row while writing finished`,
+          })
+          expect(writes).toEqual(['running', 'finished'])
+          expect(persisted).toEqual([{ status: 'timed_out', state: {} }])
         } else {
           expect(result.error).toBeTruthy()
           expect(result.accepted).toBeUndefined()
