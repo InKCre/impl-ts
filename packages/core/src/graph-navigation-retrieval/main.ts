@@ -96,6 +96,7 @@ export class GraphNavigationRetrievalManager {
           contents: options.contents,
           cursor: options.cursor,
           limit: requested,
+          requireEndpoints: true,
         })
       )
     }
@@ -107,6 +108,7 @@ export class GraphNavigationRetrievalManager {
           contents: options.contents,
           cursor: options.cursor,
           limit: requested,
+          requireEndpoints: true,
         })
       )
     }
@@ -135,10 +137,13 @@ export class GraphNavigationRetrievalManager {
   static async getRelationNeighborhood(
     focalRelation: RelationRef
   ): Promise<RelationNeighborhood | null> {
-    const relation = await Relation.find(focalRelation)
+    const relation = await Relation.find(focalRelation, { requireEndpoints: true })
     if (!relation) return null
-    const blocks = await Block.getMany([relation.from_, relation.to_])
-    if (new Set(blocks.map((block) => block.id)).size !== 2) return null
+    const endpoints = new Set([relation.from_, relation.to_])
+    const blocks = await Block.getMany(endpoints)
+    const blockIds = new Set(blocks.map((block) => block.id))
+    if (blockIds.size !== endpoints.size || [...endpoints].some((id) => !blockIds.has(id)))
+      return null
     return RelationNeighborhoodSchema.parse({
       focal_relation: focalRelation,
       graph: { blocks, relations: [relation] },
@@ -296,6 +301,7 @@ export class GraphNavigationRetrievalManager {
           contents,
           cursor,
           limit: FRONTIER_RELATION_PAGE_SIZE,
+          requireEndpoints: true,
         })
         const last = page.at(-1)
         if (!last) break

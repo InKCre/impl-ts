@@ -178,6 +178,69 @@ export function registerGraphNavigationTests() {
       }
     })
 
+    test('graph navigation preserves relations whose endpoints are present', async () => {
+      const start = await createBlock('start')
+      const blockIds = [start]
+      try {
+        const target = await createBlock('target')
+        blockIds.push(target)
+        const [connected, ...incomplete] = await createRows('relations', [
+          { from_: start, to_: target, content: 'connected' },
+          { from_: start, to_: null, content: 'first absent target' },
+          { from_: start, to_: null, content: 'second absent target' },
+          { from_: null, to_: target, content: 'first absent source' },
+          { from_: null, to_: target, content: 'second absent source' },
+        ])
+        assert.equal(incomplete.filter((relation) => relation.to_ === null).length, 2)
+        assert.equal(incomplete.filter((relation) => relation.from_ === null).length, 2)
+        for (const focal of blockIds) {
+          const result = await graph.getBlockNeighborhood(focal, { limit: 1 })
+          assert.equal(result.focal_block, focal)
+          assert.deepEqual(new Set(result.graph.blocks.map((block) => block.id)), new Set(blockIds))
+          assert.deepEqual(
+            result.graph.relations.map((relation) => relation.id),
+            [connected.id]
+          )
+          assert.equal(result.next_cursor, null)
+        }
+
+        const outgoing = await graph.findPath(start, target, { direction: 'out' })
+        const incoming = await graph.findPath(target, start, { direction: 'in' })
+        for (const [path, expectedBlocks] of [
+          [outgoing, [start, target]],
+          [incoming, [target, start]],
+        ]) {
+          assert.equal(path.status, 'found')
+          assert.deepEqual(path.block_path, expectedBlocks)
+          assert.deepEqual(path.relation_path, [connected.id])
+        }
+
+        const { Relation } = await import('../../packages/core/dist/index.js')
+        for (const relation of incomplete) {
+          assert.equal(await graph.getRelationNeighborhood(relation.id), null)
+          await assert.rejects(() => Relation.find(relation.id), { name: 'ZodError' })
+        }
+
+        const [selfLoop] = await createRows('relations', {
+          from_: start,
+          to_: start,
+          content: 'self loop',
+        })
+        const neighborhood = await graph.getRelationNeighborhood(selfLoop.id)
+        assert.equal(neighborhood.focal_relation, selfLoop.id)
+        assert.deepEqual(
+          neighborhood.graph.blocks.map((block) => block.id),
+          [start]
+        )
+        assert.deepEqual(
+          neighborhood.graph.relations.map((relation) => relation.id),
+          [selfLoop.id]
+        )
+      } finally {
+        await removeBlocks(blockIds)
+      }
+    })
+
     test('parallel relations cannot mask a path within the Block budget', async () => {
       const [start, bridge, target, noise] = await createRows(
         'blocks',
