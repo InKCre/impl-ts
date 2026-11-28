@@ -58,7 +58,7 @@ void test('MF snapshots permit unused UI dependencies and validate emitted UI sh
   }
 })
 
-void test('a prepared Mail release does not publish another producer with pending intent', async () => {
+void test('a prepared Mail release does not publish another producer with pending intent', async (t) => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-independent-release-'))
   const json = (file, value) => writeFile(path.join(workspace, file), JSON.stringify(value))
   try {
@@ -85,6 +85,10 @@ void test('a prepared Mail release does not publish another producer with pendin
     })
     await writeFile(path.join(workspace, build, 'remoteEntry.js'), 'export default {}')
     const queried = []
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      queried.push(url.href)
+      return new Response('{}', { status: 404 })
+    })
     const plan = await captureCandidates({
       workspace,
       deliveryDirectory: path.join(workspace, 'candidate'),
@@ -95,17 +99,13 @@ void test('a prepared Mail release does not publish another producer with pendin
         build_id: 'same-run',
       },
       pendingPackages: new Set(['@inkcre/core', '@inkcre/ext-new-producer']),
-      fetchImplementation: async (url) => {
-        queried.push(url.pathname)
-        return new Response('{}', { status: 404 })
-      },
     })
     assert.deepEqual(
       plan.candidates.map((candidate) => candidate.name),
       ['inkcre/mail']
     )
     assert.deepEqual(queried, [
-      '/v2/extensions/inkcre/mail/distributions/module_federation/releases/0.4.0',
+      'https://registry.example.test/v2/extensions/inkcre/mail/distributions/module_federation/releases/0.4.0',
     ])
   } finally {
     await rm(workspace, { recursive: true, force: true })

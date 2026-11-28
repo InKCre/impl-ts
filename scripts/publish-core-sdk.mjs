@@ -52,7 +52,7 @@ export function validateRecoveryRun(run, comparison) {
   return run.head_sha
 }
 
-export function validateReceipt(receipt) {
+function validateReceipt(receipt) {
   assert.equal(receipt.name, '@inkcre/core')
   assert.match(receipt.version, /^\d+\.\d+\.\d+$/)
   assert.match(receipt.source_revision, /^[0-9a-f]{40}$/)

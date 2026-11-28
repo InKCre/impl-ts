@@ -43,11 +43,11 @@ class RegistryError extends Error {
   }
 }
 
-async function request(url, options, fetchImplementation) {
+async function request(url, options) {
   let response
   let body
   try {
-    response = await fetchImplementation(url, {
+    response = await fetch(url, {
       ...options,
       redirect: 'error',
       signal: AbortSignal.timeout(45_000),
@@ -79,9 +79,9 @@ function releaseUrl(registryUrl, name, version) {
   )
 }
 
-async function publicRelease(url, fetchImplementation) {
+async function publicRelease(url) {
   try {
-    const release = await request(url, {}, fetchImplementation)
+    const release = await request(url, {})
     assert.equal(
       release.distribution,
       'module_federation',
@@ -101,7 +101,6 @@ export async function captureCandidates({
   registryUrl,
   provenance,
   pendingPackages = new Set(),
-  fetchImplementation = fetch,
 }) {
   await mkdir(deliveryDirectory, { recursive: true })
   const candidates = []
@@ -125,8 +124,7 @@ export async function captureCandidates({
       continue
     }
     const existing = await publicRelease(
-      releaseUrl(registryUrl, manifest.inkcre.name, manifest.version),
-      fetchImplementation
+      releaseUrl(registryUrl, manifest.inkcre.name, manifest.version)
     )
     if (existing?.module_federation) {
       console.log(
@@ -204,19 +202,15 @@ export async function checkCandidates({ workspace, deliveryDirectory, registryUr
   return plan
 }
 
-async function finishPublication(url, token, fetchImplementation) {
+async function finishPublication(url, token) {
   // A new MF-only Release stays invisible while preparing. Retry publish, not just public GET.
   for (let attempt = 0; attempt < 7; attempt++) {
     if (attempt) await setTimeout(5_000)
     try {
-      const result = await request(
-        new URL(`${url.pathname}/publish`, url),
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        },
-        fetchImplementation
-      )
+      const result = await request(new URL(`${url.pathname}/publish`, url), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
       if (result.state === 'published' && result.module_federation) return
     } catch (error) {
       if (!error.uncertain && !(error.status === 409 && error.detail === OBJECTS_PENDING))
@@ -224,7 +218,7 @@ async function finishPublication(url, token, fetchImplementation) {
       console.warn(error.message)
     }
     try {
-      const visible = await publicRelease(url, fetchImplementation)
+      const visible = await publicRelease(url)
       if (visible?.module_federation) return
     } catch (error) {
       if (!error.uncertain) throw error
@@ -237,7 +231,7 @@ async function finishPublication(url, token, fetchImplementation) {
 }
 
 export async function publishCandidates(options) {
-  const { workspace, deliveryDirectory, registryUrl, token, fetchImplementation = fetch } = options
+  const { workspace, deliveryDirectory, registryUrl, token } = options
   assert.ok(token, 'publisher token is required')
   const plan = await checkCandidates(options)
   for (const candidate of plan.candidates) {
@@ -254,10 +248,9 @@ export async function publishCandidates(options) {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: prepare,
-      },
-      fetchImplementation
+      }
     )
-    const existing = await publicRelease(url, fetchImplementation)
+    const existing = await publicRelease(url)
     if (!existing?.module_federation) {
       const form = new FormData()
       form.append(
@@ -268,20 +261,16 @@ export async function publishCandidates(options) {
         'snapshot.zip'
       )
       try {
-        await request(
-          new URL(`${url.pathname}/module-federation`, url),
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: form,
-          },
-          fetchImplementation
-        )
+        await request(new URL(`${url.pathname}/module-federation`, url), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        })
       } catch (error) {
         if (!error.uncertain) throw error
         console.warn(`${error.message}; upload outcome is unknown, checking completion.`)
       }
-      await finishPublication(url, token, fetchImplementation)
+      await finishPublication(url, token)
     }
     const artifactDirectory = await mkdtemp(path.join(os.tmpdir(), 'inkcre-release-verification-'))
     try {
@@ -296,7 +285,6 @@ export async function publishCandidates(options) {
         packagePath: path.join(workspace, 'extensions', candidate.directory, 'package.json'),
         corePackagePath: path.join(workspace, 'packages/core/package.json'),
         artifactDirectory,
-        fetchImplementation,
       })
       const summary = `${candidate.name} ${candidate.version}: published and verified (${result.verified_assets} files), ZIP SHA256 ${candidate.sha256}.\n`
       console.log(summary.trim())

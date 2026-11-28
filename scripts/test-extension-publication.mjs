@@ -28,20 +28,23 @@ void test('a rerun cannot replace a missing or expired release candidate', () =>
 // A real HTTP fault-injection boundary for the publisher, not a replacement Registry implementation.
 void test('an unknown MF-only upload resumes the saved ZIP and verifies even an existing association', async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'inkcre-publication-test-'))
-  let registryUrl = 'https://registry.example.test'
+  let registryUrl
   const prefix = '/extensions/test/source/1.0.0/module-federation/'
   const build = path.join(workspace, 'extensions/source/dist/web')
   const uploaded = path.join(workspace, 'uploaded')
-  let prepared
+  const releases = '/v2/extensions/test/source/distributions/module_federation/releases'
+  const release = `${releases}/1.0.0`
   let published = false
   let uploads = 0
   let publishes = 0
   let writes = 0
   let corrupt = false
+  let missingHeader
   let forceConflict = false
   const server = createServer(async (req, res) => {
     try {
-      res.setHeader('Access-Control-Allow-Origin', '*')
+      if (req.headers.origin === 'https://app.inkcre.dev')
+        res.setHeader('Access-Control-Allow-Origin', '*')
       const json = (status, body) => {
         res.writeHead(status, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(body))
@@ -64,15 +67,24 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
         const chunks = []
         for await (const chunk of req) chunks.push(chunk)
         const body = Buffer.concat(chunks)
-        if (req.url.endsWith('/releases')) {
+        if (req.url === releases) {
           if (forceConflict)
             return json(409, { detail: 'Module Federation association is immutable' })
           const value = JSON.parse(body)
-          if (prepared) assert.deepEqual(value, prepared)
-          prepared = value
+          assert.deepEqual(value, {
+            nickname: 'Source',
+            version: '1.0.0',
+            module_federation: {
+              host_sdk: '@inkcre/core',
+              host_sdk_version: '>=0.2.0 <0.4.0',
+              source_repository: 'https://github.com/InKCre/impl-ts',
+              source_revision: 'exact-source',
+              build_id: 'same-run',
+            },
+          })
           return json(200, { state: 'preparing' })
         }
-        if (req.url.endsWith('/module-federation')) {
+        if (req.url === `${release}/module-federation`) {
           uploads++
           const form = await new Response(body, {
             headers: { 'Content-Type': req.headers['content-type'] },
@@ -83,7 +95,7 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
           // Heroku can return H12 while the server keeps processing this exact archive.
           return json(503, { detail: 'H12 request timeout' })
         }
-        if (req.url.endsWith('/publish')) {
+        if (req.url === `${release}/publish`) {
           publishes++
           if (publishes === 1)
             return json(409, {
@@ -93,9 +105,10 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
           return json(200, record())
         }
       }
-      if (req.url.startsWith('/v2/'))
+      if (req.method === 'GET' && req.url === release)
         return json(published ? 200 : 404, published ? record() : { detail: 'not found' })
-      if (!published) return json(404, { detail: 'not found' })
+      if (req.method !== 'GET' || !published || !req.url.startsWith(prefix))
+        return json(404, { detail: 'not found' })
       const relativePath = req.url.slice(prefix.length)
       let bytes = await readFile(path.join(uploaded, relativePath))
       if (relativePath === 'mf-manifest.json') {
@@ -104,7 +117,9 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
         bytes = Buffer.from(JSON.stringify(manifest))
       }
       if (corrupt && relativePath === 'transitive.js') bytes = Buffer.from('changed')
-      res.writeHead(200, { 'Cache-Control': 'public, no-cache', ETag: '"snapshot"' })
+      res.setHeader('Cache-Control', 'public, no-cache')
+      res.setHeader('ETag', '"snapshot"')
+      if (relativePath === 'transitive.js' && missingHeader) res.removeHeader(missingHeader)
       res.end(bytes)
     } catch (error) {
       res.writeHead(500)
@@ -145,8 +160,7 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
     await writeFile(path.join(build, '.vite/manifest.json'), '{}')
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
-    const origin = `http://127.0.0.1:${server.address().port}`
-    registryUrl = origin
+    registryUrl = `http://127.0.0.1:${server.address().port}`
     const options = {
       workspace,
       registryUrl,
@@ -157,7 +171,6 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
         source_revision: 'exact-source',
         build_id: 'same-run',
       },
-      fetchImplementation: (url, init) => fetch(new URL(new URL(url).pathname, origin), init),
     }
     await assert.rejects(
       verifyPublicModuleFederation({
@@ -184,6 +197,25 @@ void test('an unknown MF-only upload resumes the saved ZIP and verifies even an 
     corrupt = true
     await assert.rejects(publishCandidates(options), /public asset bytes differ: transitive.js/)
     corrupt = false
+    // Read the already uploaded snapshot through the public verification command's owner.
+    for (const [header, refusal] of [
+      ['Access-Control-Allow-Origin', /asset transitive.js must allow browser reads/],
+      ['Cache-Control', /asset transitive.js must revalidate Registry readability/],
+      ['ETag', /asset transitive.js must include an ETag/],
+    ]) {
+      missingHeader = header
+      await assert.rejects(
+        verifyPublicModuleFederation({
+          registryUrl,
+          packagePath: path.join(workspace, 'extensions/source/package.json'),
+          corePackagePath: path.join(workspace, 'packages/core/package.json'),
+          artifactDirectory: uploaded,
+        }),
+        refusal,
+        header
+      )
+    }
+    missingHeader = undefined
     forceConflict = true
     const beforeConflict = writes
     await assert.rejects(publishCandidates(options), /association is immutable/)

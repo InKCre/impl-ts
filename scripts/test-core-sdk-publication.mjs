@@ -4,13 +4,7 @@ import test from 'node:test'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import {
-  main,
-  savedCandidate,
-  validateReceipt,
-  verifyRelease,
-  validateRecoveryRun,
-} from './publish-core-sdk.mjs'
+import { main, savedCandidate, verifyRelease, validateRecoveryRun } from './publish-core-sdk.mjs'
 
 void test('partial reruns require the original unexpired SDK candidate', () => {
   assert.equal(savedCandidate([], '1'), undefined)
@@ -157,13 +151,13 @@ process.stdout.write(JSON.stringify(response));
 
 void test('published SDK is verified against source tag and every saved package byte', async () => {
   const bytes = Buffer.from('original prebuilt SDK archive')
-  const receipt = validateReceipt({
+  const receipt = {
     name: '@inkcre/core',
     version: '0.4.0',
     source_revision: 'a'.repeat(40),
     asset: 'inkcre-core-0.4.0.tgz',
     sha256: createHash('sha256').update(bytes).digest('hex'),
-  })
+  }
   const release = {
     draft: false,
     prerelease: false,
@@ -200,7 +194,11 @@ void test('published SDK is verified against source tag and every saved package 
     await assert.rejects(verifyRelease(release, '0.4.0', receipt), /bytes differ/)
     archive = bytes
     tag = 'b'.repeat(40)
-    await assert.rejects(verifyRelease(release, '0.4.0', receipt))
+    await assert.rejects(verifyRelease(release, '0.4.0', receipt), {
+      code: 'ERR_ASSERTION',
+      actual: tag,
+      expected: receipt.source_revision,
+    })
     tag = receipt.source_revision
     await assert.rejects(
       verifyRelease(release, '0.4.0', { ...receipt, source_revision: 'b'.repeat(40) }),
@@ -221,7 +219,17 @@ void test('recovery accepts only the same completed workflow from protected main
     head_sha: 'a'.repeat(40),
   }
   assert.equal(validateRecoveryRun(run, { status: 'ahead' }), run.head_sha)
-  for (const field of ['event', 'head_branch', 'path', 'status', 'head_sha'])
-    assert.throws(() => validateRecoveryRun({ ...run, [field]: 'invalid' }, { status: 'ahead' }))
+  for (const [field, error] of [
+    ['event', /admitted main push/],
+    ['head_branch', { code: 'ERR_ASSERTION', expected: 'main' }],
+    ['path', { code: 'ERR_ASSERTION', expected: '.github/workflows/core-sdk-release.yml' }],
+    ['status', /must have completed/],
+    ['head_sha', { code: 'ERR_ASSERTION', actual: 'invalid' }],
+  ]) {
+    assert.throws(
+      () => validateRecoveryRun({ ...run, [field]: 'invalid' }, { status: 'ahead' }),
+      error
+    )
+  }
   assert.throws(() => validateRecoveryRun(run, { status: 'diverged' }), /main history/)
 })
