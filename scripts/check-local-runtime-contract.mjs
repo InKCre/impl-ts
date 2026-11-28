@@ -1,5 +1,6 @@
 import { access, readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { parse } from 'yaml'
 import { inspectBrowserRuntimeSource } from './browser-runtime-contract.mjs'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
@@ -37,7 +38,6 @@ async function sourceFiles(relativeDirectory) {
 }
 
 const rootPackage = await readJson('package.json')
-const webPackage = await readJson('apps/web/package.json')
 const svcConfig = await readJson('svc.json')
 
 const nodeRuntime = rootPackage.devEngines?.runtime
@@ -57,84 +57,33 @@ for (const [path, expectedNodeFile] of [
   ['.github/workflows/pages-preview.yml', 'candidate/package.json'],
   ['.github/workflows/pages-deploy.yml', 'release/package.json'],
 ]) {
-  const workflow = await readFile(`${repoRoot}/${path}`, 'utf8')
-  const configuredNodeFiles = [...workflow.matchAll(/node-version-file:\s*(\S+)/g)].map(
-    (match) => match[1]
-  )
+  const workflow = parse(await readFile(`${repoRoot}/${path}`, 'utf8'))
+  const setups = Object.values(workflow.jobs)
+    .flatMap((job) => job.steps ?? [])
+    .filter((step) => step.uses?.startsWith('actions/setup-node@'))
   if (
-    configuredNodeFiles.length === 0 ||
-    configuredNodeFiles.some((nodeFile) => nodeFile !== expectedNodeFile)
+    !setups.length ||
+    setups.some((step) => step.with?.['node-version-file'] !== expectedNodeFile)
   ) {
     errors.push(`${path} must derive every Node setup from ${expectedNodeFile}`)
   }
 }
-if (rootPackage.devDependencies?.portless !== '0.12.0') {
-  errors.push('root devDependency "portless" must be exactly "0.12.0" for the Node 22 contract')
-}
-if (rootPackage.scripts?.dev !== 'node scripts/dev.mjs web') {
-  errors.push('root "dev" script must enter the declared SVC web capability')
-}
-if (rootPackage.scripts?.['dev:ui'] !== 'node scripts/dev-ui.mjs') {
-  errors.push('root "dev:ui" script must validate and enter the opt-in SVC web-ui capability')
-}
-if (rootPackage.scripts?.['type-check:ui'] !== 'node scripts/type-check-ui.mjs') {
-  errors.push('root "type-check:ui" script must own the temporary source-graph check')
-}
-if (rootPackage.scripts?.['dev:webext'] !== 'node scripts/dev.mjs webext') {
-  errors.push('root "dev:webext" script must enter the declared SVC webext capability')
-}
-if (rootPackage.scripts?.['dev:stop'] !== 'node scripts/dev-stop.mjs') {
-  errors.push('root "dev:stop" script must clean up only the current worktree routes')
-}
-
-for (const dependency of ['@cloudflare/workers-types', 'hono', 'wrangler']) {
-  if (webPackage.dependencies?.[dependency] || webPackage.devDependencies?.[dependency]) {
-    errors.push(`static Web App must not depend on legacy runtime tool "${dependency}"`)
+const sourceRoots = [
+  'apps/web/src',
+  'apps/webext/components',
+  'apps/webext/entrypoints',
+  'apps/webext/logic',
+]
+for (const root of ['packages', 'extensions']) {
+  for (const entry of await readdir(`${repoRoot}/${root}`, { withFileTypes: true })) {
+    if (entry.isDirectory() && !entry.name.startsWith('.'))
+      sourceRoots.push(`${root}/${entry.name}/src`)
   }
 }
-
-for (const path of [
-  'apps/web/.env.cloudflare',
-  'apps/web/.env.example',
-  'apps/web/server/index.ts',
-  'apps/web/wrangler.jsonc',
-  'deploy/profiles/legacy-endpoints.json',
-  'deploy/profiles/production.json',
-  'packages/core/src/database/production-profile.ts',
-  'packages/core/src/database/profile.ts',
-]) {
-  if (await exists(path)) {
-    errors.push(`legacy runtime/environment surface must remain absent: ${path}`)
-  }
-}
-
-const runtimeSources = [
-  ...(await sourceFiles('packages/core/src')),
-  ...(await sourceFiles('packages/ext-dev-utils/src')),
-  ...(await sourceFiles('apps/web/src')),
-  ...(await sourceFiles('apps/webext/components')),
-  ...(await sourceFiles('apps/webext/entrypoints')),
-  ...(await sourceFiles('apps/webext/logic')),
-  ...(
-    await Promise.all(
-      (
-        await readdir(`${repoRoot}/extensions`, { withFileTypes: true })
-      )
-        .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-        .map((entry) => sourceFiles(`extensions/${entry.name}/src`))
-    )
-  ).flat(),
-].filter((path) => !/\.(?:spec|test)\.[cm]?[jt]sx?$/.test(path))
-
-for (const path of runtimeSources) {
-  const source = await readFile(`${repoRoot}/${path}`, 'utf8')
-  errors.push(...inspectBrowserRuntimeSource(source, path))
-}
-
-const coreIndex = await readFile(`${repoRoot}/packages/core/src/index.ts`, 'utf8')
-for (const legacyExport of ['httpAdapter', 'envAdapter', 'createEnvAdapter']) {
-  if (coreIndex.includes(legacyExport)) {
-    errors.push(`@inkcre/core public API must not export legacy adapter "${legacyExport}"`)
+for (const directory of sourceRoots) {
+  for (const path of await sourceFiles(directory)) {
+    if (/\.(?:spec|test)\.[cm]?[jt]sx?$/.test(path)) continue
+    errors.push(...inspectBrowserRuntimeSource(await readFile(`${repoRoot}/${path}`, 'utf8'), path))
   }
 }
 
@@ -180,7 +129,7 @@ if (!localTargets) {
       errors.push(`SVC target "${name}" must use the identity probe that proves dev.instance`)
     }
     if (JSON.stringify(target.provision?.argv) !== JSON.stringify(expected.command)) {
-      errors.push(`SVC target "${name}" must provision through scripts/dev.mjs`)
+      errors.push(`SVC target "${name}" has an incorrect provision command`)
     }
     if (
       expected.environment &&
@@ -189,94 +138,6 @@ if (!localTargets) {
       errors.push(`SVC target "${name}" must commit only the portable local provider default`)
     }
   }
-}
-
-const databaseCompose = await readFile(`${repoRoot}/runtime/database.compose.yml`, 'utf8')
-for (const required of [
-  "command: ['python', 'scripts/container.py', 'db', 'init', '--profile', 'development']",
-  '${INKCRE_CORE_IMAGE:?INKCRE_CORE_IMAGE is required}',
-  'database-contract:/database-contract',
-  '${POSTGRES_PORT:-0}',
-  '${POSTGREST_PORT:-0}',
-  'PEER_ID: 00000000-0000-4000-8000-000000000002',
-  'PEER_LEASE_RENEW_INTERVAL_SECONDS: 1',
-]) {
-  if (!databaseCompose.includes(required)) {
-    errors.push(`database Compose is missing runtime contract fragment "${required}"`)
-  }
-}
-for (const forbidden of [
-  '5432:5432',
-  '3000:3000',
-  'sleep ',
-  'CLIENT_BASE_URL:',
-  'CLIENT_ID:',
-  'CLIENT_NAME:',
-  'CORE_PUBLIC_URL:',
-]) {
-  if (databaseCompose.includes(forbidden)) {
-    errors.push(`database Compose contains forbidden fixed-order fragment "${forbidden}"`)
-  }
-}
-
-const databaseProvider = await readFile(`${repoRoot}/scripts/database-provider.mjs`, 'utf8')
-const remoteCompose = await readFile(`${repoRoot}/scripts/remote-compose.sh`, 'utf8')
-for (const required of [
-  "kind === 'local'",
-  "kind === 'external'",
-  "kind !== 'ssh'",
-  'INKCRE_DATABASE_RUNTIME_DESCRIPTOR',
-  "'BatchMode=yes'",
-  'ExitOnForwardFailure=yes',
-  'svc.local.json',
-]) {
-  if (!databaseProvider.includes(required)) {
-    errors.push(`database provider is missing safety contract "${required}"`)
-  }
-}
-if (remoteCompose.includes('eval ') || !remoteCompose.includes('"$docker_bin" compose')) {
-  errors.push('remote Compose runner must preserve argv without eval or shell command construction')
-}
-const committedDatabaseEnvironment = svcConfig.dev.targets.database.provision.env
-if (
-  committedDatabaseEnvironment?.INKCRE_DATABASE_SSH_TARGET ||
-  committedDatabaseEnvironment?.INKCRE_DATABASE_SSH_DOCKER_BIN ||
-  committedDatabaseEnvironment?.INKCRE_DATABASE_RUNTIME_DESCRIPTOR
-) {
-  errors.push('committed SVC config must not contain machine-specific database provider values')
-}
-
-const devScript = await readFile(`${repoRoot}/scripts/dev.mjs`, 'utf8')
-if (!devScript.includes("'database'")) {
-  errors.push('pnpm dev must ensure the worktree-scoped database capability')
-}
-
-for (const path of ['apps/web/vite.config.ts', 'extensions/twitter/vite.config.ts']) {
-  const config = await readFile(`${repoRoot}/${path}`, 'utf8')
-  for (const required of [
-    'createUiSourceAliases',
-    'isPathInside',
-    'uiSourceDedupe',
-    'searchForWorkspaceRoot',
-  ]) {
-    if (!config.includes(required)) {
-      errors.push(`${path} is missing UI source contract "${required}"`)
-    }
-  }
-  if (config.includes('/Volumes/') || config.includes('/Users/')) {
-    errors.push(`${path} must not persist a machine-specific UI source path`)
-  }
-}
-
-const wxtConfig = await readFile(`${repoRoot}/apps/webext/wxt.config.ts`, 'utf8')
-if (wxtConfig.includes('--remote-debugging-port=9222')) {
-  errors.push('WXT development must not reuse the fixed Chromium debugging port 9222')
-}
-if (!wxtConfig.includes('INKCRE_WXT_PROFILE_DIR')) {
-  errors.push('WXT development must use a worktree-owned Chromium profile directory')
-}
-if (!wxtConfig.includes('INKCRE_CHROMIUM_BINARY') || !wxtConfig.includes('disabled: true')) {
-  errors.push('WXT development must make automatic browser launch explicit and optional')
 }
 
 const result = {

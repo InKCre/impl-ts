@@ -8,7 +8,7 @@
  * sidePanel.infoBase, source.saveFailed), which rendered raw i18n keys in
  * production. This check makes that class of mistake fail CI.
  *
- * Dynamic keys (template literals, variables) are skipped — they cannot be
+ * Dynamic keys (interpolated templates, variables) are skipped — they cannot be
  * verified statically.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs'
@@ -27,8 +27,8 @@ function flatten(node, path = '') {
   if (node && typeof node === 'object') {
     for (const [key, value] of Object.entries(node)) {
       const full = path ? `${path}.${key}` : key
-      keys.add(full)
-      for (const sub of flatten(value, full)) keys.add(sub)
+      if (typeof value === 'string') keys.add(full)
+      else for (const sub of flatten(value, full)) keys.add(sub)
     }
   }
   return keys
@@ -44,16 +44,16 @@ function* walk(dir) {
   }
 }
 
-// Literal t('...') calls only; template literals and dynamic keys are skipped.
-const T_CALL = /\bt\(\s*'([a-zA-Z][\w.]*)'/g
+// Require a complete first argument so concatenated prefixes stay dynamic.
+const T_CALL = /\bt\(\s*(['"`])([\w.-]+)\1\s*(?=[,)])/g
 const missing = []
 for (const file of walk(srcDir)) {
   const text = readFileSync(file, 'utf8')
   for (const match of text.matchAll(T_CALL)) {
-    const key = match[1]
+    const key = match[2]
     for (const { name, keys } of catalogKeys) {
       if (!keys.has(key)) {
-        missing.push(`${relative(root, file)}: '${key}' missing from ${name}.json`)
+        missing.push(`${relative(root, file)}: '${key}' has no message in ${name}.json`)
       }
     }
   }

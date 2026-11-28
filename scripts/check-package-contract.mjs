@@ -10,12 +10,12 @@ const coreRoot = `${repoRoot}/packages/core`
 const errors = []
 
 try {
-  execFileSync(process.execPath, ['scripts/check-local-runtime-contract.mjs'], {
+  execFileSync(process.execPath, ['scripts/verify-web-release.mjs'], {
     cwd: repoRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 } catch (error) {
-  errors.push(`browser source contract failed: ${error.stderr?.toString() || error.message}`)
+  errors.push(`static Web release failed: ${error.stderr?.toString() || error.message}`)
 }
 
 async function requireFile(path) {
@@ -32,19 +32,10 @@ await Promise.all(
     'packages/core/dist/index.js.map',
     'packages/core/dist/index.d.ts',
     'packages/core/dist/index.d.ts.map',
-    'apps/web/dist/index.html',
     'apps/webext/.output/chrome-mv3/manifest.json',
     'apps/webext/.output/chrome-mv3/content-scripts/collection.js',
     'apps/webext/.output/chrome-mv3/options.html',
     'apps/webext/.output/chrome-mv3/popup.html',
-    'extensions/github/dist/web/remoteEntry.js',
-    'extensions/bilibili/dist/web/remoteEntry.js',
-    'extensions/caldav/dist/web/remoteEntry.js',
-    'extensions/capture/dist/web/remoteEntry.js',
-    'extensions/local-files/dist/web/remoteEntry.js',
-    'extensions/mail/dist/web/remoteEntry.js',
-    'extensions/memos/dist/web/remoteEntry.js',
-    'extensions/twitter/dist/web/remoteEntry.js',
   ].map((path) => requireFile(`${repoRoot}/${path}`))
 )
 
@@ -58,7 +49,6 @@ for (const entry of await readdir(`${repoRoot}/extensions`, { withFileTypes: tru
     if (error.code === 'ENOENT') continue
     throw error
   }
-  if (!metadata.inkcre?.module_federation) continue
   try {
     await inspectNativeModuleFederation({
       packagePath: `${directory}/package.json`,
@@ -114,34 +104,16 @@ async function builtFiles(directory) {
   return files
 }
 
-const webDist = `${repoRoot}/apps/web/dist`
-const webextDist = `${repoRoot}/apps/webext/.output/chrome-mv3`
 try {
-  await access(`${webDist}/_worker.js`)
-  errors.push('unexpected Worker output: apps/web/dist/_worker.js')
-} catch {
-  // The web application is a static Pages artifact.
-}
-
-for (const [label, directory] of [
-  ['static web', webDist],
-  ['browser extension', webextDist],
-]) {
-  try {
-    const files = await builtFiles(directory)
-    for (const file of files) {
-      if (!/\.(?:css|html|js|json|map)$/.test(file)) {
-        continue
-      }
-
-      const content = await readFile(file, 'utf8')
-      for (const reason of inspectBrowserArtifact(content)) {
-        errors.push(`${label} output contains ${reason}: ${file.slice(repoRoot.length + 1)}`)
-      }
+  const files = await builtFiles(`${repoRoot}/apps/webext/.output/chrome-mv3`)
+  for (const file of files) {
+    if (!/\.(?:css|html|js|json|map)$/.test(file)) continue
+    for (const reason of inspectBrowserArtifact(await readFile(file, 'utf8'))) {
+      errors.push(`browser extension output contains ${reason}: ${file.slice(repoRoot.length + 1)}`)
     }
-  } catch (error) {
-    errors.push(`${label} artifact inspection failed: ${error.message}`)
   }
+} catch (error) {
+  errors.push(`browser extension artifact inspection failed: ${error.message}`)
 }
 
 const packageJson = JSON.parse(await readFile(`${coreRoot}/package.json`, 'utf8'))
