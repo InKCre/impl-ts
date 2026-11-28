@@ -8,6 +8,8 @@ export type DatabaseTokenProvider = () => Promise<string>
 export interface DatabaseConnection {
   readonly baseUrl: string
   readonly tokenProvider: DatabaseTokenProvider
+  /** Optional request-bound authorization; ordinary providers remain zero-argument. */
+  readonly authorizeRequest?: (requestUrl: string) => Promise<string>
   /** Borrowed transport; the SDK does not close caller resources. */
   readonly fetch?: typeof globalThis.fetch
 }
@@ -42,6 +44,7 @@ export type RawPostgrestRequestOptions = RequestInit & {
   schema?: 'inkcre'
   baseUrl: string
   tokenProvider: DatabaseTokenProvider
+  authorizeRequest?: (requestUrl: string) => Promise<string>
   fetch?: typeof globalThis.fetch
 }
 
@@ -59,6 +62,7 @@ export async function rawPostgrestFetch(
     schema = 'inkcre',
     baseUrl,
     tokenProvider,
+    authorizeRequest,
     fetch: fetcher = globalThis.fetch,
     ...init
   } = options
@@ -71,7 +75,7 @@ export async function rawPostgrestFetch(
     ? configuredBaseUrl
     : `${configuredBaseUrl}/`
   const url = new URL(path.replace(/^\//, ''), normalizedBaseUrl)
-  const token = await tokenProvider()
+  const token = await (authorizeRequest ? authorizeRequest(url.href) : tokenProvider())
   const headers = new Headers(init.headers)
   headers.set('Authorization', `Bearer ${token}`)
   headers.set('Accept-Profile', schema)
@@ -105,7 +109,12 @@ export class DatabaseClient<
     protected defSchema: { parse(input: unknown): DT } | undefined,
     connection: DatabaseConnection
   ) {
-    const { baseUrl, tokenProvider, fetch: fetcher = globalThis.fetch } = connection
+    const {
+      baseUrl,
+      tokenProvider,
+      authorizeRequest,
+      fetch: fetcher = globalThis.fetch,
+    } = connection
     const url = new URL(baseUrl)
     if (!['https:', 'http:'].includes(url.protocol)) {
       throw new TypeError('PostgREST URL must use HTTP(S).')
@@ -114,7 +123,10 @@ export class DatabaseClient<
       schema: 'inkcre',
       fetch: async (input, init) => {
         const headers = new Headers(init?.headers)
-        headers.set('Authorization', `Bearer ${await tokenProvider()}`)
+        const token = await (authorizeRequest
+          ? authorizeRequest(input instanceof Request ? input.url : String(input))
+          : tokenProvider())
+        headers.set('Authorization', `Bearer ${token}`)
         return fetcher(input, { ...init, headers })
       },
     })

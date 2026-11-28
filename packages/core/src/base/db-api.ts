@@ -30,7 +30,7 @@ const observedFetch: typeof fetch = (input, init) =>
 
 export type RawPostgrestRequestOptions = Omit<
   ExplicitRequestOptions,
-  'baseUrl' | 'tokenProvider'
+  'baseUrl' | 'tokenProvider' | 'authorizeRequest'
 > & {
   baseUrl?: string
   tokenProvider?: DatabaseTokenProvider
@@ -42,6 +42,7 @@ export function rawPostgrestFetch(path: string, options: RawPostgrestRequestOpti
     ...options,
     baseUrl: options.baseUrl ?? configStore.metaConfig.INKCRE_PGREST_URL,
     tokenProvider: options.tokenProvider ?? (() => authStore.getToken()),
+    authorizeRequest: options.tokenProvider ? undefined : (url) => authStore.getToken(url),
     fetch: options.fetch ?? observedFetch,
   })
 }
@@ -56,12 +57,13 @@ export class DBAPIClient<
     defSchema?: { parse(input: unknown): DT },
     public schemaName: 'inkcre' = 'inkcre',
     baseUrl = '',
-    tokenProvider: DatabaseTokenProvider = () => authStore.getToken()
+    tokenProvider?: DatabaseTokenProvider
   ) {
     // Unconfigured UI may construct models before the connection form is completed.
     super(relation, defSchema, {
       baseUrl: baseUrl || configStore.metaConfig.INKCRE_PGREST_URL || 'http://unconfigured.invalid',
-      tokenProvider,
+      tokenProvider: tokenProvider ?? (() => authStore.getToken()),
+      authorizeRequest: tokenProvider ? undefined : (url) => authStore.getToken(url),
       fetch: observedFetch,
     })
     if (!baseUrl) {
