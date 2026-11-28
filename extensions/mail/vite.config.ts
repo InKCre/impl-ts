@@ -17,14 +17,7 @@ import {
 const extensionRoot = fileURLToPath(new URL('.', import.meta.url))
 const extensionComponents = fileURLToPath(new URL('./src/components', import.meta.url))
 
-export const mailArtifactBase = './'
-export const mailBuildTarget = 'es2022'
-export const mailBuildOptions = {
-  target: mailBuildTarget,
-  outDir: 'dist/web',
-  sourcemap: true,
-}
-export const mailFederationOptions = {
+const federationOptions = {
   name: 'extension.mail',
   filename: 'remoteEntry.js',
   manifest: true,
@@ -40,7 +33,7 @@ export default defineConfig(async ({ command }) => {
   const uiSourceComponents = uiSource ? path.resolve(uiSource.root, 'src/components') : null
 
   return {
-    plugins: [vue(), vueJsx(), federation(mailFederationOptions)],
+    plugins: [vue(), vueJsx(), federation(federationOptions)],
     resolve: {
       alias: uiSource ? createUiSourceAliases(uiSource) : [],
       ...(uiSource ? { dedupe: uiSourceDedupe } : {}),
@@ -53,8 +46,12 @@ export default defineConfig(async ({ command }) => {
           },
         }
       : {}),
-    base: mailArtifactBase,
-    build: mailBuildOptions,
+    base: './',
+    build: {
+      target: 'es2022',
+      outDir: 'dist/web',
+      sourcemap: true,
+    },
     css: {
       preprocessorOptions: {
         scss: {
