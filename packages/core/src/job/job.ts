@@ -31,7 +31,9 @@ export class JobType extends Z.class({
   }
 
   static async getAll(): Promise<JobType[]> {
-    return ((await this.dbApi.from().select()).data ?? []).map((item) => JobType.parse(item))
+    return ((await this.dbApi.from().select().throwOnError()).data ?? []).map((item) =>
+      JobType.parse(item)
+    )
   }
 }
 
@@ -64,14 +66,19 @@ export class Job extends Z.class({
     return Job.parse(data)
   }
 
-  static async getAll(options: { limit?: number; status?: JobStatusValue } = {}): Promise<Job[]> {
+  static async getAll(
+    options: { limit?: number; status?: JobStatusValue | JobStatusValue[]; type?: JobTypeRef } = {}
+  ): Promise<Job[]> {
     let query = this.dbApi
       .from()
       .select()
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(options.limit ?? 20)
-    if (options.status) query = query.eq('status', options.status)
-    return ((await query).data ?? []).map((item) => Job.parse(item))
+    if (options.type) query = query.eq('type', options.type)
+    if (typeof options.status === 'string') query = query.eq('status', options.status)
+    if (Array.isArray(options.status)) query = query.in('status', options.status)
+    return ((await query.throwOnError()).data ?? []).map((item) => Job.parse(item))
   }
 
   static async getBySource(source: number, limit = 20): Promise<Job[]> {

@@ -8,6 +8,7 @@ import {
   type Context,
 } from '../obsrv/telemetry'
 import { z } from 'zod'
+import { configStore } from '../config'
 import { Job, JobStatus, JobType, type JobRef, type JobTypeRef } from './job'
 
 export interface JobHandler<Parameters extends z.ZodType = z.ZodType> {
@@ -50,6 +51,7 @@ export class JobManager {
     timeoutSeconds?: number,
     parent?: Context
   ): Promise<Job> {
+    const connection = configStore.metaConfig
     return observeOperation(
       'job.submit',
       async (active, span) => {
@@ -59,6 +61,9 @@ export class JobManager {
         const timeout = timeoutSeconds ?? jobType.default_timeout_seconds
         if (!Number.isInteger(timeout) || timeout <= 0) {
           throw new TypeError('Job timeout must be a positive number of seconds')
+        }
+        if (connection !== configStore.metaConfig) {
+          throw new Error('The connection changed before the Job could be submitted')
         }
         const result = await Job.dbApi
           .insert({
@@ -70,6 +75,7 @@ export class JobManager {
           })
           .select()
           .single()
+          .throwOnError()
         const job = Job.parse(result.data)
         span?.setAttribute('inkcre.job.id', job.id)
         emitJobEvent('job.submitted', job.id, active)

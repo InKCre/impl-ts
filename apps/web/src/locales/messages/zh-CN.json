@@ -376,6 +376,32 @@
       "noPreview": "暂无预览，可打开条目阅读。",
       "score": "相似度"
     },
+    "lexicalIndex": {
+      "title": "词法索引维护",
+      "description": "增量维护处理缺失或过期的记录。重建还会刷新已有记录，可能读取外部内容。",
+      "maintain": "增量维护",
+      "rebuild": "重建",
+      "job": "任务 #{id}",
+      "noJobs": "暂无任务记录。",
+      "waiting": "等待可以执行此任务的 Peer。",
+      "counts": "本批写入 {indexed} 条索引，{unavailable} 条不可用，{failed} 条失败。",
+      "more": "此批执行时还有后续记录。",
+      "unavailable": "请连接支持此任务类型的 Core。",
+      "readError": "无法读取索引任务状态，请刷新后重试。",
+      "submitError": "无法确认提交结果，请先刷新任务状态。",
+      "continue": "提交下一批",
+      "queue": "提交新任务",
+      "rebuildConfirm": "重建还会刷新已有索引记录，可能读取外部内容。要提交首批任务吗？",
+      "emptyHint": "部分内容可能仍待索引。可打开词法索引维护查看最近的任务。",
+      "status": {
+        "pending": "待执行",
+        "running": "执行中",
+        "finished": "已完成",
+        "failed": "失败",
+        "timed_out": "超时",
+        "aborted": "已中止"
+      }
+    },
     "blockInspector": {
       "loadFailed": "无法读取此条目。",
       "title": "条目详情",
