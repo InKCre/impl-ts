@@ -141,9 +141,9 @@ const formatCapability = (cap: unknown): string => {
   <article class="entity-card peer-card">
     <header class="entity-card__header">
       <div class="entity-card__title-group">
-        <h3 class="entity-card__title peer-card__title">
+        <h2 class="entity-card__title peer-card__title">
           <InkInput v-model="peer.name" type="inline" @confirm="savePeer" />
-        </h3>
+        </h2>
         <span :class="['peer-card__status-badge', statusConfig.class]">
           {{ statusConfig.text }}
         </span>

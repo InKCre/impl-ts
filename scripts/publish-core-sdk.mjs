@@ -41,10 +41,14 @@ async function releaseByTag(tag) {
 
 export function validateRecoveryRun(run, comparison) {
   assert.equal(run.event, 'push', 'Recovery source must be an admitted main push')
-  assert.equal(run.head_branch, 'main')
-  assert.equal(run.path, '.github/workflows/core-sdk-release.yml')
+  assert.equal(run.head_branch, 'main', 'Recovery source branch must be main')
+  assert.equal(
+    run.path,
+    '.github/workflows/core-sdk-release.yml',
+    'Recovery requires the original SDK release workflow'
+  )
   assert.equal(run.status, 'completed', 'Original SDK run must have completed')
-  assert.match(run.head_sha, /^[0-9a-f]{40}$/)
+  assert.match(run.head_sha, /^[0-9a-f]{40}$/, 'Recovery source revision must be a full commit SHA')
   assert.ok(
     ['ahead', 'identical'].includes(comparison?.status),
     'Recovery source is not in current main history'
@@ -52,7 +56,7 @@ export function validateRecoveryRun(run, comparison) {
   return run.head_sha
 }
 
-export function validateReceipt(receipt) {
+function validateReceipt(receipt) {
   assert.equal(receipt.name, '@inkcre/core')
   assert.match(receipt.version, /^\d+\.\d+\.\d+$/)
   assert.match(receipt.source_revision, /^[0-9a-f]{40}$/)
@@ -84,7 +88,7 @@ async function assetBytes(asset, authenticated = false) {
   return Buffer.from(await response.arrayBuffer())
 }
 
-export async function verifyRelease(release, version, expected) {
+async function verifyRelease(release, version, expected) {
   assert.ok(!release.draft && !release.prerelease, 'SDK release is not public and final')
   const receiptAsset = release.assets.find((asset) => asset.name === 'source.json')
   assert.ok(receiptAsset, 'SDK source receipt is missing')
@@ -94,7 +98,7 @@ export async function verifyRelease(release, version, expected) {
     assert.deepEqual(receipt, expected, 'Existing SDK coordinate belongs to other bytes/source')
   const tag = await api(`git/ref/tags/core-v${version}`)
   assert.equal(tag?.object.type, 'commit', 'SDK tag must directly identify its source commit')
-  assert.equal(tag.object.sha, receipt.source_revision)
+  assert.equal(tag.object.sha, receipt.source_revision, 'SDK tag must match the candidate source')
   const archive = release.assets.find((asset) => asset.name === receipt.asset)
   assert.ok(archive, 'SDK archive is missing')
   assert.equal(
@@ -102,7 +106,6 @@ export async function verifyRelease(release, version, expected) {
     receipt.sha256,
     'SDK public bytes differ from receipt'
   )
-  return receipt
 }
 
 async function checkCandidate() {

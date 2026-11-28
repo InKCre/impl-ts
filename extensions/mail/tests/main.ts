@@ -183,7 +183,6 @@ if (new URLSearchParams(location.search).has('recall')) {
                 id: match.block.id,
                 excerpt: match.excerpt,
                 rank: match.rank,
-                unchanged: matches.includes(match),
               })),
             }))
           )

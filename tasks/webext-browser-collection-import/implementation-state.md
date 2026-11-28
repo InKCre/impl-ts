@@ -82,7 +82,7 @@ packages/web-collection/src/material.ts 用连接绑定的现有 DBAPIClient 读
 
 ## 验证与运行
 
-从 impl-py/PDM 运行 task helper；显式环境变量 INKCRE_CHROMIUM_BINARY=/Applications/Helium.app/Contents/MacOS/Helium。当前脚本路径 /Volumes/WorkSSD/Development/InKCre/worktrees/webext-collection-impl-ts/tasks/webext-browser-collection-import/verify_browser.py，--runtime /Volumes/WorkSSD/Development/InKCre/impl-py/.runtime/database/0ec9cf3c08ae5096，可选 --grep。只运行默认 headless，不使用 Playwright 默认缓存、不碰日常 Helium。
+从 impl-py/PDM 运行 task helper；显式环境变量 INKCRE_CHROMIUM_BINARY=/Applications/Helium.app/Contents/MacOS/Helium。历史脚本 [verify_browser.py](https://github.com/InKCre/impl-ts/blob/115ca6890d122a1f6f707ec717d6393a8e8bdd6e/tasks/webext-browser-collection-import/verify_browser.py)，--runtime /Volumes/WorkSSD/Development/InKCre/impl-py/.runtime/database/0ec9cf3c08ae5096，可选 --grep。只运行默认 headless，不使用 Playwright 默认缓存、不碰日常 Helium。
 
 最终 Helium 7/7 通过（29.8 秒），覆盖普通图/Storage 与不完整根、独立 UI、原生导入/部分失败/重跑、自动 current 与 fixed/附注、SPA、旧配置/任务、暂停自动队列仍能手动、完整重启与切换连接后的原目标恢复。原生导入增加 PDF 已入队后403、原站改410、重试同一载荷成功且只抓取一次的检查。中断迁移夹具覆盖 IDB 已复制但 storage.local 旧 key 尚在；启动清理与精确保留数据均通过。core TextResolver 解释正文、原站无数据库认证、reader 不执行脚本、草稿/密码/编辑内容排除均通过。测试预授予合成 localhost/bookmarks/history，不代表原生权限 UX；生产 manifest optional 权限另有断言。
 
@@ -92,7 +92,7 @@ Helium 启动延迟后新文档导航可能挂起，无扩展裸浏览器也复�
 
 ## Firefox 与自有资源
 
-用户不允许下载 Firefox，随后指出 sfp7 已安装。SSH sfp7-ws.localhost（Fedora）使用 /usr/bin/firefox 156.0、Node22.23.4。verify_firefox.mjs 通过内置 BiDi、临时加载与临时 profile 验证了设置/后台、自动 current、重载、SPA、稳定手动材料/附注、原生书签/历史/HTML解析/部分失败/PDF，并实际采集读回公开 MDN Match Patterns 页面。权限只在测试 profile 预授予 localhost 和 MDN，未验收原生提示 UI。修复 Firefox 不匹配带端口权限模式，以及 SPA 后 sender.url 保持初始地址造成的误拒绝；自动材料仍核对实际完整 URL。每次 profile/库/容器/tunnel 已清理，初始探测目录 HQwrAd 也已删除。不下载浏览器/驱动、不改日常配置。
+用户不允许下载 Firefox，随后指出 sfp7 已安装。SSH sfp7-ws.localhost（Fedora）使用 /usr/bin/firefox 156.0、Node22.23.4。[verify_firefox.mjs](https://github.com/InKCre/impl-ts/blob/115ca6890d122a1f6f707ec717d6393a8e8bdd6e/tasks/webext-browser-collection-import/verify_firefox.mjs) 通过内置 BiDi、临时加载与临时 profile 验证了设置/后台、自动 current、重载、SPA、稳定手动材料/附注、原生书签/历史/HTML解析/部分失败/PDF，并实际采集读回公开 MDN Match Patterns 页面。权限只在测试 profile 预授予 localhost 和 MDN，未验收原生提示 UI。修复 Firefox 不匹配带端口权限模式，以及 SPA 后 sender.url 保持初始地址造成的误拒绝；自动材料仍核对实际完整 URL。每次 profile/库/容器/tunnel 已清理，初始探测目录 HQwrAd 也已删除。不下载浏览器/驱动、不改日常配置。
 
 verify_browser.py 只创建 UUID 数据库、自己 PostgREST 容器和 SSH forward，finally 清理，不改 cluster roles；最新运行资源已清理。--firefox-ssh sfp7-ws.localhost 运行远端 Firefox；SSH forward 必须 -S none，避免已有 multiplex master 接管生命周期。旧 autogenerate 库 inkcre_webext_rewrite_20261022 已核对所有业务表0行、无活动连接后删除，不触碰共享库。不打印凭据/trace 中测试 token。
 

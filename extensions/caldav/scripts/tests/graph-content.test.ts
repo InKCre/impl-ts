@@ -21,42 +21,52 @@ function properties(sample: (typeof samples)[number]): GraphProperty[] {
   }))
 }
 
-void test('Python-authored contact graph composes the same phones, photo and unknown properties', () => {
+void test('Python-authored contact graph preserves contact fields, labels and photo bytes', () => {
   const sample = samples.find((item: any) => item.kind === 'contact')
   const text = composeGraph(sample.remainder, properties(sample))
   const actual = parseResource(JSON.stringify({ href: 'contact.vcf', text }), 'contact')
-  const expected = parseResource(
-    JSON.stringify({ href: 'contact.vcf', text: sample.text }),
-    'contact'
-  )
-  assert.notEqual(actual.kind, 'invalid')
-  if (actual.kind !== 'contact' || expected.kind !== 'contact') return
-  assert.equal(actual.title, expected.title)
-  assert.deepEqual(actual.fields, expected.fields)
-  assert.equal(actual.photo, expected.photo)
-  assert.equal(resourceUid(text), resourceUid(sample.text))
-  const changed = properties(sample)
-  changed.find((field) => field.link.name === 'TEL')!.value = '+8613800000001'
-  assert.match(composeGraph(sample.remainder, changed), /\+8613800000001/)
+  assert.equal(actual.kind, 'contact')
+  if (actual.kind !== 'contact') return
+  assert.equal(actual.title, 'InKCre Preview Photo Contact')
+  assert.deepEqual(actual.fields, [
+    {
+      name: 'tel',
+      values: [
+        { value: '+8613800000000', label: 'cell' },
+        { value: '+8613900000000', label: 'work' },
+      ],
+    },
+    { name: 'email', values: [{ value: 'preview146@example.invalid', label: '' }] },
+    { name: 'note', values: [{ value: 'PR 146 HTTPS acceptance test', label: '' }] },
+  ])
+  const photoBytes = sample.properties.find((field: any) => field.link.name === 'PHOTO').value
+  assert.equal(actual.photo, `data:image/jpeg;base64,${photoBytes}`)
+  assert.equal(resourceUid(text), 'inkcre-preview146-contact')
 })
 
 void test('component identity retains TZID exceptions and audio-alarm attachments', () => {
   const sample = samples.find((item: any) => item.kind === 'calendar')
   const text = composeGraph(sample.remainder, properties(sample))
-  const actual = parseResource(JSON.stringify({ href: 'event.ics', text }), 'calendar')
-  const expected = parseResource(
-    JSON.stringify({ href: 'event.ics', text: sample.text }),
-    'calendar'
-  )
-  assert.notEqual(actual.kind, 'invalid')
-  if (actual.kind !== 'calendar' || expected.kind !== 'calendar') return
-  assert.deepEqual(actual.items, expected.items)
   const root = new ICAL.Component(ICAL.parse(text))
-  const attachment = root
-    .getFirstSubcomponent('vevent')!
-    .getFirstSubcomponent('valarm')!
-    .getFirstProperty('attach')!
-    .getFirstValue()
+  const events = root.getAllSubcomponents('vevent')
+  assert.equal(events.length, 2)
+  const master = events.find((event) => !event.hasProperty('recurrence-id'))!
+  const exception = events.find((event) => event.hasProperty('recurrence-id'))!
+  assert.equal(master.getFirstPropertyValue('uid'), 'shared-event')
+  assert.equal(master.getFirstPropertyValue('summary'), '共享日程')
+  assert.equal(master.getFirstProperty('dtstart')!.getParameter('tzid'), 'Asia/Shanghai')
+  assert.equal(String(master.getFirstPropertyValue('dtstart')), '2026-10-20T09:00:00')
+  assert.equal(String(master.getFirstPropertyValue('rrule')), 'FREQ=DAILY;COUNT=3')
+  assert.equal(exception.getFirstPropertyValue('uid'), 'shared-event')
+  assert.equal(exception.getFirstPropertyValue('summary'), '单次例外')
+  assert.equal(String(exception.getFirstPropertyValue('dtstart')), '2026-10-21T10:00:00')
+  assert.equal(master.getFirstPropertyValue('description'), '共同正文')
+  assert.equal(master.getFirstPropertyValue('attach'), 'https://example.invalid/plan.pdf')
+  assert.equal(exception.getFirstPropertyValue('description'), '例外正文')
+  const recurrence = exception.getFirstProperty('recurrence-id')!
+  assert.equal(recurrence.getParameter('tzid'), 'Asia/Shanghai')
+  assert.equal(String(recurrence.getFirstValue()), '2026-10-21T09:00:00')
+  const attachment = master.getFirstSubcomponent('valarm')!.getFirstPropertyValue('attach')
   assert.ok(attachment instanceof ICAL.Binary)
   assert.equal(attachment.decodeValue(), 'hello')
   assert.match(text, /X-UNKNOWN;X-KEEP=yes:保留/)

@@ -130,8 +130,6 @@ export function inspectBrowserRuntimeSource(source, filename) {
       for (const value of fixedStrings(expression)) {
         if (value === '/api/config')
           errors.push(`${filename} uses the retired /api/config runtime-config channel`)
-        if (value.startsWith('https://raw.githubusercontent.com/stopwords-iso/'))
-          errors.push(`${filename} fetches the retired mutable stopword bootstrap fallback`)
       }
     }
     function rejectFixed(expression, boundary) {

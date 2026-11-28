@@ -1,8 +1,7 @@
 import { readFile, readdir, realpath, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { pathToFileURL } from 'node:url'
 
-export async function preparePagesPreview(directory, { sourceRevision, buildId }) {
+async function preparePagesPreview(directory, { sourceRevision, buildId }) {
   if (!/^[a-f0-9]{40}$/.test(sourceRevision ?? '') || !/^\d+-\d+$/.test(buildId ?? '')) {
     throw new Error('Preview requires an exact source SHA and run-attempt build identity')
   }
@@ -34,12 +33,9 @@ export async function preparePagesPreview(directory, { sourceRevision, buildId }
   }
   const candidate = { source_revision: sourceRevision, build_id: buildId, distributions }
   await writeFile(join(root, 'preview-candidate.json'), `${JSON.stringify(candidate, null, 2)}\n`)
-  return candidate
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await preparePagesPreview(process.argv[2], {
-    sourceRevision: process.env.INKCRE_PREVIEW_SOURCE_SHA,
-    buildId: `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`,
-  })
-}
+await preparePagesPreview(process.argv[2], {
+  sourceRevision: process.env.INKCRE_PREVIEW_SOURCE_SHA,
+  buildId: `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`,
+})

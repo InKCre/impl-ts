@@ -64,9 +64,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify canonical candidate admission boundaries
-        run: node --test scripts/test-core-release.mjs
-
       - name: Resolve admitted Core once to an immutable release
         id: release
         run: node scripts/resolve-core-release.mjs
@@ -129,22 +126,8 @@ jobs:
       - name: 构建并校验相互兼容的 Host 与 MF 产物
         run: pnpm build
 
-      - name: Verify independent SDK and Job observations
-        run: pnpm check:sdk && pnpm check:web
-
-      - name: 验证 B 站收藏采集规则
-        run: pnpm --filter @inkcre/ext-bilibili test
-
-      - name: Verify independent MF publication
-        run: >-
-          node --test scripts/test-extension-publication.mjs scripts/test-core-sdk-publication.mjs
-          scripts/tests/independent-extension-release.test.mjs
-          scripts/tests/release-checkout.test.mjs
-          scripts/tests/core-sdk-compatibility.test.mjs
-          scripts/tests/pages-preview.test.mjs
-          scripts/tests/browser-automation-transport.test.mjs
-          scripts/tests/job-cancellation.test.mjs
-          scripts/tests/source-anchor.test.mjs
+      - name: 验证 SDK、运行时、采集与发布的独立契约
+        run: pnpm test:contracts
 
   peer-database:
     # Existing branch protection binds this exact check name.
@@ -180,8 +163,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run the selected real core service and isolated browser/database chain
-        run: pnpm test:e2e:web
+      - name: 验证邮件阅读及独占浏览器与数据库链路
+        run: pnpm test:e2e:web:with-mail
         env:
           INKCRE_CORE_IMAGE: ${{ needs.core-release.outputs.image }}
 
@@ -193,12 +176,14 @@ jobs:
           path: |
             test-results/playwright
             test-results/database
+            test-results/mail-newsletter
           if-no-files-found: ignore
           retention-days: 7
 
   browser-extension:
     # Existing branch protection binds this exact check name.
     name: client-webext E2E
+    needs: core-release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -218,23 +203,28 @@ jobs:
       - name: Install the frozen workspace
         run: pnpm install --frozen-lockfile
 
-      - name: Install the exact browser engine
-        run: pnpm exec playwright install --with-deps chromium
+      - name: 安装锁定的 Chromium 和 Firefox
+        run: pnpm exec playwright install --with-deps chromium firefox
 
-      - name: Load the exact Chromium extension build
+      - name: Authenticate to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 验证浏览器扩展产物与独占数据库采集、重启恢复
         run: pnpm test:e2e:webext
-
-      - name: Build the Firefox extension
-        run: pnpm --filter @inkcre/webext build:firefox
-
-      - name: Verify WebExt delivery rules
-        run: node --test scripts/tests/webext-release.test.mjs
+        env:
+          INKCRE_CORE_IMAGE: ${{ needs.core-release.outputs.image }}
 
       - name: Upload browser evidence on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-extension-failure-evidence
-          path: test-results/playwright
+          path: |
+            test-results/playwright
+            test-results/database
           if-no-files-found: ignore
           retention-days: 7

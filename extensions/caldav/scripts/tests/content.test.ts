@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseCollection, parseResource, safeHttpUrl } from '../../src/content.ts'
+import { parseCollection, parseResource } from '../../src/content.ts'
 
 const resource = (text: string) => JSON.stringify({ href: 'test.ics', text })
 const fixture = (name: string) =>
@@ -23,7 +23,7 @@ void test('the phone calendar retains the master, offline exception and all-day 
   assert.deepEqual(allDay.end, { value: '2026-10-21', zone: '', dateOnly: true })
 })
 
-void test('Tasks.org parent references and completion state remain readable', () => {
+void test('Tasks.org parent references and incomplete task status remain readable', () => {
   const result = parseResource(resource(fixture('tasks.ics')), 'calendar')
   assert.equal(result.kind, 'calendar')
   if (result.kind !== 'calendar') return
@@ -35,7 +35,10 @@ void test('Tasks.org parent references and completion state remain readable', ()
 })
 
 void test('a real Android vCard retains its two phones and embedded raster photo', () => {
-  const result = parseResource(resource(fixture('contact.vcf')), 'contact')
+  const contact = JSON.parse(fixture('semantic-graph.json')).find(
+    (sample: { kind: string }) => sample.kind === 'contact'
+  )
+  const result = parseResource(resource(contact.text), 'contact')
   assert.equal(result.kind, 'contact')
   if (result.kind !== 'contact') return
   assert.equal(result.title, 'InKCre Preview Photo Contact')
@@ -78,10 +81,10 @@ void test('floating and unknown TZID wall times are not converted; folded text a
   assert.equal(result.text, text)
 })
 
-void test('unsafe photos and links cannot become active content; remote photos remain explicit links', () => {
-  assert.equal(safeHttpUrl('javascript:alert(1)'), null)
-  assert.equal(safeHttpUrl('https://user:secret@example.com/'), null)
+void test('unsafe vCard photos cannot become active content; remote photos remain explicit links', () => {
   for (const [photo, embedded, link] of [
+    ['javascript:alert(1)', null, null],
+    ['https://user:secret@example.com/', null, null],
     ['data:image/svg+xml;base64,PHN2Zz4=', null, null],
     ['https://example.com/photo.png', null, 'https://example.com/photo.png'],
     ['data:image/png;base64,aGVsbG8=', 'data:image/png;base64,aGVsbG8=', null],

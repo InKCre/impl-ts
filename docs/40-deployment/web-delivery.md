@@ -133,8 +133,7 @@ open, same-repository pull requests targeting `main`; fork pull requests are ine
 exact candidate head, installs the candidate's frozen pnpm and PDM environments, builds its SPA and
 selected Module Federation snapshots, and uses `inkcre-ext preview build` with the explicit
 `.github/preview/extensions.json` inventory to add a same-origin static Registry facade. The
-current inventory includes the CalDAV, GitHub, Twitter and Mail Module Federation distributions. Before
-deployment it revalidates that the PR is still open and its identity and head SHA have not changed.
+current inventory includes the CalDAV, GitHub, Twitter and Mail Module Federation distributions. The controller uses the PR head selected by the identity job through staging and deployment.
 
 The Toolkit places read-only native Extension snapshots and preview Releases beside the exact-head
 app build, using the stable alias branch `preview/client-web/pr-<number>`. This is a preview

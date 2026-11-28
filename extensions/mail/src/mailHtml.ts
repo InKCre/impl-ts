@@ -7,7 +7,20 @@ export function isolateMailHtml(
 ): string {
   const document = DOMPurify.sanitize(source, {
     RETURN_DOM: true,
-    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'link', 'meta', 'base'],
+    // SVG image references use href, outside the materialized CID <img> path below.
+    FORBID_TAGS: [
+      'script',
+      'style',
+      'iframe',
+      'object',
+      'embed',
+      'form',
+      'link',
+      'meta',
+      'base',
+      'image',
+      'feimage',
+    ],
     FORBID_ATTR: ['style', 'srcset', 'poster', 'background', 'formaction'],
   }) as HTMLElement
   for (const element of document.querySelectorAll<HTMLElement>('[src]')) {
@@ -57,5 +70,5 @@ export function isolateMailHtml(
   const readingStyle = newsletterReading
     ? 'table[role="none"],table[role="presentation"]{width:100%;max-width:100%;table-layout:auto}h4,h5,h6{font-size:1.05em;line-height:1.4;margin-block:1em .5em}'
     : ''
-  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob:; style-src 'nonce-inkcre-mail'"><style nonce="inkcre-mail">body{margin:0;padding:16px;color:#202020;background:#fff;font:16px/1.65 system-ui,sans-serif;overflow-wrap:anywhere}h1,h2,h3{line-height:1.35;font-weight:600}h1{font-size:1.5em}h2{font-size:1.25em}h3{font-size:1.1em}img{max-width:100%;height:auto}pre{white-space:pre-wrap}blockquote{margin-inline:0;padding-inline-start:16px;border-inline-start:2px solid #ccc}a{color:inherit}${readingStyle}</style></head><body>${document.innerHTML}</body></html>`
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'nonce-inkcre-mail'"><style nonce="inkcre-mail">body{margin:0;padding:16px;color:#202020;background:#fff;font:16px/1.65 system-ui,sans-serif;overflow-wrap:anywhere}h1,h2,h3{line-height:1.35;font-weight:600}h1{font-size:1.5em}h2{font-size:1.25em}h3{font-size:1.1em}img{max-width:100%;height:auto}pre{white-space:pre-wrap}blockquote{margin-inline:0;padding-inline-start:16px;border-inline-start:2px solid #ccc}a{color:inherit}${readingStyle}</style></head><body>${document.innerHTML}</body></html>`
 }

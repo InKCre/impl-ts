@@ -30,4 +30,5 @@ Shared models, Peer protocols, storage/resolver mechanics, and native Extension 
 
 - `src/sdk.ts` is the independent consumer boundary; neither its runtime nor its declarations may import Vue, Pinia, application stores, or the root compatibility barrel.
 - Keep explicit transport/storage logic in the SDK and reuse it from the published Vue entry. Do not duplicate protocol behavior when preserving compatibility.
-- The packed independent-consumer check is `node --test scripts/tests/core-independent.test.mjs` after building Core.
+- The packed independent-consumer check is `node --test scripts/tests/core-independent.test.mjs` after building Core. Exercise SDK connection binding with both a supplied transport and the default Fetch captured at construction.
+- For Job admission and cancellation, observe conditional PostgREST writes and handler effects. For Resolver replacement, read through the public cache with the same Block revision before and after re-registration.
