@@ -1546,6 +1546,8 @@ test('the graph retries a failed read and keeps a dragged node when highlighting
     })
     expect(cleanup.status).toBe(200)
   }
+  await page.goto(`/info-base/graph/blocks/${focus.id}`)
+  await expect(page.getByText(`Entry #${focus.id} no longer exists.`)).toBeVisible()
 })
 
 test('Block Inspector delegates rumination through the discovered Peer', async ({ page }) => {

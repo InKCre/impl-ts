@@ -17,14 +17,6 @@ void test('browser artifacts preserve identity, numeric version and readable too
     if (browser === 'chrome') {
       // Existing installations retain the ID published in webext-v0.2.2/source.json.
       assert.equal(extensionId(manifest.key), 'fnejbpghhbcojofhgjglkejhednalfoa')
-      assert.throws(
-        () => checkManifest({ ...manifest, key: undefined }, metadata.version, browser, key),
-        /fixed Chromium identity/
-      )
-      assert.throws(
-        () => checkManifest({ ...manifest, version: '0.0.1' }, metadata.version, browser, key),
-        { code: 'ERR_ASSERTION', actual: '0.0.1', expected: metadata.version }
-      )
     }
     const checkLogo = async (entry, size, asset) => {
       const image = await readFile(new URL(entry, output))

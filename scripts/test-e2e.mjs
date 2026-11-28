@@ -83,21 +83,22 @@ await runIsolatedDatabaseTest('web', async (state, credentials) => {
   let preview
   try {
     run('pnpm', ['--filter', '@inkcre/web', 'build-only'])
+    // The package scripts build Core before this runner. Only build the remotes used here.
     run('pnpm', [
       '--filter',
-      '@inkcre/ext-github...',
+      '@inkcre/ext-github',
       '--filter',
-      '@inkcre/ext-mail...',
+      '@inkcre/ext-mail',
       '--filter',
-      '@inkcre/ext-capture...',
+      '@inkcre/ext-capture',
       '--filter',
-      '@inkcre/ext-caldav...',
+      '@inkcre/ext-caldav',
       '--filter',
-      '@inkcre/ext-local-files...',
+      '@inkcre/ext-local-files',
       '--filter',
-      '@inkcre/ext-memos...',
+      '@inkcre/ext-memos',
       '--filter',
-      '@inkcre/ext-twitter...',
+      '@inkcre/ext-twitter',
       'build',
     ])
     const webPort = await availablePort()

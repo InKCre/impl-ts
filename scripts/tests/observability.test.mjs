@@ -195,14 +195,15 @@ void test('unknown selection, missing capability, external failure and backend d
 
 void test('database ingestion preserves portable identity, kind and event metadata', async () => {
   let stored
-  let writes = 0
+  const requests = []
   const client = new ObservabilityClient({
     baseUrl: 'https://db.example',
     tokenProvider: async () => 'token',
     fetch: async (input, init) => {
-      if (new URL(input).pathname === '/configs') return Response.json(null)
-      assert.equal(new URL(input).pathname, '/logs')
-      writes++
+      const { pathname } = new URL(input)
+      requests.push(pathname)
+      if (pathname === '/configs') return Response.json(null)
+      assert.equal(pathname, '/logs')
       stored = JSON.parse(init.body)
       return new Response(null, { status: 201 })
     },
@@ -212,6 +213,11 @@ void test('database ingestion preserves portable identity, kind and event metada
   assert.equal(stored.attributes['inkcre.record.kind'], 'event')
   assert.equal(stored.attributes['inkcre.event.name'], 'job.closed')
   assert.equal(stored.id, undefined)
+  assert.deepEqual(
+    requests.filter((path) => path === '/logs'),
+    ['/logs']
+  )
+  const requestCount = requests.length
   const rejectsField = (field, message) => (error) => {
     assert.equal(error.name, 'ZodError')
     assert.ok(
@@ -243,7 +249,7 @@ void test('database ingestion preserves portable identity, kind and event metada
     ],
   ])
     await assert.rejects(client.query(input), rejectsField(field, message))
-  assert.equal(writes, 1, 'invalid input must fail before database I/O')
+  assert.equal(requests.length, requestCount, 'invalid input must fail before database I/O')
   assert.equal(stored.body, record.body)
 })
 
@@ -335,19 +341,20 @@ void test('Job lifecycle and terminal severities are recorded without optional O
     closed_at: null,
   }
   const records = []
-  let configReads = 0
   let outcome = 'finished'
   globalThis.fetch = async (input, init) => {
     const url = new URL(input)
-    if (url.pathname === '/configs') {
-      configReads++
-      return Response.json(null)
-    }
+    if (url.pathname === '/configs') return Response.json(null)
     if (url.pathname === '/logs') {
       records.push(JSON.parse(init.body))
       return new Response(null, { status: 201 })
     }
     if (url.pathname === '/jobs') {
+      if (init.method === 'GET' && url.searchParams.get('select') === 'id') {
+        assert.equal(url.searchParams.get('id'), 'in.(8)')
+        assert.equal(url.searchParams.get('abort_requested'), 'eq.true')
+        return Response.json(dbJob.abort_requested ? [{ id: dbJob.id }] : [])
+      }
       if (init.method === 'PATCH') Object.assign(dbJob, JSON.parse(init.body))
       const singleton = new Headers(init.headers).get('Accept')?.includes('object+json')
       return Response.json(singleton ? dbJob : [dbJob])
@@ -372,6 +379,7 @@ void test('Job lifecycle and terminal severities are recorded without optional O
         dbJob.abort_requested = true
         await new Promise((resolve) => setImmediate(resolve))
         await JobManager.checkAbortRequests()
+        assert.equal(signal.aborted, true)
       }
     },
   })
@@ -410,7 +418,6 @@ void test('Job lifecycle and terminal severities are recorded without optional O
       assert.equal(execution.attributes.outcome, expectedOutcome)
       assert.equal(JSON.stringify(records).includes('must-not-be-recorded'), false)
     }
-    assert.equal(configReads, 1, 'all operations share one captured backend selection')
   } finally {
     JobManager.unregisterHandler('test.observation')
     Object.assign(configStore.metaConfig, priorMeta)

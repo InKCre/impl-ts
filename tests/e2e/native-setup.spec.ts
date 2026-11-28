@@ -284,14 +284,19 @@ test('Twitter setup preserves rejected credentials and polls the transaction ret
       await page.route(address(status), (route) => route.fulfill({ headers, json: disconnected }))
       let allowSave = false
       await page.route(address(configure), async (route) => {
+        const payload = route.request().postDataJSON()
+        expect(payload).toEqual({
+          client_id: 'fixture-client',
+          client_secret: 'fixture-only',
+          confirm_account_reset: false,
+        })
         if (!allowSave)
           return route.fulfill({
             headers,
             status: 403,
             json: { detail: 'Application save rejected' },
           })
-        const { client_id, client_secret, confirm_account_reset } = route.request().postDataJSON()
-        expect(confirm_account_reset).toBe(false)
+        const { client_id, client_secret } = payload
         await database(shared, 'PATCH', { config: { client_id, client_secret } })
         await route.fulfill({ headers, json: disconnected })
       })

@@ -260,8 +260,6 @@ test('Mail navigation, cold restore and explicit MIME materialization survive re
     await inspector.getByRole('button', { name: 'Close', exact: true }).click()
     await expect(page).toHaveURL(new RegExp(`/info-base/graph/blocks/${email.id}/content$`))
     await expect(content.getByRole('heading', { name: subject, exact: true })).toBeVisible()
-    await page.goto('/info-base/graph/blocks/2147483647')
-    await expect(page.getByText('Entry #2147483647 no longer exists.')).toBeVisible()
   } finally {
     releaseFirstAttempt()
     extension.release()

@@ -36,6 +36,8 @@
 
 聚焦复验可传 Playwright 参数，例如 `pnpm test:e2e:web --project accessibility` 或 `pnpm test:e2e:webext --grep "browser restart"`。显式 `--project` 替换 Web 默认项目集合；App 的 `test:a11y` 转发到同一个隔离入口，不启动日常 SVC/Portless 环境。根配置在 CI 拒绝 `test.only`。直接调用 Playwright 的专项/子集结果不代替上述完整入口。
 
+Web E2E 的 MF 构建和独立 Mail 测试共享同一份 Core `dist`。CI 用 `pnpm test:e2e:web:with-mail` 按顺序跑两者，Core 只打包一次。单跑 Web、Mail 或完整 WebExt 时，入口会准备其所需的 Core 产物。Firefox 专项的 WXT 构建直接消费 Core 源码。
+
 测试主要归属于产生承诺的 owner：SDK 打包与请求字节、Job 执行资格、采集检查点、格式兼容、浏览器存储与跨进程恢复、产物分发各保留独立风险。故障注入需要到达目标检查并核对具体诊断；读取恢复必须消费生产代码写下的状态。新增用例应说明已有证明漏掉的可信回归；删除或合并前先确认剩余 keeper。静态配置、慢速、负向或测试接缝本身不是删除理由。
 
 ## Capability Contract

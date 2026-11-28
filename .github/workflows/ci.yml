@@ -163,11 +163,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 验证邮件阅读与不可信内容隔离
-        run: pnpm test:mail
-
-      - name: Run the selected real core service and isolated browser/database chain
-        run: pnpm test:e2e:web
+      - name: 验证邮件阅读及独占浏览器与数据库链路
+        run: pnpm test:e2e:web:with-mail
         env:
           INKCRE_CORE_IMAGE: ${{ needs.core-release.outputs.image }}
 

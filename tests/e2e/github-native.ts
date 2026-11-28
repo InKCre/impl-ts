@@ -203,6 +203,13 @@ export function registerGitHubNativeTests(): void {
       await row.getByRole('button', { name: 'Enable', exact: true }).click()
       await expect(row.getByText(`Running ${version}`, { exact: true })).toBeVisible()
       // Stopping background participation keeps already loaded local resolvers usable.
+      const graph = `/info-base/graph?focal_block=${repository}`
+      const preview = page.getByRole('button', {
+        name: `Explore entry #${repository}`,
+        exact: true,
+      })
+      await page.goto(graph)
+      await expect(preview).toContainText('fixture-org/demo')
       const documentStartedAt = await page.evaluate(() => performance.timeOrigin)
       await page.locator('button[aria-controls="app-side-panel"]').click()
       await page.getByLabel('Primary').getByRole('link', { name: 'Settings', exact: true }).click()
@@ -211,27 +218,11 @@ export function registerGitHubNativeTests(): void {
       await expect(
         page.getByText('Configuration saved successfully', { exact: true }).first()
       ).toBeVisible()
-      expect(
-        await page.evaluate(async (repository) => {
-          type Sdk = typeof import('../../packages/core/src/index')
-          const state = globalThis as typeof globalThis & {
-            __FEDERATION__: {
-              __INSTANCES__: Array<{
-                options: { name: string }
-                loadShare(name: string): Promise<() => Sdk>
-              }>
-            }
-          }
-          const host = state.__FEDERATION__.__INSTANCES__.find(
-            (instance) => instance.options.name === 'host'
-          )!
-          const sdk = (await host.loadShare('@inkcre/core'))()
-          const resolver = await sdk.ResolverCache.getResolver(await sdk.Block.get(repository))
-          return resolver.getText()
-        }, repository)
-      ).toBe(
-        'fixture-org/demo\n<script>unsafe()</script> Stored repository description\nLanguage: Python\nTopics: fixture, reader'
-      )
+      await page.goBack()
+      await expect(page).toHaveURL(graph)
+      await page.getByRole('button', { name: `Inspect entry #${repository}`, exact: true }).click()
+      await page.getByRole('button', { name: 'View content', exact: true }).click()
+      await expect(content).toContainText('Stored repository description')
       expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStartedAt)
       // A new document must also restore the reader without starting background participation.
       await page.goto(`/info-base/list/blocks/${repository}/content`)

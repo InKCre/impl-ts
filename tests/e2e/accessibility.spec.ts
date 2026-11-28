@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { AxeBuilder } from '@axe-core/playwright'
-import { SignJWT } from 'jose'
+import { connectNativeHost, databaseToken } from './native-extension-fixture'
 
 const postgrestUrl = process.env.INKCRE_E2E_POSTGREST_URL!
 const jwtSecret = process.env.INKCRE_E2E_JWT_SECRET!
@@ -13,13 +13,7 @@ let headers: Record<string, string>
 let sourceId: number | undefined
 
 test.beforeAll(async () => {
-  const token = await new SignJWT({ role: 'authenticated' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .setIssuer('inkcre-peer')
-    .setAudience('inkcre-api')
-    .sign(new TextEncoder().encode(jwtSecret))
+  const token = await databaseToken(jwtSecret)
   headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   const type = await fetch(`${postgrestUrl}sources_types`, {
     method: 'POST',
@@ -62,19 +56,11 @@ test.afterAll(async () => {
 })
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(
-    ({ postgrestUrl, jwtSecret }) => {
-      localStorage.setItem(
-        'inkcre_app_config',
-        JSON.stringify({
-          INKCRE_PGREST_URL: postgrestUrl,
-          INKCRE_JWT_SECRET: jwtSecret,
-          INKCRE_PEER_ID: '00000000-0000-4000-8000-000000000001',
-        })
-      )
-    },
-    { postgrestUrl, jwtSecret }
-  )
+  await connectNativeHost(page, {
+    postgrestUrl,
+    jwtSecret,
+    browserPeer: '00000000-0000-4000-8000-000000000001',
+  })
 })
 
 for (const route of ['sources', 'extensions', 'settings', 'peers'] as const) {

@@ -290,7 +290,16 @@ void test('partial graph failure leaves progress unchanged and the next executio
     database.rows.blocks.find((row) => row.resolver === resolverTypes.video)!.id,
     originalVideo
   )
-  assert.ok(database.rows.blocks.some((row) => row.id === incompleteMember))
+  const folder = database.rows.blocks.find((row) => row.resolver === resolverTypes.folder)!.id
+  const contains = database.rows.relations.filter(
+    (row) => row.from_ === folder && row.content === 'contains'
+  )
+  const paths = contains.flatMap((edge) =>
+    database.rows.relations.filter(
+      (row) => row.from_ === edge.to_ && row.to_ === originalVideo && row.content === 'item'
+    )
+  )
+  assert.equal(paths.length, 1)
   assert.ok(Object.hasOwn(value.state, 'bilibili'))
   savedGraph(database, value)
 })
