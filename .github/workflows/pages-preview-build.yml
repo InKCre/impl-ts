@@ -1,0 +1,86 @@
+name: Web Pages preview build
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-preview-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: >-
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.base.repo.full_name == github.repository &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout the exact pull-request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Install the pinned pnpm release
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.11.0
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: candidate/package.json
+          cache: pnpm
+          cache-dependency-path: candidate/pnpm-lock.yaml
+
+      - name: Set up Python and PDM
+        uses: pdm-project/setup-pdm@544d7237314ee09c256785bd360f6b30add38b37 # v4.6
+        with:
+          python-version-file: candidate/.python-version
+          version: 2.28.0
+          cache: true
+          cache-dependency-path: candidate/pdm.lock
+
+      - name: Install frozen preview toolchains
+        working-directory: candidate
+        run: |
+          pnpm install --frozen-lockfile
+          pdm install --frozen-lockfile
+        env:
+          PDM_CHECK_UPDATE: 'false'
+
+      - name: Build the exact-head SPA and Module Federation snapshots
+        working-directory: candidate
+        run: pnpm review:candidate build
+
+      - name: Build the same-origin Preview Registry facade
+        working-directory: candidate
+        env:
+          PREVIEW_ORIGIN: https://preview-client-web-pr-${{ github.event.pull_request.number }}.${{ vars.CLOUDFLARE_PAGES_PROJECT }}.pages.dev
+        run: |
+          pdm run inkcre-ext preview build \
+            --inventory .github/preview/extensions.json \
+            --public-origin "$PREVIEW_ORIGIN" \
+            --output .preview-registry
+          cp -R .preview-registry/. apps/web/dist/
+          cp -R apps/web/dist "$GITHUB_WORKSPACE/.pages-preview"
+
+      - name: Upload exact-head static preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: pages-preview-${{ github.event.pull_request.head.sha }}
+          path: .pages-preview
+          if-no-files-found: error
+          include-hidden-files: true
+          overwrite: true
+          retention-days: 3
