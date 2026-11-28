@@ -18,6 +18,7 @@ run('node', [
   'scripts/tests/browser-automation-transport.test.mjs',
   'scripts/tests/job-cancellation.test.mjs',
   'scripts/tests/source-anchor.test.mjs',
+  'scripts/tests/webext-outbox.test.mjs',
 ])
 run('node', ['scripts/verify-browser-automation.mjs'])
 run('pnpm', ['exec', 'playwright', 'test', '--project', 'browser-extension'])
