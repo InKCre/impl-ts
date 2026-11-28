@@ -81,10 +81,13 @@ void test('default database query is bounded, preserves legacy records and captu
     `gte.${range.since}`,
     `lt.${range.until}`,
   ])
+  assert.equal(logCall.url.searchParams.get('order'), 'timestamp.desc,id.desc')
   assert.ok(
     logCall.url.searchParams
       .getAll('or')
-      .some((value) => value.includes('attributes->>"inkcre.record.kind"'))
+      .includes(
+        '(attributes->>"inkcre.record.kind".eq.log,attributes->>"inkcre.record.kind".is.null)'
+      )
   )
   assert.ok(
     logCall.url.searchParams
@@ -93,39 +96,46 @@ void test('default database query is bounded, preserves legacy records and captu
   )
 })
 
-void test('selected external backend delegates query and writes using Peer authority, never database logs', async () => {
+void test('selected external backend delegates query and writes using Peer authority, never database logs', async (t) => {
   const calls = []
+  const query = { ...range, text: 'collected', severity_min: 9 }
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    const url = new URL(input)
+    calls.push(url)
+    if (url.pathname === '/configs') return Response.json(selector)
+    if (url.pathname === '/peers') return Response.json([peer])
+    assert.equal(url.href, 'https://peer.example/observability')
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer peer-token')
+    assert.equal(init.redirect, 'error')
+    const body = JSON.parse(init.body)
+    if (body.action === 'ingest') {
+      assert.deepEqual(body.records, [record])
+      return Response.json({ accepted: 1, dropped: 0 })
+    }
+    if (body.action === 'status')
+      return Response.json({
+        backend: 'loki',
+        configured: true,
+        recording: true,
+        queryable: true,
+        scope: 'selected_backend',
+        history: 'Previous backend data remains there.',
+        dropped: null,
+        error: null,
+      })
+    assert.equal(body.action, 'query')
+    assert.equal(body.expected_backend, 'loki')
+    assert.deepEqual(body.query, { ...query, limit: 100 })
+    return Response.json({ ...range, records: [record], truncated: false, backend: 'loki' })
+  })
   const client = new ObservabilityClient({
     baseUrl: 'https://db.example',
     tokenProvider: async () => 'peer-token',
-    fetch: async (input, init) => {
-      const url = new URL(input)
-      calls.push(url)
-      if (url.pathname === '/configs') return Response.json(selector)
-      if (url.pathname === '/peers') return Response.json([peer])
-      assert.equal(url.href, 'https://peer.example/observability')
-      assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer peer-token')
-      assert.equal(init.redirect, 'error')
-      const body = JSON.parse(init.body)
-      if (body.action === 'ingest') {
-        assert.deepEqual(body.records, [record])
-        return Response.json({ accepted: 1, dropped: 0 })
-      }
-      if (body.action === 'status')
-        return Response.json({
-          backend: 'loki',
-          configured: true,
-          recording: true,
-          queryable: true,
-          scope: 'selected_backend',
-          history: 'Previous backend data remains there.',
-          dropped: null,
-          error: null,
-        })
-      return Response.json({ ...range, records: [record], truncated: false, backend: 'loki' })
-    },
   })
-  assert.deepEqual((await client.query(range)).records, [record])
+  t.mock.method(globalThis, 'fetch', () => {
+    throw new Error('external observation switched transport after construction')
+  })
+  assert.deepEqual((await client.query(query)).records, [record])
   assert.equal((await client.status()).dropped, null)
   await client.emit(record)
   assert.ok(calls.every((url) => url.pathname !== '/logs'))
