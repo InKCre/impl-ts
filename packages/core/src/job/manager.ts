@@ -8,7 +8,12 @@ import {
   type Context,
 } from '../obsrv/telemetry'
 import { z } from 'zod'
-import { Job, JobStatus, JobType, type JobRef, type JobTypeRef } from './job'
+import { Job, JobStatus, JobType, type JobRef, type JobStatusValue, type JobTypeRef } from './job'
+
+type TerminalJobStatus = Exclude<
+  JobStatusValue,
+  typeof JobStatus.PENDING | typeof JobStatus.RUNNING
+>
 
 export interface JobHandler<Parameters extends z.ZodType = z.ZodType> {
   parameters: Parameters
@@ -70,6 +75,7 @@ export class JobManager {
           })
           .select()
           .single()
+          .throwOnError()
         const job = Job.parse(result.data)
         span?.setAttribute('inkcre.job.id', job.id)
         emitJobEvent('job.submitted', job.id, active)
@@ -94,17 +100,19 @@ export class JobManager {
       .eq('status', JobStatus.PENDING)
       .select()
       .maybeSingle()
+      .throwOnError()
     return result.data ? Job.parse(result.data) : null
   }
 
-  private static async close(job: Job, status: string): Promise<boolean> {
+  private static async close(job: Job, status: TerminalJobStatus): Promise<boolean> {
     const result = await Job.dbApi
       .update({ status, state: job.state })
       .eq('id', job.id)
       .eq('status', JobStatus.RUNNING)
       .select('id')
+      .throwOnError()
     const closed = (result.data?.length ?? 0) > 0
-    if (closed) job.status = status as Job['status']
+    if (closed) job.status = status
     return closed
   }
 
@@ -207,26 +215,26 @@ export class JobManager {
       () => controller.abort(JobStatus.TIMED_OUT),
       claimed.timeout_seconds * 1000
     )
+    let status: TerminalJobStatus = JobStatus.FINISHED
     try {
       // An abort signal is only a request. Await actual handler settlement;
       // Promise.race would report closure while side effects were still running.
       await handler.handle(claimed, parameters, controller.signal)
-      await this.close(
-        claimed,
-        controller.signal.aborted ? String(controller.signal.reason) : JobStatus.FINISHED
-      )
     } catch (error) {
       claimed.state = {
         ...claimed.state,
         error: error instanceof Error ? error.message : String(error),
       }
-      await this.close(
-        claimed,
-        controller.signal.aborted ? String(controller.signal.reason) : JobStatus.FAILED
-      )
+      status = JobStatus.FAILED
     } finally {
       clearTimeout(timeout)
     }
+    if (controller.signal.aborted) {
+      status =
+        controller.signal.reason === JobStatus.TIMED_OUT ? JobStatus.TIMED_OUT : JobStatus.ABORTED
+    }
+    // A lost close response may follow a commit. Propagate the error without writing a second outcome.
+    await this.close(claimed, status)
   }
 
   static async checkAbortRequests(): Promise<void> {
@@ -237,6 +245,7 @@ export class JobManager {
       .select('id')
       .in('id', [...active.keys()])
       .eq('abort_requested', true)
+      .throwOnError()
     for (const job of result.data ?? []) {
       active.get(job.id)?.controller.abort(JobStatus.ABORTED)
     }
