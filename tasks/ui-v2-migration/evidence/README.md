@@ -10,11 +10,11 @@ Web、mail、twitter 和 ext-dev-utils 均锁定 GitHub Packages 的 `@inkcre/ui
 
 实际构建的 Web 页面验证了 JSON 语法／schema 无效时禁用保存、保存后的草稿回显、中英文切换和深浅主题。375px 下 Peer dialog 位于视口内，未发生运行时异常。持久化失败、pending 禁止关闭、禁用编辑与重试成功由真实数据库 E2E 证明。
 
-[扩展验收脚本](browser-host.mjs) 从真实 Web 构建进入 Extensions，按原生 manifest 加载本次构建的 mail 和 twitter，网络边界使用隔离 Registry／Peer／Block 数据。它验证中文 Host 的小时／分钟、取消／确认文案传入 Twitter；取消保留原时间，确认提交 07:30；再进入 Info-Base 的 Mail renderer，验证 HTML 隔离显示、附件下载 pending、受控 HTTP 500 后错误显示与按钮恢复。最终未出现 pageerror；控制台的 500 属于主动失败注入。它不证明真实 OAuth 或 Mail 服务集成，这些操作没有执行。
+[扩展验收脚本](https://github.com/InKCre/impl-ts/blob/ec5dd1e3877db30bf51b5780b1a6bc7d31e3ba01/tasks/ui-v2-migration/evidence/browser-host.mjs) 从真实 Web 构建进入 Extensions，按原生 manifest 加载本次构建的 mail 和 twitter，网络边界使用隔离 Registry／Peer／Block 数据。它验证中文 Host 的小时／分钟、取消／确认文案传入 Twitter；取消保留原时间，确认提交 07:30；再进入 Info-Base 的 Mail renderer，验证 HTML 隔离显示、附件下载 pending、受控 HTTP 500 后错误显示与按钮恢复。最终未出现 pageerror；控制台的 500 属于主动失败注入。它不证明真实 OAuth 或 Mail 服务集成，这些操作没有执行。
 
 ## 复跑
 
-在工作区根目录完成 `pnpm install --frozen-lockfile` 和 `pnpm check`，随后分别运行：
+在历史提交 `ec5dd1e387` 的工作区根目录完成 `pnpm install --frozen-lockfile` 和 `pnpm check`，随后分别运行：
 
 ```sh
 pnpm --filter @inkcre/client-web preview --host 127.0.0.1 --port 47931 --strictPort
@@ -70,7 +70,7 @@ Web 与 Mail 产物和上表一致；Twitter 构建仍为 47 个文件，新的 
 
 来源列表保留名称、类型、ID 和采集入口，完整配置在详情读取与修改。创建和调度表单通过明确动作打开；来源、计划和任务分别显示实际状态。回到列表时定位并聚焦对应来源，失败与尺寸变化保留原始草稿。Host 同时补上 `presetInk()` 注册，语义错误色类现在实际生成；没有新增颜色覆盖或依赖。
 
-沿用上方重放命令；命令中的 `node` 可通过 `pnpm exec node` 使用仓库声明的 Node 22.22.3。[来源旅程](sources.mjs) 由既有 [Host 脚本](browser-host.mjs) 调用，使用原有 Playwright 和 Chromium，未新增发布门禁或测试框架。
+沿用上方重放命令；命令中的 `node` 可通过 `pnpm exec node` 使用仓库声明的 Node 22.22.3。[来源旅程](https://github.com/InKCre/impl-ts/blob/ec5dd1e3877db30bf51b5780b1a6bc7d31e3ba01/tasks/ui-v2-migration/evidence/sources.mjs) 由既有 [Host 脚本](https://github.com/InKCre/impl-ts/blob/ec5dd1e3877db30bf51b5780b1a6bc7d31e3ba01/tasks/ui-v2-migration/evidence/browser-host.mjs) 调用，使用原有 Playwright 和 Chromium，未新增发布门禁或测试框架。
 
 | 边界             | 验证内容                                                                                                                                    |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,6 +120,6 @@ pnpm exec node tasks/ui-v2-migration/evidence/browser-host.mjs https://preview-c
 
 本轮以正式包 DESIGN.md 的内容取舍、视觉语言及页面组合为比较依据。Twitter 保留当前步骤与完成摘要，应用凭据按需展开，保存与授权分开；Mail 让邮件内容优先，附件按行组织，信头、内嵌内容与相关邮件可展开，事实摘要不罗列底层字段；Graph 保留场景上下文，选项按需打开，节点可通过键盘聚焦与查看，方向弱化保留可读内容。
 
-完整 check 与原有浏览器旅程通过。扩展的 [I4 重放](i4.mjs) 使用真实构建的 Host 与 MF 产物，验证首次使用、草稿、等待、失败重试、已配置、展开详情、下载、图检索和返回。通过既有 Storage 读取隔离字节并产生真实 Blob 链接；邮件 iframe 不允许脚本、同源访问或外部追踪图像，仅应用清理后注入的固定排印。Graph 验证方向切换不增加数据库读取，拖拽位置在选项变化后保留，读取失败、缺失、空结果、已找到／未找到路径与超出边界分别呈现。
+完整 check 与原有浏览器旅程通过。扩展的 [I4 重放](https://github.com/InKCre/impl-ts/blob/ec5dd1e3877db30bf51b5780b1a6bc7d31e3ba01/tasks/ui-v2-migration/evidence/i4.mjs) 使用真实构建的 Host 与 MF 产物，验证首次使用、草稿、等待、失败重试、已配置、展开详情、下载、图检索和返回。通过既有 Storage 读取隔离字节并产生真实 Blob 链接；邮件 iframe 不允许脚本、同源访问或外部追踪图像，仅应用清理后注入的固定排印。Graph 验证方向切换不增加数据库读取，拖拽位置在选项变化后保留，读取失败、缺失、空结果、已找到／未找到路径与超出边界分别呈现。
 
 375px 的 Graph 默认聚焦当前对象，使用平移和缩放访问邻域；不要求所有节点同时挤入视口。截图禁用过渡动画并等待相机定位，避免将途中帧作为最终布局。单独重放本轮可在原命令后加 `--i4-only`；远端加 `--deployed-extensions`。详细日志和代表截图位于 [I4 证据目录](i4/)。实际 OAuth 与真实邮箱未执行，数据库 E2E 由同一 PR 的独立 CI 检查。
