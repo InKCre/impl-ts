@@ -5,8 +5,8 @@ import {
   type MaterialMetadata,
   type MaterialPart,
 } from '@inkcre/web-collection'
+import { extractPage } from '@inkcre/web-collection/extract'
 import { browser } from 'wxt/browser'
-import { parsePublicHTML } from './parse-html'
 import { siteMatchPattern } from './permissions'
 
 let openingParser: Promise<void> | undefined
@@ -14,7 +14,7 @@ async function parseHTML(
   html: string,
   url: string
 ): Promise<{ html: string; title: string; canonical?: string }> {
-  if (typeof DOMParser !== 'undefined') return parsePublicHTML(html, url)
+  if (typeof DOMParser !== 'undefined') return extractPage(html, url)
   const contexts = await browser.runtime.getContexts({
     contextTypes: ['OFFSCREEN_DOCUMENT'],
     documentUrls: [browser.runtime.getURL('/parser.html')],

@@ -16,7 +16,7 @@ HTML／Markdown／text 是 inline 语义内容，PDF 通过所选 Storage 保存
 
 旧 `part.html|text|pdf` 图仍可读取：html 是原材料，text／pdf 是正文。冻结旧载荷只在提交内存中映射用途，不修改待办。current 更新复用旧正文 Block 和关系，先重标用途再更新实际格式；旧 fixed 保留关系形状及已有内容，只补缺失部件。多个正文候选明确报错，不用优先级掩盖歧义。没有全库迁移或第二份正文。
 
-`@inkcre/web-collection` 根入口只导出 DTO、关系选择和字节转换，避免 content script 连带加载 core 运行态。`/extract` 只解析已经取得的 HTML／DOM 和 JSON-LD，不初始化 core、网络或数据库；`/client` 是普通图读取/写入入口，接收固定 URL 和 token provider；`/resolvers` 提供两个根的 Resolver 实现，使用者像 core Resolver 一样绑定自己的呈现并注册。另一 Peer 可沿 Relation 直接读取标准语义内容，不要求 WebExt 在线；未安装领域解码能力的 Peer 不应猜测自定义根的含义。
+`@inkcre/web-collection` 根入口只导出 DTO、关系选择和字节转换，避免 content script 连带加载 core 运行态。`/extract` 只解析已经取得的 HTML／DOM 和 JSON-LD，不初始化 core、网络或数据库；`/client` 是普通图读取/写入入口，接收固定 URL 和 token provider。另一 Peer 可沿 Relation 直接读取标准语义内容，不要求 WebExt 在线；未安装领域解码能力的 Peer 不应猜测自定义根的含义。
 
 ## 生命周期与恢复
 
