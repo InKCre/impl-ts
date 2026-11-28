@@ -6,6 +6,16 @@ import {
   Relation,
   Resolver,
   ResolverCache,
+  TextResolver,
+  MarkdownResolver,
+  HtmlResolver,
+  ImageResolver,
+  AudioResolver,
+  VideoResolver,
+  PdfResolver,
+  EpubResolver,
+  ZipResolver,
+  FileResolver,
   type LexicalRetrievalMatch,
   type ProjectionOptions,
   type RecallTarget,
@@ -52,6 +62,20 @@ import {
 } from './schema'
 
 export const MAIL_MIME_PART_MATERIALIZE_CAPABILITY = 'extensions.mail.mime_part.materialize.v1'
+
+// These exact built-in classes read their own payload without following other Blocks.
+const MIME_CONTENT_LEAVES = [
+  TextResolver,
+  MarkdownResolver,
+  HtmlResolver,
+  ImageResolver,
+  AudioResolver,
+  VideoResolver,
+  PdfResolver,
+  EpubResolver,
+  ZipResolver,
+  FileResolver,
+]
 
 async function solveBlock<Content>(
   block: Block,
@@ -423,6 +447,36 @@ export class MailMimePartResolver extends Resolver<string, SolvedMimePart> {
     Resolver.register(MailMimePartResolver.type, MailMimePartResolver)
   }
 
+  private pendingRead: { context: string; promise: Promise<SolvedMimePart> } | null = null
+
+  override async getSolvedContent(options: ProjectionOptions = {}): Promise<SolvedMimePart> {
+    if (options.refresh || options.materializeMissing !== false)
+      return super.getSolvedContent(options)
+    const context = options.context ?? 'default'
+    if (this.pendingRead) {
+      return this.pendingRead.context === context
+        ? this.pendingRead.promise
+        : super.getSolvedContent(options)
+    }
+    const promise = super.getSolvedContent(options)
+    this.pendingRead = { context, promise }
+    try {
+      return await promise
+    } finally {
+      if (this.pendingRead?.promise === promise) this.pendingRead = null
+    }
+  }
+
+  private async solveContent(block: Block, options: ProjectionOptions): Promise<SolvedBlock> {
+    const resolverClass = Resolver.getClass(block.resolver)
+    if (!MIME_CONTENT_LEAVES.some((leaf) => leaf === resolverClass)) {
+      // A semantic/custom child can call back into this MIME part. Stop admitting shared
+      // reads before entering it, so the base Resolver's loading guard still ends cycles.
+      this.pendingRead = null
+    }
+    return solveBlock(block, options)
+  }
+
   protected async _getSolvedContent(options: ProjectionOptions): Promise<SolvedMimePart> {
     const root = CanonicalMimePartSchema.parse(parseJson(await this.getRawContent(options)))
     const relations = await this.getRelations({
@@ -433,7 +487,7 @@ export class MailMimePartResolver extends Resolver<string, SolvedMimePart> {
     const contentRelation = relations.find((relation) => relation.content === 'content')
     if (contentRelation) {
       const child = await Block.find(contentRelation.to_)
-      if (child) return { root, content: await solveBlock(child, options) }
+      if (child) return { root, content: await this.solveContent(child, options) }
     }
     if (!options.materializeMissing) return { root, content: null }
 
@@ -445,7 +499,7 @@ export class MailMimePartResolver extends Resolver<string, SolvedMimePart> {
       throw new Error(`Mail materialization Peer returned HTTP ${response.status}`)
     }
     const child = Block.parse(response.body)
-    return { root, content: await solveBlock(child, options) }
+    return { root, content: await this.solveContent(child, options) }
   }
 
   async getText(options: ProjectionOptions = {}): Promise<string> {

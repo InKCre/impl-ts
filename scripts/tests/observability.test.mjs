@@ -1,14 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import {
-  ObservabilityClient,
-  ObservabilityUnavailableError,
-} from '../../packages/core/dist/sdk/sdk.js'
+import { ObservabilityClient } from '../../packages/core/dist/sdk/sdk.js'
 
-const range = { since: '2026-11-04T00:00:00Z', until: '2026-11-04T23:59:59Z' }
+const range = { since: '2020-11-04T00:00:00Z', until: '2020-11-04T23:59:59Z' }
 const record = {
   id: 'observation-1',
-  timestamp: '2026-11-04T10:00:00Z',
+  timestamp: '2020-11-04T10:00:00Z',
   kind: 'event',
   event_name: 'job.closed',
   severity_number: 9,
@@ -81,10 +78,13 @@ void test('default database query is bounded, preserves legacy records and captu
     `gte.${range.since}`,
     `lt.${range.until}`,
   ])
+  assert.equal(logCall.url.searchParams.get('order'), 'timestamp.desc,id.desc')
   assert.ok(
     logCall.url.searchParams
       .getAll('or')
-      .some((value) => value.includes('attributes->>"inkcre.record.kind"'))
+      .includes(
+        '(attributes->>"inkcre.record.kind".eq.log,attributes->>"inkcre.record.kind".is.null)'
+      )
   )
   assert.ok(
     logCall.url.searchParams
@@ -93,51 +93,66 @@ void test('default database query is bounded, preserves legacy records and captu
   )
 })
 
-void test('selected external backend delegates query and writes using Peer authority, never database logs', async () => {
-  const calls = []
-  const client = new ObservabilityClient({
-    baseUrl: 'https://db.example',
-    tokenProvider: async () => 'peer-token',
-    fetch: async (input, init) => {
-      const url = new URL(input)
-      calls.push(url)
-      if (url.pathname === '/configs') return Response.json(selector)
-      if (url.pathname === '/peers') return Response.json([peer])
-      assert.equal(url.href, 'https://peer.example/observability')
-      assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer peer-token')
-      assert.equal(init.redirect, 'error')
-      const body = JSON.parse(init.body)
-      if (body.action === 'ingest') {
-        assert.deepEqual(body.records, [record])
-        return Response.json({ accepted: 1, dropped: 0 })
-      }
-      if (body.action === 'status')
-        return Response.json({
-          backend: 'loki',
-          configured: true,
-          recording: true,
-          queryable: true,
-          scope: 'selected_backend',
-          history: 'Previous backend data remains there.',
-          dropped: null,
-          error: null,
-        })
-      return Response.json({ ...range, records: [record], truncated: false, backend: 'loki' })
-    },
+void test('a prepared client keeps its delegated queries when a new client adopts a changed selector', async (t) => {
+  let selected = selector
+  let databaseReads = 0
+  const query = { ...range, text: 'collected', severity_min: 9 }
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    const url = new URL(input)
+    if (url.pathname === '/configs') return Response.json(selected)
+    if (url.pathname === '/logs') {
+      databaseReads++
+      return Response.json([])
+    }
+    if (url.pathname === '/peers') return Response.json([peer])
+    assert.equal(url.href, 'https://peer.example/observability')
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer peer-token')
+    assert.equal(init.redirect, 'error')
+    const body = JSON.parse(init.body)
+    if (body.action === 'status')
+      return Response.json({
+        backend: 'loki',
+        configured: true,
+        recording: true,
+        queryable: true,
+        scope: 'selected_backend',
+        history: 'Previous backend data remains there.',
+        dropped: 7,
+        error: null,
+      })
+    assert.equal(body.action, 'query')
+    assert.equal(body.expected_backend, 'loki')
+    assert.deepEqual(body.query, { ...query, limit: 100 })
+    return Response.json({ ...range, records: [record], truncated: false, backend: 'loki' })
   })
-  assert.deepEqual((await client.query(range)).records, [record])
-  assert.equal((await client.status()).dropped, null)
-  await client.emit(record)
-  assert.ok(calls.every((url) => url.pathname !== '/logs'))
+  const connection = { baseUrl: 'https://db.example', tokenProvider: async () => 'peer-token' }
+  const client = new ObservabilityClient(connection)
+  await client.prepare()
+  selected = null
+  const fresh = new ObservabilityClient(connection)
+  t.mock.method(globalThis, 'fetch', () => {
+    throw new Error('external observation switched transport after construction')
+  })
+  assert.deepEqual((await client.query(query)).records, [record])
+  assert.equal((await client.status()).dropped, 7)
+  assert.equal(databaseReads, 0)
+  assert.equal((await fresh.query(range)).backend, 'postgresql')
+  assert.equal(databaseReads, 1)
 })
 
 void test('unknown selection, missing capability, external failure and backend disagreement never fall back', async () => {
-  for (const failure of ['selection', 'capability', 'request', 'mismatch']) {
+  for (const [failure, message, expectedActions] of [
+    ['selection', 'Unsupported observability configuration version.', []],
+    ['capability', 'No live Peer provides the selected observability backend.', []],
+    ['request', 'Observability backend request failed (503).', ['status', 'query']],
+    ['mismatch', 'Observability backend changed during this query.', ['status', 'query']],
+  ]) {
     let queriedDatabase = false
+    const actions = []
     const client = new ObservabilityClient({
       baseUrl: 'https://db.example',
       tokenProvider: async () => 'token',
-      fetch: async (input) => {
+      fetch: async (input, init) => {
         const url = new URL(input)
         if (url.pathname === '/configs')
           return Response.json(
@@ -148,78 +163,97 @@ void test('unknown selection, missing capability, external failure and backend d
           queriedDatabase = true
           return Response.json([])
         }
+        assert.equal(url.href, 'https://peer.example/observability')
+        const body = JSON.parse(init.body)
+        actions.push(body.action)
+        if (body.action === 'status')
+          return Response.json({
+            backend: 'loki',
+            configured: true,
+            recording: true,
+            queryable: true,
+            scope: 'selected_backend',
+            history: '',
+            dropped: null,
+            error: null,
+          })
+        assert.equal(body.action, 'query')
+        assert.equal(body.expected_backend, 'loki')
         return failure === 'request'
           ? new Response('unavailable', { status: 503 })
           : Response.json({ ...range, records: [], truncated: false, backend: 'postgresql' })
       },
     })
-    await assert.rejects(client.query(range), ObservabilityUnavailableError)
+    await assert.rejects(client.query(range), {
+      name: 'ObservabilityUnavailableError',
+      message,
+    })
+    assert.deepEqual(actions, expectedActions, failure)
     assert.equal(queriedDatabase, false)
   }
 })
 
 void test('database ingestion preserves portable identity, kind and event metadata', async () => {
   let stored
+  const requests = []
   const client = new ObservabilityClient({
     baseUrl: 'https://db.example',
     tokenProvider: async () => 'token',
     fetch: async (input, init) => {
-      if (new URL(input).pathname === '/configs') return Response.json(null)
+      const { pathname } = new URL(input)
+      requests.push(pathname)
+      if (pathname === '/configs') return Response.json(null)
+      assert.equal(pathname, '/logs')
       stored = JSON.parse(init.body)
       return new Response(null, { status: 201 })
     },
   })
+  const rejectsField = (field, message) => (error) => {
+    assert.equal(error.name, 'ZodError')
+    assert.ok(
+      error.issues.some(
+        (issue) => issue.path.join('.') === field && (!message || issue.message === message)
+      ),
+      error.message
+    )
+    return true
+  }
+  for (const [input, field] of [
+    [{ ...record, body: 'x'.repeat(8193) }, 'body'],
+    [{ ...record, event_name: 'x'.repeat(129) }, 'event_name'],
+    [{ ...record, severity_text: 'x'.repeat(33) }, 'severity_text'],
+    [{ ...record, trace_id: 'x'.repeat(129) }, 'trace_id'],
+    [{ ...record, span_id: 'x'.repeat(129) }, 'span_id'],
+    [{ ...record, attributes: { nested: { value: 1 } } }, 'attributes.nested'],
+    [{ ...record, attributes: { large: 'x'.repeat(1025) } }, 'attributes.large'],
+    [{ ...record, attributes: { large: Array(33).fill(1) } }, 'attributes.large'],
+  ])
+    await assert.rejects(client.emit(input), rejectsField(field))
+  for (const [input, field, message] of [
+    [{ ...range, until: range.since }, '', 'Observation time range must end after it starts.'],
+    [{ ...range, limit: 501 }, 'limit'],
+    [
+      { since: '2026-01-01T00:00:00Z', until: '2026-11-01T00:00:00Z' },
+      '',
+      'Observation time range must not exceed 31 days.',
+    ],
+  ])
+    await assert.rejects(client.query(input), rejectsField(field, message))
+  assert.deepEqual(requests, [], 'invalid input must fail before database I/O')
+
   await client.emit(record)
   assert.equal(stored.attributes['inkcre.record.id'], record.id)
   assert.equal(stored.attributes['inkcre.record.kind'], 'event')
   assert.equal(stored.attributes['inkcre.event.name'], 'job.closed')
   assert.equal(stored.id, undefined)
-  await assert.rejects(client.emit({ ...record, body: 'x'.repeat(8193) }))
-  for (const [key, length] of [
-    ['event_name', 128],
-    ['severity_text', 32],
-    ['trace_id', 128],
-    ['span_id', 128],
-  ])
-    await assert.rejects(client.emit({ ...record, [key]: 'x'.repeat(length + 1) }))
-  await assert.rejects(client.emit({ ...record, attributes: { nested: { value: 1 } } }))
-  await assert.rejects(client.emit({ ...record, attributes: { large: 'x'.repeat(1025) } }))
-  await assert.rejects(client.emit({ ...record, attributes: { large: Array(33).fill(1) } }))
   assert.equal(stored.body, record.body)
-  await assert.rejects(client.query({ ...range, until: range.since }))
-  await assert.rejects(client.query({ ...range, limit: 501 }))
-})
-
-void test('an initialized instance keeps its selected backend until a new instance is created', async () => {
-  let selected = null
-  let reads = 0
-  const connection = {
-    baseUrl: 'https://db.example',
-    tokenProvider: async () => 'token',
-    fetch: async (input) => {
-      const url = new URL(input)
-      if (url.pathname === '/configs') {
-        reads++
-        return Response.json(selected)
-      }
-      if (url.pathname === '/logs') return Response.json([])
-      if (url.pathname === '/peers') return Response.json([])
-      throw new Error('Unexpected call')
-    },
-  }
-  const old = new ObservabilityClient(connection)
-  await old.prepare()
-  selected = selector
-  assert.equal((await old.query(range)).backend, 'postgresql')
-  assert.equal(reads, 1)
-  await assert.rejects(
-    new ObservabilityClient(connection).query(range),
-    ObservabilityUnavailableError
+  assert.deepEqual(
+    requests.filter((path) => path === '/logs'),
+    ['/logs']
   )
-  await assert.rejects(old.query({ since: '2026-01-01T00:00:00Z', until: '2026-11-01T00:00:00Z' }))
 })
 
-void test('a not-ready Peer is skipped before dispatch and writes carry atomic backend expectation', async () => {
+void test('external writes skip unready Peers, carry backend expectation, and never retry rejected dispatch', async () => {
   const stale = {
     ...peer,
     id: '00000000-0000-4000-8000-000000000000',
@@ -233,34 +267,60 @@ void test('a not-ready Peer is skipped before dispatch and writes carry atomic b
       },
     ],
   }
-  let stored = false
-  const client = new ObservabilityClient({
-    baseUrl: 'https://db.example',
-    tokenProvider: async () => 'token',
-    fetch: async (input, init) => {
-      const url = new URL(input)
-      if (url.pathname === '/configs') return Response.json(selector)
-      if (url.pathname === '/peers') return Response.json([stale, peer])
-      const body = JSON.parse(init.body)
-      if (body.action === 'status')
-        return Response.json({
-          backend: 'loki',
-          configured: url.hostname !== 'stale.example',
-          recording: url.hostname !== 'stale.example',
-          queryable: url.hostname !== 'stale.example',
-          scope: 'selected_backend',
-          history: '',
-          dropped: null,
-          error: null,
-        })
-      assert.equal(url.hostname, 'peer.example')
-      assert.equal(body.expected_backend, 'loki')
-      stored = true
-      return Response.json({ accepted: 1, dropped: 0 })
-    },
-  })
-  await client.emit(record)
-  assert.equal(stored, true)
+  const alternative = {
+    ...peer,
+    id: '00000000-0000-4000-8000-000000000002',
+    capabilities: [
+      {
+        ...peer.capabilities[0],
+        inbound: {
+          ...peer.capabilities[0].inbound,
+          parameters: { method: 'POST', url: 'https://alternative.example/observability' },
+        },
+      },
+    ],
+  }
+  for (const [outcome, message] of [
+    ['accepted', null],
+    ['unavailable', 'Observability backend request failed (503).'],
+    ['dropped', 'The selected backend did not accept this observation.'],
+  ]) {
+    const writes = []
+    const client = new ObservabilityClient({
+      baseUrl: 'https://db.example',
+      tokenProvider: async () => 'token',
+      fetch: async (input, init) => {
+        const url = new URL(input)
+        if (url.pathname === '/configs') return Response.json(selector)
+        if (url.pathname === '/peers') return Response.json([stale, peer, alternative])
+        const body = JSON.parse(init.body)
+        if (body.action === 'status')
+          return Response.json({
+            backend: 'loki',
+            configured: url.hostname !== 'stale.example',
+            recording: url.hostname !== 'stale.example',
+            queryable: url.hostname !== 'stale.example',
+            scope: 'selected_backend',
+            history: '',
+            dropped: null,
+            error: null,
+          })
+        assert.equal(url.hostname, 'peer.example')
+        assert.equal(body.action, 'ingest')
+        assert.deepEqual(body.records, [record])
+        assert.equal(body.expected_backend, 'loki')
+        writes.push(url.href)
+        if (outcome === 'unavailable') return new Response(null, { status: 503 })
+        return Response.json(
+          outcome === 'dropped' ? { accepted: 0, dropped: 1 } : { accepted: 1, dropped: 0 }
+        )
+      },
+    })
+    if (message)
+      await assert.rejects(client.emit(record), { name: 'ObservabilityUnavailableError', message })
+    else await client.emit(record)
+    assert.deepEqual(writes, ['https://peer.example/observability'], outcome)
+  }
 })
 
 void test('Job lifecycle and terminal severities are recorded without optional OTEL or raw content', async () => {
@@ -281,19 +341,20 @@ void test('Job lifecycle and terminal severities are recorded without optional O
     closed_at: null,
   }
   const records = []
-  let configReads = 0
   let outcome = 'finished'
   globalThis.fetch = async (input, init) => {
     const url = new URL(input)
-    if (url.pathname === '/configs') {
-      configReads++
-      return Response.json(null)
-    }
+    if (url.pathname === '/configs') return Response.json(null)
     if (url.pathname === '/logs') {
       records.push(JSON.parse(init.body))
       return new Response(null, { status: 201 })
     }
     if (url.pathname === '/jobs') {
+      if (init.method === 'GET' && url.searchParams.get('select') === 'id') {
+        assert.equal(url.searchParams.get('id'), 'in.(8)')
+        assert.equal(url.searchParams.get('abort_requested'), 'eq.true')
+        return Response.json(dbJob.abort_requested ? [{ id: dbJob.id }] : [])
+      }
       if (init.method === 'PATCH') Object.assign(dbJob, JSON.parse(init.body))
       const singleton = new Headers(init.headers).get('Accept')?.includes('object+json')
       return Response.json(singleton ? dbJob : [dbJob])
@@ -311,12 +372,14 @@ void test('Job lifecycle and terminal severities are recorded without optional O
     canHandle: () => true,
     handle: async (job, _parameters, signal) => {
       job.state = { count: 11 }
+      if (outcome === 'failed') throw new Error('private-handler-error-must-not-be-recorded')
       if (outcome === 'timed_out')
         await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }))
       if (outcome === 'aborted') {
         dbJob.abort_requested = true
         await new Promise((resolve) => setImmediate(resolve))
         await JobManager.checkAbortRequests()
+        assert.equal(signal.aborted, true)
       }
     },
   })
@@ -336,6 +399,7 @@ void test('Job lifecycle and terminal severities are recorded without optional O
     )
     assert.equal(JSON.stringify(records).includes('must-not-be-recorded'), false)
     for (const [terminalStatus, severity, expectedOutcome] of [
+      ['failed', 17, 'error'],
       ['timed_out', 17, 'timeout'],
       ['aborted', 9, 'cancelled'],
     ]) {
@@ -352,8 +416,8 @@ void test('Job lifecycle and terminal severities are recorded without optional O
       assert.equal(closed.severity_number, severity)
       assert.equal(execution.severity_number, severity)
       assert.equal(execution.attributes.outcome, expectedOutcome)
+      assert.equal(JSON.stringify(records).includes('must-not-be-recorded'), false)
     }
-    assert.equal(configReads, 1, 'all operations share one captured backend selection')
   } finally {
     JobManager.unregisterHandler('test.observation')
     Object.assign(configStore.metaConfig, priorMeta)

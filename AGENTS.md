@@ -49,6 +49,8 @@ For UI work, read the installed `@inkcre/ui-web` package's `DESIGN.md` and `skil
 - `.env` files are dotenv data, not shell scripts. Load them through the application because values may contain shell metacharacters.
 - Generated contracts under `contracts/` are checked-in projections. Change their source and regenerate; do not edit them directly.
 - The `apps/webext/` WXT extension and the `apps/web/` Vue SPA share `@inkcre/core` but run in different security contexts. Changes that cross the seam must be validated against both runtimes.
+- For test changes, check the actual entry point in `package.json`, `playwright.config.ts`, and CI. Put independent producer fixtures (including legacy persisted bytes) in the tests. Exercise browser recovery through the shipped wake-up events.
+- Development, release, and artifact checks under `scripts/` are acceptance entry points too. Exercise CLI behavior at process boundaries and check the resolved configuration or published artifact when that owns the contract.
 - Follow `.agents/prompts/code-for-human.md` for source changes.
 
 ## Governance And Workflow

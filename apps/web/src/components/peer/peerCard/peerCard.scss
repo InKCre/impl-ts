@@ -3,7 +3,7 @@
 
   &__title {
     // Title is an inline-edit InkInput, not plain text — remove its default
-    // h3-adjacent margins that conflict with the inline input's own layout.
+    // heading margins that conflict with the inline input's own layout.
     display: flex;
     align-items: center;
     min-inline-size: 0;

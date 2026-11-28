@@ -6,8 +6,19 @@ function check(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message)
 }
 
+async function rejectsWith(operation: Promise<unknown>, name: string, message: RegExp) {
+  const failure: unknown = await operation.then(
+    () => undefined,
+    (error: unknown) => error
+  )
+  check(
+    failure instanceof Error && failure.name === name && message.test(failure.message),
+    `Expected ${name} matching ${message}, received ${String(failure)}`
+  )
+}
+
 async function main() {
-  if (location.pathname === '/unpaired' || location.pathname === '/paired') {
+  if (location.pathname === '/probe') {
     const found = await BrowserAccess.discover()
     await fetch('/probe-report', {
       method: 'POST',
@@ -19,17 +30,21 @@ async function main() {
     })
     return
   }
-  const config = await fetch('/config').then((response) => response.json())
+  const query = new URLSearchParams(location.search)
+  const provider = query.get('provider')
+  const secondProvider = query.get('secondProvider')
+  const otherOrigin = query.get('otherOrigin')
+  check(provider && secondProvider && otherOrigin, 'Missing fixture provider or origin')
   configStore.metaConfig = MetaConfigSchema.parse({
     INKCRE_PGREST_URL: `${location.origin}/unused-database`,
     INKCRE_PEER_ID: crypto.randomUUID(),
   })
   const found = await BrowserAccess.discover()
   check(found.length === 2, `Expected two authorized providers, found ${found.length}`)
-  const binding = found.find((item) => item.provider === config.provider)!
-  check(binding.provider === config.provider, 'Discovery returned another provider')
+  const binding = found.find((item) => item.provider === provider)
+  check(binding, 'The authorized provider was not discovered')
   BrowserAccess.bind(binding)
-  check(BrowserAccess.hasBinding(binding.provider), 'Explicit binding was not persisted')
+  check(BrowserAccess.hasBinding(binding.provider), 'Explicit binding is not available to Sources')
   const baseline = await BrowserAccess.tabs(binding.provider)
   let stalePage: { evaluate: (value: string) => Promise<unknown> } | undefined
   const extracted = await BrowserAccess.withPage(
@@ -64,17 +79,31 @@ async function main() {
     extracted.entries.join(',') === 'one,two,three,four',
     'Page interactions did not load the later batch'
   )
-  check(extracted.body.entries.length === 2, 'Network response body did not cross the bridge')
+  check(
+    JSON.stringify(extracted.body) === JSON.stringify({ entries: ['three', 'four'] }),
+    'Network response body did not cross the bridge'
+  )
   check(
     (await BrowserAccess.tabs(binding.provider)).length === baseline.length,
     'Owned tab was not closed'
   )
+  stage = 'stale-page'
+  const staleFailure: unknown = await stalePage!.evaluate('1').then(
+    () => undefined,
+    (error: unknown) => error
+  )
+  // Puppeteer may finish frame teardown before the stale command reaches its closed session.
+  const closedSession =
+    staleFailure instanceof Error &&
+    staleFailure.name === 'TargetCloseError' &&
+    /Session closed/.test(staleFailure.message)
+  const detachedFrame =
+    staleFailure instanceof Error &&
+    staleFailure.name === 'Error' &&
+    /^Attempted to use detached Frame '[^']+'\.$/.test(staleFailure.message)
   check(
-    await stalePage!.evaluate('1').then(
-      () => false,
-      () => true
-    ),
-    'Old Page still executed after release'
+    closedSession || detachedFrame,
+    `Expected a closed session or detached frame, received ${String(staleFailure)}`
   )
 
   const borrowed = (await BrowserAccess.tabs(binding.provider)).find((tab) =>
@@ -92,60 +121,98 @@ async function main() {
         (tab) => tab.tabId === borrowed.tabId
       )
       check(busyTab, 'Active borrowed tab disappeared')
-      check(
-        await BrowserAccess.withPage(
+      await rejectsWith(
+        BrowserAccess.withPage(
           { provider: binding.provider, target: { kind: 'existing', tab: busyTab } },
           async () => null
-        ).then(
-          () => false,
-          () => true
         ),
-        'Two sessions acquired the same borrowed tab'
+        'BrowserAutomationError',
+        /此标签页正在被另一个自动化会话使用/
       )
     }
   )
   check(
-    (await BrowserAccess.tabs(binding.provider)).some((tab) => tab.tabId === borrowed.tabId),
+    (await BrowserAccess.tabs(binding.provider)).some(
+      (tab) => tab.tabId === borrowed.tabId && tab.title === 'borrowed-preserved'
+    ),
     'Borrowed tab was closed'
   )
-  check(
-    await BrowserAccess.withPage(
+  await rejectsWith(
+    BrowserAccess.withPage(
       { provider: binding.provider, target: { kind: 'existing', tab: borrowed } },
       async () => null
-    ).then(
-      () => false,
-      () => true
     ),
-    'Consumed tab reference was reused'
+    'BrowserAutomationError',
+    /标签页引用已经使用或过期/
   )
 
   const controller = new AbortController()
+  const abortReason = new Error('fixture cancelled the active callback')
   stage = 'abort'
-  let entered = false
+  let releaseCallback = () => {}
+  const callbackGate = new Promise<void>((resolve) => {
+    releaseCallback = resolve
+  })
+  let reportCallbackClosing = () => {}
+  const callbackClosing = new Promise<void>((resolve) => {
+    reportCallbackClosing = resolve
+  })
+  let callbackExited = false
+  let cancelledSettled = false
   const cancelled = BrowserAccess.withPage(
     { provider: binding.provider, target: { kind: 'new' }, signal: controller.signal },
     async (page) => {
       await page.goto(`${location.origin}/target`)
-      entered = true
-      setTimeout(() => controller.abort(), 50)
-      await page.waitForSelector('#never', { timeout: 0 })
+      await page.waitForSelector('#more')
+      const waiting = page.waitForSelector('#never', { timeout: 0 })
+      controller.abort(abortReason)
+      try {
+        check(
+          await waiting.then(
+            () => false,
+            () => true
+          ),
+          'Abort did not interrupt the pending Page operation'
+        )
+      } finally {
+        reportCallbackClosing()
+        await callbackGate
+        callbackExited = true
+      }
     }
   )
-  check(
-    await cancelled.then(
-      () => false,
-      () => true
-    ),
-    'Aborted callback completed successfully'
+  const cancellationResult = cancelled.then(
+    () => {
+      cancelledSettled = true
+      return undefined
+    },
+    (error: unknown) => {
+      cancelledSettled = true
+      return error
+    }
   )
-  check(entered, 'Abort did not exercise an active callback')
+  await Promise.race([
+    callbackClosing,
+    cancellationResult.then((error) => {
+      throw new Error('withPage ended before reaching callback cleanup', { cause: error })
+    }),
+  ])
+  try {
+    // A native round trip lets cancellation propagate while the callback is still held.
+    await BrowserAccess.tabs(binding.provider)
+    check(!cancelledSettled, 'withPage settled before the active callback exited')
+  } finally {
+    releaseCallback()
+  }
+  check((await cancellationResult) === abortReason, 'Abort did not preserve its target reason')
+  check(callbackExited, 'Abort completed without waiting for the callback to exit')
   check(
     (await BrowserAccess.tabs(binding.provider)).length === baseline.length,
     'Aborted owned tab was not cleaned up'
   )
 
   stage = 'provider-revoke-isolation'
-  const secondBinding = found.find((item) => item.provider === config.secondProvider)
+  const secondBinding = found.find((item) => item.provider === secondProvider)
   check(secondBinding, 'Second provider is missing')
   BrowserAccess.bind(secondBinding)
   await BrowserAccess.withPage(
@@ -167,23 +234,32 @@ async function main() {
       )
     }
   )
+  const stillAuthorized = await BrowserAccess.discover()
+  check(
+    stillAuthorized.length === 1 && stillAuthorized[0]?.provider === secondProvider,
+    'Discovery did not reflect the provider-specific revocation'
+  )
   const wrongProvider = crypto.randomUUID()
   BrowserAccess.bind({ ...binding, provider: wrongProvider })
+  const wrongProviderSignal = AbortSignal.timeout(100)
+  await rejectsWith(
+    BrowserAccess.tabs(wrongProvider, wrongProviderSignal),
+    'BrowserAutomationError',
+    /浏览器操作已取消/
+  )
+  check(wrongProviderSignal.aborted, 'Exact-provider probe failed before its deadline')
   check(
-    await BrowserAccess.tabs(wrongProvider, AbortSignal.timeout(100)).then(
-      () => false,
-      () => true
-    ),
-    'Another provider silently substituted for the exact target'
+    (await BrowserAccess.tabs(secondBinding.provider)).some((tab) => tab.tabId === borrowed.tabId),
+    'Exact-provider rejection was caused by a broken authorized bridge'
   )
   BrowserAccess.unbind(wrongProvider)
-  const probe = async (route: string): Promise<{ count: number; providers: string[] }> => {
+  const probe = async (): Promise<{ count: number; providers: string[] }> => {
     const token = crypto.randomUUID()
     const opened = await fetch('/fixture-command', {
       method: 'POST',
       body: JSON.stringify({
         type: 'fixture-open-probe',
-        url: `${config.otherOrigin}${route}?token=${token}`,
+        url: `${otherOrigin}/probe?token=${token}`,
       }),
     }).then((response) => response.json())
     check(opened.ok, 'Could not open a separate top-level Web origin')
@@ -195,51 +271,30 @@ async function main() {
     return observed
   }
   check(
-    (await probe('/unpaired')).count === 0,
+    (await probe()).count === 0,
     'An unpaired origin on the same permitted host acquired a provider'
   )
   const granted = await fetch('/fixture-command', {
     method: 'POST',
     body: JSON.stringify({
       type: 'browser-automation-grant',
-      origin: config.otherOrigin,
+      origin: otherOrigin,
       provider: secondBinding.provider,
     }),
   }).then((response) => response.json())
   check(granted.ok, 'Second origin could not be paired dynamically')
-  const paired = await probe('/paired')
+  const paired = await probe()
   check(
     paired.count === 1 && paired.providers[0] === secondBinding.provider,
     'Second origin did not discover its exact authorized provider'
   )
   await fetch('/report', {
     method: 'POST',
-    body: JSON.stringify({
-      ok: true,
-      entries: extracted.entries,
-      cases: [
-        'provider-revoke-isolation',
-        'second-origin-pairing',
-        'login-state',
-        'page-navigation',
-        'dynamic-batch',
-        'network-json',
-        'new-tab-cleanup',
-        'borrowed-tab-preserved',
-        'borrowed-tab-exclusion',
-        'stale-page',
-        'stale-tab-reference',
-        'abort-cleanup',
-        'exact-provider',
-        'exact-origin',
-      ],
-    }),
+    body: JSON.stringify({ ok: true }),
   })
-  document.querySelector('#status')!.textContent = 'Passed'
 }
 
 void main().catch(async (error: unknown) => {
-  document.querySelector('#status')!.textContent = String(error)
   await fetch('/report', {
     method: 'POST',
     body: JSON.stringify({

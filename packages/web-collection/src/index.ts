@@ -131,9 +131,6 @@ export function encodeBytes(bytes: Uint8Array): string {
 export function decodeBytes(base64: string): Uint8Array {
   return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0))
 }
-export function textPart(role: 'html' | 'text', text: string): MaterialPart {
-  return { role, base64: encodeBytes(new TextEncoder().encode(text)) }
-}
 export function contentPart(
   role: 'original' | 'body',
   format: Exclude<MaterialFormat, 'pdf'>,

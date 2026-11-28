@@ -4,13 +4,7 @@ import test from 'node:test'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import {
-  main,
-  savedCandidate,
-  validateReceipt,
-  verifyRelease,
-  validateRecoveryRun,
-} from './publish-core-sdk.mjs'
+import { main, savedCandidate, validateRecoveryRun } from './publish-core-sdk.mjs'
 
 void test('partial reruns require the original unexpired SDK candidate', () => {
   assert.equal(savedCandidate([], '1'), undefined)
@@ -21,16 +15,15 @@ void test('partial reruns require the original unexpired SDK candidate', () => {
     /expired/
   )
   const original = { name: 'core-sdk-candidate', id: 23, expired: false }
-  assert.equal(savedCandidate([original], '2'), original)
+  assert.equal(savedCandidate([original], '2').id, original.id)
 })
 
-void test('draft recovery uploads missing saved assets without replacing an existing archive', async () => {
+void test('SDK publication recovers the saved candidate and verifies the public release', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'inkcre-sdk-publish-test-'))
-  const originalDirectory = process.cwd()
+  const cwd = process.cwd()
   const originalPath = process.env.PATH
   const originalSource = process.env.SOURCE_REVISION
   const originalSummary = process.env.GITHUB_STEP_SUMMARY
-  const originalFetch = globalThis.fetch
   const source = 'c'.repeat(40)
   const bytes = Buffer.from('saved SDK package')
   const receipt = {
@@ -40,168 +33,128 @@ void test('draft recovery uploads missing saved assets without replacing an exis
     asset: 'inkcre-core-0.4.0.tgz',
     sha256: createHash('sha256').update(bytes).digest('hex'),
   }
+  const draft = {
+    id: 12,
+    tag_name: 'core-v0.4.0',
+    target_commitish: source,
+    draft: true,
+    assets: [
+      {
+        name: receipt.asset,
+        url: `https://private.test/${receipt.asset}`,
+        browser_download_url: `https://public.test/${receipt.asset}`,
+      },
+    ],
+  }
+  const remote = (name) => `remote-assets/${name}`
+  const release = async () => JSON.parse(await readFile('release.json', 'utf8'))
   try {
-    await mkdir(`${root}/packages/core`, { recursive: true })
-    await mkdir(`${root}/.core-sdk-delivery`)
-    await writeFile(`${root}/packages/core/package.json`, JSON.stringify({ version: '0.5.0' }))
-    await writeFile(`${root}/.core-sdk-delivery/source.json`, JSON.stringify(receipt))
-    await writeFile(`${root}/.core-sdk-delivery/${receipt.asset}`, bytes)
-    await writeFile(
-      `${root}/gh`,
-      `#!/usr/bin/env node
-const fs = require('node:fs');
-const args = process.argv.slice(2);
-fs.appendFileSync('calls.jsonl', JSON.stringify(args) + '\\n');
-const route = args[1];
-const method = args[args.indexOf('--method') + 1];
-let response;
-const asset = (name) => ({ name, url: 'https://api.github.com/' + (name.endsWith('.tgz') ? 'archive' : 'receipt'), browser_download_url: 'https://api.github.com/' + (name.endsWith('.tgz') ? 'archive' : 'receipt') });
-const release = () => ({ id: 12, tag_name: 'core-v0.4.0', target_commitish: process.env.SOURCE_REVISION, draft: !fs.existsSync('published'), assets: [fs.existsSync('archiveUploaded') && asset('inkcre-core-0.4.0.tgz'), fs.existsSync('uploaded') && asset('source.json')].filter(Boolean) });
-if (route.startsWith('https://uploads.github.com/')) {
-  const name = new URL(route).searchParams.get('name');
-  fs.writeFileSync(name.endsWith('.tgz') ? 'archiveUploaded' : 'uploaded', 'yes');
-  response = asset(name);
-} else if (method === 'POST') {
-  fs.writeFileSync('created', 'yes');
-  response = release();
-} else if (method === 'PATCH') {
-  fs.writeFileSync('published', 'yes');
-  response = release();
-}
-process.stdout.write(JSON.stringify(response));
-`
-    )
-    await chmod(`${root}/gh`, 0o700)
-    await writeFile(`${root}/created`, 'yes')
-    await writeFile(`${root}/archiveUploaded`, 'yes')
     process.chdir(root)
     process.env.PATH = `${root}:${originalPath}`
     process.env.SOURCE_REVISION = source
     delete process.env.GITHUB_STEP_SUMMARY
-    globalThis.fetch = async (url) => {
-      if (url.endsWith('/archive')) return new Response(bytes)
-      if (url.endsWith('/receipt')) return new Response(JSON.stringify(receipt))
-      if (url.includes('/git/ref/'))
-        return Response.json({ object: { type: 'commit', sha: source } })
-      const exists = async (file) =>
-        readFile(file).then(
-          () => true,
-          () => false
-        )
-      if (!(await exists('created')) || (await exists('invisibleList'))) return Response.json([])
-      const assets = []
-      if (await exists('archiveUploaded'))
-        assets.push({
-          name: receipt.asset,
-          url: 'https://api.github.com/archive',
-          browser_download_url: 'https://api.github.com/archive',
-        })
-      if (await exists('uploaded'))
-        assets.push({
-          name: 'source.json',
-          url: 'https://api.github.com/receipt',
-          browser_download_url: 'https://api.github.com/receipt',
-        })
-      return Response.json([
-        {
-          id: 12,
-          tag_name: 'core-v0.4.0',
-          draft: !(await exists('published')),
-          prerelease: false,
-          target_commitish: source,
-          assets,
-        },
-      ])
-    }
+    await mkdir('packages/core', { recursive: true })
+    await mkdir('.core-sdk-delivery')
+    await mkdir('remote-assets')
+    await writeFile('packages/core/package.json', JSON.stringify({ version: '0.5.0' }))
+    await writeFile('.core-sdk-delivery/source.json', JSON.stringify(receipt))
+    await writeFile(`.core-sdk-delivery/${receipt.asset}`, bytes)
+    await writeFile('release.json', JSON.stringify(draft))
+    await writeFile(remote(receipt.asset), bytes)
+    // The fake GitHub writer persists only what gh actually uploads; duplicate uploads are refused.
+    await writeFile(
+      'gh',
+      `#!/usr/bin/env node
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const [, route, ...args] = process.argv.slice(2)
+assert.ok(!fs.existsSync('read-only'), 'published release must not be written again')
+const method = args[args.indexOf('--method') + 1]
+let release
+let response
+if (method === 'POST' && route.endsWith('/releases')) {
+  const field = (name) => args.find((arg) => arg.startsWith(name + '=')).slice(name.length + 1)
+  release = { id: 12, tag_name: field('tag_name'), target_commitish: field('target_commitish'), draft: field('draft') === 'true', assets: [] }
+  response = release
+} else {
+  release = JSON.parse(fs.readFileSync('release.json'))
+  if (method === 'POST' && route.startsWith('https://uploads.github.com/')) {
+    const url = new URL(route)
+    assert.ok(url.pathname.endsWith('/releases/12/assets'))
+    const name = url.searchParams.get('name')
+    fs.writeFileSync('remote-assets/' + name, fs.readFileSync(args[args.indexOf('--input') + 1]), { flag: 'wx' })
+    response = { name, url: 'https://private.test/' + name, browser_download_url: 'https://public.test/' + name }
+    release.assets.push(response)
+  } else {
+    assert.equal(method, 'PATCH')
+    assert.ok(route.endsWith('/releases/12') && args.includes('draft=false'))
+    release.draft = fs.existsSync('hold-draft')
+    response = release
+  }
+}
+fs.writeFileSync('release.json', JSON.stringify(release))
+process.stdout.write(JSON.stringify(response))
+`
+    )
+    await chmod('gh', 0o700)
+    let tag = source
+    let visible = true
+    t.mock.method(globalThis, 'fetch', async (url, options) => {
+      const { hostname, pathname } = new URL(url)
+      if (hostname === 'private.test' || hostname === 'public.test') {
+        if (!(await release()).draft) {
+          assert.equal(hostname, 'public.test', 'published assets must be anonymously readable')
+          assert.equal(options.headers.Authorization, undefined)
+        }
+        return new Response(await readFile(remote(path.basename(pathname))))
+      }
+      if (pathname.endsWith('/git/ref/tags/core-v0.4.0'))
+        return Response.json({ object: { type: 'commit', sha: tag } })
+      assert.ok(pathname.endsWith('/releases'), `unexpected GitHub request: ${pathname}`)
+      return Response.json(visible ? [await release()] : [])
+    })
+
+    await writeFile('hold-draft', '')
+    await assert.rejects(main('publish'), /not public/)
+    await rm('hold-draft')
     await main('publish')
-    const calls = (await readFile('calls.jsonl', 'utf8')).trim().split('\n').map(JSON.parse)
-    assert.equal(calls.length, 2)
-    assert.match(calls[0][1], /releases\/12\/assets\?name=source.json$/)
-    assert.ok(calls[1].includes('PATCH'))
+    assert.equal((await release()).draft, false)
+    assert.deepEqual(JSON.parse(await readFile(remote('source.json'), 'utf8')), receipt)
+
+    await writeFile('read-only', '')
+    await main('publish')
+    await writeFile(remote(receipt.asset), 'changed archive')
+    await assert.rejects(main('publish'), /bytes differ/)
+    await writeFile(remote(receipt.asset), bytes)
+    tag = 'b'.repeat(40)
+    await assert.rejects(main('publish'), /tag must match the candidate source/)
+    tag = source
+    await writeFile(
+      remote('source.json'),
+      JSON.stringify({ ...receipt, source_revision: 'd'.repeat(40) })
+    )
+    await assert.rejects(main('publish'), /other bytes\/source/)
+
+    // A fresh draft must complete using its creation response while the list still omits it.
+    for (const file of ['release.json', 'read-only', remote(receipt.asset), remote('source.json')])
+      await rm(file)
+    visible = false
     await main('publish')
     assert.equal(
-      await readFile('calls.jsonl', 'utf8'),
-      calls.map((args) => JSON.stringify(args)).join('\n') + '\n'
+      (await release()).tag_name,
+      'core-v0.4.0',
+      'recovery uses the saved payload version'
     )
-    for (const file of ['created', 'archiveUploaded', 'uploaded', 'published', 'calls.jsonl'])
-      await rm(file)
-    await writeFile('invisibleList', 'yes')
-    await main('publish')
-    const freshCalls = (await readFile('calls.jsonl', 'utf8')).trim().split('\n').map(JSON.parse)
-    assert.equal(freshCalls.length, 4)
-    assert.ok(
-      freshCalls[0].includes('tag_name=core-v0.4.0'),
-      'Recovered payload keeps its own version'
-    )
-    assert.match(freshCalls[1][1], /releases\/12\/assets/)
-    assert.match(freshCalls[2][1], /releases\/12\/assets/)
-    assert.ok(freshCalls[3].includes('PATCH'))
+    assert.deepEqual(await readFile(remote(receipt.asset)), bytes)
+    assert.equal((await release()).draft, false)
   } finally {
-    process.chdir(originalDirectory)
+    process.chdir(cwd)
     process.env.PATH = originalPath
     if (originalSource === undefined) delete process.env.SOURCE_REVISION
     else process.env.SOURCE_REVISION = originalSource
     if (originalSummary === undefined) delete process.env.GITHUB_STEP_SUMMARY
     else process.env.GITHUB_STEP_SUMMARY = originalSummary
-    globalThis.fetch = originalFetch
     await rm(root, { recursive: true, force: true })
-  }
-})
-
-void test('published SDK is verified against source tag and every saved package byte', async () => {
-  const bytes = Buffer.from('original prebuilt SDK archive')
-  const receipt = validateReceipt({
-    name: '@inkcre/core',
-    version: '0.4.0',
-    source_revision: 'a'.repeat(40),
-    asset: 'inkcre-core-0.4.0.tgz',
-    sha256: createHash('sha256').update(bytes).digest('hex'),
-  })
-  const release = {
-    draft: false,
-    prerelease: false,
-    assets: [
-      {
-        name: 'source.json',
-        url: 'https://api.github.com/receipt',
-        browser_download_url: 'https://api.github.com/receipt',
-      },
-      {
-        name: receipt.asset,
-        url: 'https://api.github.com/archive',
-        browser_download_url: 'https://api.github.com/archive',
-      },
-    ],
-  }
-  const originalFetch = globalThis.fetch
-  let archive = bytes
-  let tag = receipt.source_revision
-  globalThis.fetch = async (url, options) => {
-    if (url.endsWith('/receipt') || url.endsWith('/archive'))
-      assert.equal(
-        options.headers.Authorization,
-        undefined,
-        'Published SDK bytes must be anonymously readable'
-      )
-    if (url.endsWith('/receipt')) return new Response(JSON.stringify(receipt))
-    if (url.endsWith('/archive')) return new Response(archive)
-    return Response.json({ object: { type: 'commit', sha: tag } })
-  }
-  try {
-    assert.deepEqual(await verifyRelease(release, '0.4.0', receipt), receipt)
-    archive = Buffer.from('changed archive')
-    await assert.rejects(verifyRelease(release, '0.4.0', receipt), /bytes differ/)
-    archive = bytes
-    tag = 'b'.repeat(40)
-    await assert.rejects(verifyRelease(release, '0.4.0', receipt))
-    tag = receipt.source_revision
-    await assert.rejects(
-      verifyRelease(release, '0.4.0', { ...receipt, source_revision: 'b'.repeat(40) }),
-      /other bytes\/source/
-    )
-    await assert.rejects(verifyRelease({ ...release, draft: true }, '0.4.0', receipt), /not public/)
-  } finally {
-    globalThis.fetch = originalFetch
   }
 })
 
@@ -214,7 +167,17 @@ void test('recovery accepts only the same completed workflow from protected main
     head_sha: 'a'.repeat(40),
   }
   assert.equal(validateRecoveryRun(run, { status: 'ahead' }), run.head_sha)
-  for (const field of ['event', 'head_branch', 'path', 'status', 'head_sha'])
-    assert.throws(() => validateRecoveryRun({ ...run, [field]: 'invalid' }, { status: 'ahead' }))
+  for (const [field, error] of [
+    ['event', /admitted main push/],
+    ['head_branch', /source branch must be main/],
+    ['path', /original SDK release workflow/],
+    ['status', /must have completed/],
+    ['head_sha', /source revision must be a full commit SHA/],
+  ]) {
+    assert.throws(
+      () => validateRecoveryRun({ ...run, [field]: 'invalid' }, { status: 'ahead' }),
+      error
+    )
+  }
   assert.throws(() => validateRecoveryRun(run, { status: 'diverged' }), /main history/)
 })

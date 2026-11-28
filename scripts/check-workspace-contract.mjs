@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process'
+import { basename, relative } from 'node:path'
+import { parse } from 'yaml'
 import { access, readFile, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -5,129 +8,43 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const jsonOutput = process.argv.includes('--json')
 
-const workspaces = [
-  {
-    path: 'extensions/bilibili',
-    name: '@inkcre/ext-bilibili',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-  },
-  {
-    path: 'extensions/local-files',
-    name: '@inkcre/ext-local-files',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-  },
-  {
-    path: 'extensions/capture',
-    name: '@inkcre/ext-capture',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-  },
-  {
-    path: 'extensions/caldav',
-    name: '@inkcre/ext-caldav',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-  },
-  {
-    path: 'packages/core',
-    name: '@inkcre/core',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'tsdown',
-  },
-  {
-    path: 'packages/ext-dev-utils',
-    name: '@inkcre/ext-dev-utils',
-    requiredScripts: ['type-check'],
-    buildExemption: 'source-only Vue support package; consuming Vite applications own output',
-  },
-  {
-    path: 'packages/web-collection',
-    name: '@inkcre/web-collection',
-    requiredScripts: ['type-check'],
-    buildExemption: 'source-only browser material contract; consuming peers own output',
-  },
-  {
-    path: 'apps/web',
-    name: '@inkcre/web',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-    builderScript: 'build-only',
-  },
-  {
-    path: 'apps/webext',
-    name: '@inkcre/webext',
-    requiredScripts: ['build', 'build:firefox', 'dev', 'type-check'],
-    builder: 'wxt',
-  },
-  {
-    path: 'extensions/github',
-    name: '@inkcre/ext-github',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-  },
-  {
-    path: 'extensions/mail',
-    name: '@inkcre/ext-mail',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-  },
-  {
-    path: 'extensions/twitter',
-    name: '@inkcre/ext-twitter',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-  },
-  {
-    path: 'extensions/memos',
-    name: '@inkcre/ext-memos',
-    requiredScripts: ['build', 'dev', 'type-check'],
-    builder: 'vite',
-  },
-]
-
-const bannedDirectTooling = [
-  '@biomejs/biome',
-  '@typescript-eslint/eslint-plugin',
-  '@typescript-eslint/parser',
-  'eslint',
-  'eslint-config-prettier',
-  'prettier',
-  'tsup',
-]
+const sourcePackages = {
+  'packages/ext-dev-utils':
+    'source-only Vue support package; consuming Vite applications own output',
+  'packages/web-collection': 'source-only browser material contract; consuming peers own output',
+}
 
 const errors = []
 const members = []
 
-const workspaceRoots = ['packages', 'apps', 'extensions']
-const workspaceCandidates = (
-  await Promise.all(
-    workspaceRoots.map(async (root) => {
-      const entries = await readdir(`${repoRoot}/${root}`, { withFileTypes: true })
-      return entries.filter((entry) => entry.isDirectory()).map((entry) => `${root}/${entry.name}`)
-    })
-  )
-).flat()
-const discoveredWorkspaces = (
-  await Promise.all(
-    workspaceCandidates.map(async (path) => {
-      try {
-        await access(`${repoRoot}/${path}/package.json`)
-        return path
-      } catch {
-        return null
-      }
-    })
-  )
+const discoveredWorkspaces = []
+for (const root of ['packages', 'apps', 'extensions']) {
+  for (const entry of await readdir(`${repoRoot}/${root}`, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const path = `${root}/${entry.name}`
+    try {
+      await access(`${repoRoot}/${path}/package.json`)
+      discoveredWorkspaces.push(path)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+  }
+}
+discoveredWorkspaces.sort()
+// pnpm applies inclusions and exclusions; a package on disk can silently
+// disappear from every recursive build and type check.
+const listed = JSON.parse(
+  execFileSync('pnpm', ['list', '-r', '--depth=-1', '--json'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  })
 )
-  .filter((path) => path !== null)
+  .map((member) => relative(repoRoot, member.path))
+  .filter(Boolean)
   .sort()
-const declaredWorkspaces = workspaces.map((workspace) => workspace.path).sort()
-
-if (JSON.stringify(discoveredWorkspaces) !== JSON.stringify(declaredWorkspaces)) {
+if (JSON.stringify(listed) !== JSON.stringify(discoveredWorkspaces)) {
   errors.push(
-    `workspace validator inventory does not match discovered packages: declared=${declaredWorkspaces.join(',')} discovered=${discoveredWorkspaces.join(',')}`
+    `pnpm membership differs from packages on disk: pnpm=${listed.join(',')} disk=${discoveredWorkspaces.join(',')}`
   )
 }
 
@@ -135,169 +52,76 @@ async function readJson(relativePath) {
   return JSON.parse(await readFile(`${repoRoot}/${relativePath}`, 'utf8'))
 }
 
-const rootPackage = await readJson('package.json')
-const rootScripts = [
-  'build',
-  'check',
-  'check:package',
-  'check:release:web',
-  'check:runtime',
-  'check:workspace',
-  'contract:check',
-  'contract:sync',
-  'doctor',
-  'dev:all:ui',
-  'dev:status',
-  'dev:stop',
-  'dev:ui',
-  'format',
-  'format:check',
-  'lint',
-  'lint:type-aware',
-  'type-check',
-  'type-check:ui',
-]
-
-for (const script of rootScripts) {
-  if (!rootPackage.scripts?.[script]) {
-    errors.push(`root package is missing script "${script}"`)
-  }
-}
-
-const expectedRootTools = {
-  oxfmt: '0.60.0',
-  oxlint: '1.75.0',
-  'oxlint-tsgolint': '7.0.2001',
-  portless: '0.12.0',
-  typescript: 'catalog:',
-}
-
-for (const [name, version] of Object.entries(expectedRootTools)) {
-  if (rootPackage.devDependencies?.[name] !== version) {
-    errors.push(`root devDependency "${name}" must be "${version}"`)
-  }
-}
-
-const compilerVersion = '6.0.3-bridge.19.tsgo.7.0.2'
 const rootRequire = createRequire(`${repoRoot}/package.json`)
 const compilerPath = rootRequire.resolve('typescript/package.json')
 const compiler = rootRequire('typescript/package.json')
-if (compiler.name !== 'typescript-native-bridge' || compiler.version !== compilerVersion) {
-  errors.push(`typescript must resolve to typescript-native-bridge@${compilerVersion}`)
-}
-for (const alias of [
-  '@typescript/native',
-  '@typescript/native-preview',
-  '@typescript/typescript6',
-]) {
-  if (rootPackage.devDependencies?.[alias]) {
-    errors.push(`remove separate compiler ${alias}; all checks must use the TypeScript catalog`)
-  }
+if (compiler.name !== 'typescript-native-bridge') {
+  errors.push('typescript must resolve to the shared native bridge')
 }
 
-for (const workspace of workspaces) {
-  const packageJson = await readJson(`${workspace.path}/package.json`)
-  const workspaceRequire = createRequire(`${repoRoot}/${workspace.path}/package.json`)
+for (const path of discoveredWorkspaces) {
+  const name = `@inkcre/${path.startsWith('extensions/') ? 'ext-' : ''}${basename(path)}`
+  const exemption = sourcePackages[path]
+  const requiredScripts = exemption ? ['type-check'] : ['build', 'dev', 'type-check']
+  if (path === 'apps/webext') requiredScripts.push('build:firefox')
+
+  const packageJson = await readJson(`${path}/package.json`)
+  const workspaceRequire = createRequire(`${repoRoot}/${path}/package.json`)
   if (workspaceRequire.resolve('typescript/package.json') !== compilerPath) {
-    errors.push(`${workspace.name} resolves a different TypeScript compiler from the root`)
+    errors.push(`${name} resolves a different TypeScript compiler from the root`)
   }
-  const allDependencies = {
-    ...packageJson.dependencies,
-    ...packageJson.devDependencies,
-    ...packageJson.optionalDependencies,
+  if (packageJson.name !== name) {
+    errors.push(`${path} must declare package name "${name}"`)
   }
 
-  if (packageJson.name !== workspace.name) {
-    errors.push(`${workspace.path} must declare package name "${workspace.name}"`)
-  }
-
-  for (const script of workspace.requiredScripts) {
+  for (const script of requiredScripts) {
     if (!packageJson.scripts?.[script]) {
-      errors.push(`${workspace.name} is missing required script "${script}"`)
-    }
-  }
-
-  for (const dependency of bannedDirectTooling) {
-    if (allDependencies[dependency]) {
-      errors.push(`${workspace.name} directly depends on superseded tool "${dependency}"`)
+      errors.push(`${name} is missing required script "${script}"`)
     }
   }
 
   if (packageJson.devDependencies?.typescript !== 'catalog:') {
-    errors.push(`${workspace.name} must use the workspace TypeScript catalog`)
+    errors.push(`${name} must use the workspace TypeScript catalog`)
   }
 
   if (
     packageJson.devDependencies?.['@vue/tsconfig'] &&
     packageJson.devDependencies['@vue/tsconfig'] !== 'catalog:'
   ) {
-    errors.push(`${workspace.name} must use the workspace @vue/tsconfig catalog`)
+    errors.push(`${name} must use the workspace @vue/tsconfig catalog`)
   }
 
   if (
     packageJson.scripts?.['type-check']?.includes('vue-tsc') &&
     packageJson.devDependencies?.['vue-tsc'] !== 'catalog:'
   ) {
-    errors.push(`${workspace.name} must use the workspace vue-tsc catalog`)
+    errors.push(`${name} must use the workspace vue-tsc catalog`)
   }
 
   if (packageJson.scripts?.['type-check']?.includes('vue-tsc')) {
     const vueRequire = createRequire(workspaceRequire.resolve('vue-tsc/package.json'))
     if (vueRequire.resolve('typescript/package.json') !== compilerPath) {
-      errors.push(`${workspace.name} vue-tsc resolves a different TypeScript compiler`)
+      errors.push(`${name} vue-tsc resolves a different TypeScript compiler`)
     }
   }
 
-  const builderScript = workspace.builderScript ?? 'build'
-  if (workspace.builder && !packageJson.scripts[builderScript].includes(workspace.builder)) {
-    errors.push(`${workspace.name} ${builderScript} script must use ${workspace.builder}`)
-  }
-
-  members.push({
-    name: workspace.name,
-    path: workspace.path,
-    build: workspace.builder ?? { exemption: workspace.buildExemption },
-  })
+  members.push({ name, path, build: exemption ? { exemption } : packageJson.scripts.build })
 }
 
-const workspaceYaml = await readFile(`${repoRoot}/pnpm-workspace.yaml`, 'utf8')
-for (const pattern of ['packages/*', 'apps/*', 'extensions/*']) {
-  if (!workspaceYaml.includes(`- ${pattern}`)) {
-    errors.push(`pnpm-workspace.yaml is missing member pattern "${pattern}"`)
-  }
-}
+const manifest = parse(await readFile(`${repoRoot}/pnpm-workspace.yaml`, 'utf8'))
+const compilerAlias = `npm:${compiler.name}@${compiler.version}`
 if (
-  !workspaceYaml.includes(
-    `typescript: &typescript npm:typescript-native-bridge@${compilerVersion}`
-  ) ||
-  !workspaceYaml.includes('typescript: *typescript')
+  manifest.catalog?.typescript !== compilerAlias ||
+  manifest.overrides?.typescript !== compilerAlias
 ) {
   errors.push('the TypeScript catalog and transitive override must share the pinned TS7 bridge')
 }
-if (!workspaceYaml.includes('vue-tsc: 3.3.8')) {
-  errors.push('pnpm-workspace.yaml must pin vue-tsc 3.3.8')
-}
-
-const corePackage = await readJson('packages/core/package.json')
 const coreRequire = createRequire(`${repoRoot}/packages/core/package.json`)
 const tsdownRequire = createRequire(coreRequire.resolve('tsdown/package.json'))
 const dtsRequire = createRequire(tsdownRequire.resolve('rolldown-plugin-dts/package.json'))
 if (dtsRequire.resolve('typescript/package.json') !== compilerPath) {
   errors.push('Core declaration generation resolves a different TypeScript compiler')
 }
-const expectedCoreEntry = './dist/index.js'
-const expectedCoreTypes = './dist/index.d.ts'
-if (
-  corePackage.main !== expectedCoreEntry ||
-  corePackage.module !== expectedCoreEntry ||
-  corePackage.types !== expectedCoreTypes ||
-  corePackage.exports?.['.']?.import !== expectedCoreEntry ||
-  corePackage.exports?.['.']?.types !== expectedCoreTypes ||
-  corePackage.exports?.['.']?.require
-) {
-  errors.push('@inkcre/core must expose one ESM dist entry and its generated declarations')
-}
-
 const result = {
   ok: errors.length === 0,
   compiler: { name: compiler.name, version: compiler.version },

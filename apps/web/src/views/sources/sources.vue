@@ -41,6 +41,7 @@ async function onCreateSource(source: Source) {
 
 <template>
   <main class="sources-view" :aria-label="t('sidePanel.sources')">
+    <h1 class="sr-only">{{ t('sidePanel.sources') }}</h1>
     <header v-if="connected" class="sources-view__header">
       <CreateSource @create="onCreateSource" />
       <InkButton

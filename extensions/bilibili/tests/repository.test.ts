@@ -61,7 +61,6 @@ class Query {
 }
 class Database {
   rows: Record<Table, Row[]> = { blocks: [], relations: [], sources: [] }
-  events: { table: Table; action: string; values: Values }[] = []
   failBefore: ((query: Query) => boolean) | null = null
   failAfter: ((query: Query) => boolean) | null = null
   pageLimit = 500
@@ -83,11 +82,6 @@ class Database {
     }
   }
   execute(query: Query) {
-    this.events.push({
-      table: query.table,
-      action: query.action,
-      values: structuredClone(query.values),
-    })
     if (this.failBefore?.(query)) throw new Error('write failed')
     const table = this.rows[query.table]
     let result = table
@@ -296,7 +290,16 @@ void test('partial graph failure leaves progress unchanged and the next executio
     database.rows.blocks.find((row) => row.resolver === resolverTypes.video)!.id,
     originalVideo
   )
-  assert.ok(database.rows.blocks.some((row) => row.id === incompleteMember))
+  const folder = database.rows.blocks.find((row) => row.resolver === resolverTypes.folder)!.id
+  const contains = database.rows.relations.filter(
+    (row) => row.from_ === folder && row.content === 'contains'
+  )
+  const paths = contains.flatMap((edge) =>
+    database.rows.relations.filter(
+      (row) => row.from_ === edge.to_ && row.to_ === originalVideo && row.content === 'item'
+    )
+  )
+  assert.equal(paths.length, 1)
   assert.ok(Object.hasOwn(value.state, 'bilibili'))
   savedGraph(database, value)
 })
@@ -316,26 +319,22 @@ void test('a lost create response is not replayed and a later execution reuses t
   )
   const created = database.rows.blocks.find((row) => row.resolver === resolverTypes.video)!.id
   assert.deepEqual(value.state, { kept: true })
-  const creates = () =>
-    database.events.filter(
-      (event) => event.action === 'insert' && event.values.resolver === resolverTypes.video
-    ).length
-  assert.equal(creates(), 1)
   database.failAfter = null
   await new BilibiliRepository().reconcilePage(value, favoriteGraph(account, page()), next(value))
-  assert.equal(creates(), 1)
-  assert.equal(
-    database.rows.blocks.find((row) => row.resolver === resolverTypes.video)!.id,
-    created
+  assert.deepEqual(
+    database.rows.blocks.filter((row) => row.resolver === resolverTypes.video).map((row) => row.id),
+    [created]
   )
   savedGraph(database, value)
 })
 
-void test('failure of the final Source update reuses the already saved graph and unbound Source anchor on the next execution', async (context) => {
+void test('failure of the final Source update reuses the saved graph and an unbound Source anchor beyond the service row cap', async (context) => {
   const database = new Database()
   attach(context, database)
   const value = source()
   database.rows.sources.push(structuredClone(value) as unknown as Row)
+  for (let id = 1; id <= database.pageLimit; id++)
+    database.rows.blocks.push(block(id, 'core.source.v1', { id: 1000 + id }))
   database.failBefore = (query) => query.table === 'sources' && query.action === 'update'
   await assert.rejects(
     new BilibiliRepository().reconcilePage(value, favoriteGraph(account, page()), next(value)),
@@ -346,13 +345,20 @@ void test('failure of the final Source update reuses the already saved graph and
   const ids = database.rows.blocks.map((row) => row.id)
   const relations = structuredClone(database.rows.relations)
   database.failBefore = null
-  await new BilibiliRepository().reconcilePage(value, favoriteGraph(account, page()), next(value))
+  const resumed = structuredClone(database.rows.sources[0]) as unknown as Source
+  await new BilibiliRepository().reconcilePage(
+    resumed,
+    favoriteGraph(account, page()),
+    next(resumed)
+  )
   assert.deepEqual(
     database.rows.blocks.map((row) => row.id),
     ids
   )
   assert.deepEqual(database.rows.relations, relations)
-  savedGraph(database, value)
+  assert.equal(database.rows.sources[0]!.block, resumed.block)
+  assert.ok(Object.hasOwn(database.rows.sources[0]!.state as object, 'bilibili'))
+  savedGraph(database, resumed)
 })
 
 void test('normal paginated graph reads find existing objects beyond the service row cap', async (context) => {

@@ -129,13 +129,19 @@ cancels pending ownership, including node drag start. Refocus waits for the same
 node-measurement boundary; later dimension changes can repair automatic positions and edge handles
 but cannot reacquire the viewport.
 
+图谱场景的关系只描述当前有限导航结果，不是节点的完整关系集合。预览仍使用
+`materializeMissing=false`；关系由各 Resolver 按需读取，不把可见边预装入共享 Resolver 缓存。
+因此详情与重新打开的内容可以读取当前场景之外的已持久化关系。
+
 Application Recall/Search is not part of an InfoBase View, but an active View may realize its selected
 destination. Recall defaults to List outside a View; Find path supplies two Block references to Graph.
 The retired `sink/graph` community/MDS layer is not a compatibility surface.
 
 Graph 的工具区显示当前地址和实体数量；仅在 Block 邻域中提供可展开的范围与方向选项。节点以 Resolver 预览为主，编号与 Details 为辅助信息。预览区域支持 Enter／Space 聚焦，Details 打开 modeless inspector；拖拽使用节点的非操作区域，关系线选择朝向另一节点的连接点并在拖动后更新。方向弱化保留可读文字与全部交互，通过节点边界和关系线型区分，不触发重新检索。关系线仅显示可聚焦标签，选中关系后由工具区提供 Relation details。窄画布默认聚焦当前对象并保持可读比例，其余关系通过平移和缩放探索；Focus current 恢复当前视角。加载、空、缺失、无路径、超出边界与读取失败分别呈现；失败允许在原地址重试。
 
-Mail 的摘要用于识别邮件、附件或事实对象，完整 renderer 承担阅读和显式下载。邮件默认显示主题、发件人、日期与正文，完整信头、内嵌内容和相关邮件通过展开入口访问。附件条目与独立 MIME 视图共享文件身份和下载状态表现。邮件 HTML 先清理，再放入禁止脚本的 iframe；只允许清理后插入的固定基础排印样式生效，远程图像不加载，已解析的 cid 图像仍由 Blob handle 提供。普通邮件和原文视图不允许同源访问；newsletter 阅读视图允许父页面访问清理后的 DOM，以测量全文高度并定位标题，仍不允许脚本。
+Mail 的摘要用于识别邮件、附件或事实对象，完整 renderer 承担阅读和显式下载。邮件默认显示主题、发件人、日期与正文，完整信头、内嵌内容和相关邮件通过展开入口访问。附件条目与独立 MIME 视图共享文件身份和下载状态表现。邮件 HTML 先清理，再放入禁止脚本的 iframe；只允许清理后插入的固定基础排印样式生效，远程图像不加载。已材化的 cid 图像由本地字节转换为 data URL 后嵌入，避免隔离文档无法访问父页面 Blob URL；MIME 条目的独立打开仍使用 Blob handle。普通邮件和原文视图不允许同源访问；newsletter 阅读视图允许父页面访问清理后的 DOM，以测量全文高度并定位标题，仍不允许脚本。
+
+同一 Mail MIME Resolver 的非刷新、显式只读、同上下文调用可以共享当前加载，供图谱预览与详情同时读取。进入不属于已知内置载荷叶子类的内容前停止接纳共享读取，保留原 Resolver 对递归加载的拒绝；已有自定义内容仍可读取。刷新、显式材化与不同上下文不共用这份在途读取，失败后释放共享状态。
 
 ## Recall Reading Destinations
 

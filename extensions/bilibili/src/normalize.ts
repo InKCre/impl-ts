@@ -110,9 +110,7 @@ export function parseFavoritePage(
   response: unknown,
   expectedOwner: string,
   expectedFolder: string,
-  page: number,
-  observedAt = new Date().toISOString(),
-  pageSize = 20
+  page: number
 ): FavoritePage {
   const data = responseData(response)
   const { folder, owner } = parseFolder(data.info, expectedOwner)
@@ -121,10 +119,10 @@ export function parseFavoritePage(
     throw new Error('B 站分页结束标记缺失，无法确认采集范围。')
   const medias = data.medias === null && !data.has_more ? [] : data.medias
   if (!Array.isArray(medias)) throw new Error('B 站未返回可识别的收藏条目。')
-  if (medias.length > pageSize)
-    throw new Error('B 站返回了超出分页范围的条目，需重新核实分页协议。')
+  if (medias.length > 20) throw new Error('B 站返回了超出分页范围的条目，需重新核实分页协议。')
   if (medias.length === 0 && data.has_more)
     throw new Error('收藏分页为空但仍声明有后续，已停止采集。')
+  const observedAt = new Date().toISOString()
   const items: FavoriteItem[] = []
   let unsupported = 0
   let unresolved = 0

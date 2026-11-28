@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import {
   APIError,
+  captureDatabaseConnection,
   DatabaseClient,
   rawPostgrestFetch,
   type DatabaseConnection,
@@ -35,7 +36,7 @@ export class PostgreSQLBlobStorage {
   ) {}
 
   static forConnection(connection: DatabaseConnection): PostgreSQLBlobStorage {
-    const bound = { ...connection }
+    const bound = captureDatabaseConnection(connection)
     return new PostgreSQLBlobStorage(
       (path, options) => rawPostgrestFetch(path, { ...options, ...bound }),
       new DatabaseClient('storage_blobs', undefined, bound)

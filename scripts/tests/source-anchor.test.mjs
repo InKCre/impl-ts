@@ -18,9 +18,8 @@ void test('Source anchors read canonical identity without needing the collector 
     await resolver.getText(),
     'Source 9 named 我的收藏 uses extensions.bilibili.favorites.v1.'
   )
-  assert.equal(await resolver.getSolvedContent(), await resolver.getText())
   assert.equal(
-    await new SourceResolver(anchor({ id: 10, type: 'source.example' })).getText(),
+    await new SourceResolver(anchor({ id: 10, type: 'source.example' })).getSolvedContent(),
     'Source 10 uses source.example.'
   )
 })

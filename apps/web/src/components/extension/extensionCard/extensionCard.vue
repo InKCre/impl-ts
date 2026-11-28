@@ -81,7 +81,7 @@ const {
   <article class="extension-card" :aria-label="extension.nickname ?? extension.name">
     <header class="extension-card__header">
       <div>
-        <span class="extension-card__id">{{ extension.nickname ?? extension.name }}</span>
+        <h2 class="extension-card__id">{{ extension.nickname ?? extension.name }}</h2>
         <p class="extension-card__hint">{{ extension.name }}</p>
       </div>
       <div class="extension-card__actions">
@@ -102,9 +102,10 @@ const {
       </div>
     </header>
     <h3 class="extension-card__hint">{{ t('extension.usedOnPeers') }}</h3>
-    <section
+    <div
       v-for="{ peer, pin, status } in rows"
       :key="peer.id"
+      role="group"
       class="extension-card__peer-row"
       :aria-label="peer.name"
     >
@@ -177,7 +178,7 @@ const {
           @click="removePeer(peer)"
         />
       </div>
-    </section>
+    </div>
     <InkDialog
       v-model="docsOpen"
       :title="t('extension.documentation')"

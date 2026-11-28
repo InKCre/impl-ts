@@ -58,7 +58,7 @@ function assetReferences(items, collectionName) {
   return references
 }
 
-export function manifestClosure(manifest) {
+function manifestClosure(manifest) {
   assert.ok(manifest && typeof manifest === 'object', 'mf-manifest.json must contain an object')
   assert.ok(manifest.metaData && typeof manifest.metaData === 'object', 'metaData is required')
   assert.equal(manifest.metaData.publicPath, './', "metaData.publicPath must be './'")
@@ -167,7 +167,6 @@ export async function verifyPublicModuleFederation({
   packagePath,
   corePackagePath,
   artifactDirectory,
-  fetchImplementation = globalThis.fetch,
 }) {
   const local = await inspectNativeModuleFederation({
     packagePath,
@@ -185,7 +184,7 @@ export async function verifyPublicModuleFederation({
     `/v2/extensions/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/distributions/module_federation/releases/${encodeURIComponent(local.version)}`,
     registry
   )
-  const releaseResponse = await fetchImplementation(releaseUrl, {
+  const releaseResponse = await fetch(releaseUrl, {
     headers: { Origin: PRODUCTION_BROWSER_ORIGIN, Accept: 'application/json' },
   })
   assert.ok(releaseResponse.ok, `public exact Release returned HTTP ${releaseResponse.status}`)
@@ -221,7 +220,7 @@ export async function verifyPublicModuleFederation({
   const manifestUrl = new URL(release.module_federation.manifest_url, registry)
   assert.equal(manifestUrl.origin, registry.origin, 'public manifest must remain Registry-hosted')
   const publicPrefix = new URL('.', manifestUrl).href
-  const manifestResponse = await fetchImplementation(manifestUrl, {
+  const manifestResponse = await fetch(manifestUrl, {
     headers: { Origin: PRODUCTION_BROWSER_ORIGIN },
   })
   assertPublicArtifactResponse(manifestResponse, 'public mf-manifest.json')
@@ -234,7 +233,7 @@ export async function verifyPublicModuleFederation({
   // Manifest references omit transitive chunks, maps and other uploaded files.
   const snapshotFiles = await listSnapshotFiles(artifactDirectory)
   for (const relativePath of snapshotFiles.filter((file) => file !== 'mf-manifest.json')) {
-    const response = await fetchImplementation(new URL(relativePath, publicPrefix), {
+    const response = await fetch(new URL(relativePath, publicPrefix), {
       headers: { Origin: PRODUCTION_BROWSER_ORIGIN },
     })
     assertPublicArtifactResponse(response, `public Module Federation asset ${relativePath}`)
@@ -326,7 +325,7 @@ export function prepareBody(local, provenance) {
   }
 }
 
-export function previewRelease(local) {
+function previewRelease(local) {
   return {
     name: local.name,
     nickname: local.nickname,

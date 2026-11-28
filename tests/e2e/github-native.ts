@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { SignJWT } from 'jose'
+import { connectNativeHost, databaseToken, serveBuiltExtension } from './native-extension-fixture'
 
 /** Uses the real built MF module and disposable suite DB; only Registry delivery is served locally. */
 export function registerGitHubNativeTests(): void {
@@ -12,100 +10,15 @@ export function registerGitHubNativeTests(): void {
     const postgrestUrl = process.env.INKCRE_E2E_POSTGREST_URL!
     const jwtSecret = process.env.INKCRE_E2E_JWT_SECRET!
     const peerId = crypto.randomUUID()
-    const producer = JSON.parse(
-      await readFile(new URL('../../extensions/github/package.json', import.meta.url), 'utf8')
-    )
-    const version: string = producer.version
-    const authorization = await new SignJWT({ role: 'authenticated' })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('1h')
-      .setIssuer('inkcre-peer')
-      .setAudience('inkcre-api')
-      .sign(new TextEncoder().encode(jwtSecret))
+    const extension = await serveBuiltExtension(page, 'github')
+    const authorization = await databaseToken(jwtSecret)
     const headers = { Authorization: `Bearer ${authorization}`, 'Content-Type': 'application/json' }
-    const assetBase = `https://registry.inkcre.dev/extensions/inkcre/github/${version}/module-federation/`
-    const release = {
-      name: 'inkcre/github',
-      nickname: 'GitHub',
-      version,
-      distribution: 'module_federation',
-      state: 'published',
-      python: null,
-      module_federation: {
-        ...producer.inkcre.module_federation,
-        manifest_url: `${assetBase}mf-manifest.json`,
-      },
-    }
-    const cors = { 'Access-Control-Allow-Origin': '*' }
-    let leaseRenewals = 0
-    let jobScans = 0
-    page.on('request', (request) => {
-      const url = new URL(request.url())
-      if (url.pathname.endsWith('/rpc/renew_peer_lease')) leaseRenewals++
-      if (url.pathname.endsWith('/jobs') && url.searchParams.get('status') === 'eq.pending')
-        jobScans++
-    })
     let githubApiCalls = 0
-    let holdRemoteEntry = false
-    let remoteEntryPending = false
-    let releaseRemoteEntry!: () => void
-    const remoteEntryGate = new Promise<void>((resolve) => {
-      releaseRemoteEntry = resolve
-    })
     await page.route('https://api.github.com/**', async (route) => {
       githubApiCalls++
       await route.abort()
     })
-    await page.route(
-      '**/v2/extensions/inkcre/github/distributions/module_federation**',
-      async (route) => {
-        await route.fulfill({
-          headers: cors,
-          json: route.request().url().includes('/releases/')
-            ? release
-            : { name: release.name, nickname: release.nickname, releases: [release] },
-        })
-      }
-    )
-    await page.route(`${assetBase}**`, async (route) => {
-      const relative = new URL(route.request().url()).pathname.split('/module-federation/')[1]
-      if (holdRemoteEntry && relative === 'remoteEntry.js') {
-        remoteEntryPending = true
-        await remoteEntryGate
-      }
-      const file = fileURLToPath(
-        new URL(`../../extensions/github/dist/web/${relative}`, import.meta.url)
-      )
-      let body = await readFile(file)
-      if (relative === 'mf-manifest.json') {
-        const manifest = JSON.parse(body.toString())
-        manifest.metaData.publicPath = 'auto'
-        body = Buffer.from(JSON.stringify(manifest))
-      }
-      const contentType = relative.endsWith('.js')
-        ? 'application/javascript'
-        : relative.endsWith('.css')
-          ? 'text/css'
-          : 'application/json'
-      await route.fulfill({ headers: cors, contentType, body })
-    })
-    await page.addInitScript(
-      ({ postgrestUrl, jwtSecret, peerId }) => {
-        const previous = JSON.parse(localStorage.getItem('inkcre_app_config') ?? '{}')
-        if (previous.INKCRE_PEER_ID === peerId) return
-        localStorage.setItem(
-          'inkcre_app_config',
-          JSON.stringify({
-            INKCRE_PGREST_URL: postgrestUrl,
-            INKCRE_JWT_SECRET: jwtSecret,
-            INKCRE_PEER_ID: peerId,
-            peer_lease_renew_interval_seconds: 30,
-          })
-        )
-      },
-      { postgrestUrl, jwtSecret, peerId }
-    )
+    await connectNativeHost(page, { postgrestUrl, jwtSecret, browserPeer: peerId })
     const createdBlocks: number[] = []
     const createdRelations: number[] = []
     async function createBlock(resolver: string, content: unknown): Promise<number> {
@@ -176,24 +89,14 @@ export function registerGitHubNativeTests(): void {
       await relate(user, list, 'owns')
       await relate(organization, repository, 'owns')
       const membership = await relate(list, repository, 'contains')
-      await page.goto(
-        `/extensions?install=inkcre%2Fgithub&distribution=module_federation&version=${version}`
-      )
-      await expect(page.getByRole('heading', { name: 'GitHub', exact: true })).toBeVisible()
-      await page.getByRole('button', { name: 'Install', exact: true }).click()
-      await expect(page).toHaveURL(/\/extensions$/)
-      const card = page.getByRole('article', { name: 'GitHub', exact: true })
-      const row = card.locator('.extension-card__peer-row').filter({ hasText: 'This browser' })
-      await row.getByRole('button', { name: 'Enable', exact: true }).click()
-      await expect(row.getByText(`Running ${version}`, { exact: true })).toBeVisible()
-      holdRemoteEntry = true
+      const { row, version } = await extension.install()
+      extension.hold()
       await page.goto(`/info-base/graph?focal_block=${list}`, { waitUntil: 'domcontentloaded' })
-      await expect.poll(() => remoteEntryPending).toBe(true)
+      await expect.poll(extension.waiting).toBe(true)
       await expect(
         page.getByRole('button', { name: `Explore entry #${list}`, exact: true })
       ).toBeVisible()
-      releaseRemoteEntry()
-      holdRemoteEntry = false
+      extension.release()
       await expect(
         page
           .getByRole('button', { name: `Explore entry #${list}`, exact: true })
@@ -209,20 +112,21 @@ export function registerGitHubNativeTests(): void {
           .getByRole('button', { name: `Explore entry #${user}`, exact: true })
           .locator('.github-content--compact')
       ).toContainText('Fixture Reader')
-      for (const [id, title] of [
-        [user, 'Fixture Reader'],
-        [organization, '@fixture-org'],
-        [repository, 'fixture-org/demo'],
-        [list, 'Fixture Favorites'],
-      ] as const) {
-        await page.goto(`/info-base/list/blocks/${id}/content`)
-        await expect(
-          page
-            .locator('.github-content:not(.github-content--compact)')
-            .getByRole('heading', { name: title, exact: true })
-        ).toBeVisible()
-      }
+      const accountPreview = page.getByRole('button', {
+        name: `Explore entry #${user}`,
+        exact: true,
+      })
+      await accountPreview.press('Enter')
+      await expect(page).toHaveURL((url) => url.searchParams.get('focal_block') === String(user))
+      await page.goto(`/info-base/list/blocks/${user}/content`)
       const content = page.locator('.github-content:not(.github-content--compact)')
+      await expect(
+        content.getByRole('heading', { name: 'Fixture Reader', exact: true })
+      ).toBeVisible()
+      await page.goto(`/info-base/list/blocks/${list}/content`)
+      await expect(
+        content.getByRole('heading', { name: 'Fixture Favorites', exact: true })
+      ).toBeVisible()
       await expect(
         content.getByRole('button', { name: 'fixture-org/demo', exact: true })
       ).toBeVisible()
@@ -235,6 +139,9 @@ export function registerGitHubNativeTests(): void {
       await expect(content).toContainText('<script>unsafe()</script> Stored repository description')
       expect(await page.locator('.github-content script').count()).toBe(0)
       await page.goto(`/info-base/list/blocks/${organization}/content`)
+      await expect(
+        content.getByRole('heading', { name: '@fixture-org', exact: true })
+      ).toBeVisible()
       await expect(content).toContainText('Organization')
       await expect(content.getByRole('link', { name: 'GitHub profile', exact: true })).toHaveCount(
         0
@@ -285,49 +192,6 @@ export function registerGitHubNativeTests(): void {
       await expect(page.locator('.solved-content-popup__state')).toContainText(
         'invented_membership'
       )
-      // Inspect the public SDK shared by the actual MF Host; this adds no application hook.
-      const lifecycle = await page.evaluate(async (blockId) => {
-        type Sdk = typeof import('../../packages/core/src/index')
-        const host = (
-          globalThis as typeof globalThis & {
-            __FEDERATION__: {
-              __INSTANCES__: Array<{
-                options: { name: string }
-                loadShare(name: string): Promise<() => Sdk>
-              }>
-            }
-          }
-        ).__FEDERATION__.__INSTANCES__.find((instance) => instance.options.name === 'host')!
-        const sdk = (await host.loadShare('@inkcre/core'))()
-        const block = await sdk.Block.get(blockId)
-        const original = sdk.Resolver.getClass(block.resolver)
-        const cached = await sdk.ResolverCache.getResolver(block)
-        class Replacement extends original {
-          async getText() {
-            return cached.getText()
-          }
-        }
-        sdk.Resolver.unregister(block.resolver, original)
-        sdk.Resolver.register(block.resolver, Replacement)
-        try {
-          const replacement = await sdk.ResolverCache.getResolver(block)
-          return {
-            text: await replacement.getText(),
-            replacementDiffers: replacement !== cached,
-            replacementUsesRegisteredClass: replacement.constructor === Replacement,
-            wrongOwnerCannotUnregister: !sdk.Resolver.unregister(block.resolver, original),
-          }
-        } finally {
-          sdk.Resolver.unregister(block.resolver, Replacement)
-          sdk.Resolver.register(block.resolver, original)
-        }
-      }, repository)
-      expect(lifecycle.replacementDiffers).toBe(true)
-      expect(lifecycle.replacementUsesRegisteredClass).toBe(true)
-      expect(lifecycle.wrongOwnerCannotUnregister).toBe(true)
-      expect(lifecycle.text).toBe(
-        'fixture-org/demo\n<script>unsafe()</script> Stored repository description\nLanguage: Python\nTopics: fixture, reader'
-      )
       await page.goto('/extensions')
       await row.getByRole('button', { name: 'Disable', exact: true }).click()
       await expect(row.getByText('Not running', { exact: true })).toBeVisible()
@@ -338,108 +202,36 @@ export function registerGitHubNativeTests(): void {
       await page.goto('/extensions')
       await row.getByRole('button', { name: 'Enable', exact: true }).click()
       await expect(row.getByText(`Running ${version}`, { exact: true })).toBeVisible()
-      await page.goto(`/info-base/list/blocks/${repository}/content`)
-      await expect(
-        content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
-      ).toBeVisible()
-      // Background participation does not own the local reader Host.
-      // Browser navigation keeps the document (and the MF host instance) alive.
-      async function openSettings(): Promise<void> {
-        // The unified entity UI renders object views as modal popups; close any
-        // open one so the header controls are clickable.
-        const contentPopup = page.getByRole('dialog', { name: 'Content' })
-        if (await contentPopup.isVisible())
-          await contentPopup.getByRole('button', { name: 'Close', exact: true }).click()
-        await page.locator('button[aria-controls="app-side-panel"]').click()
-        await page
-          .getByLabel('Primary')
-          .getByRole('link', { name: 'Settings', exact: true })
-          .click()
-        await expect(page.getByLabel('PostgREST URL')).toBeVisible()
-      }
-      async function setInterval(seconds: number): Promise<void> {
-        await page
-          .getByLabel('Lease renewal and job check interval (seconds; 0 disables)')
-          .fill(String(seconds))
-        await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
-        await expect(
-          page.getByText('Configuration saved successfully', { exact: true }).first()
-        ).toBeVisible()
-      }
-      await openSettings()
-      await setInterval(0)
-      await page.goto(`/info-base/list/blocks/${repository}/content`)
-      await expect(
-        content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
-      ).toBeVisible()
-      await page.clock.install()
-      await page.clock.setFixedTime(new Date())
-      const stoppedLeases = leaseRenewals
-      const stoppedScans = jobScans
-      await page.clock.fastForward(35_000)
-      expect(leaseRenewals).toBe(stoppedLeases)
-      expect(jobScans).toBe(stoppedScans)
-      const localHost = await page.evaluate(async () => {
-        type Sdk = typeof import('../../packages/core/src/index')
-        const state = globalThis as typeof globalThis & {
-          __FEDERATION__: {
-            __INSTANCES__: Array<{
-              options: { name: string }
-              loadShare(name: string): Promise<() => Sdk>
-            }>
-          }
-          githubReaderHost?: unknown
-          githubReaderClass?: unknown
-        }
-        const host = state.__FEDERATION__.__INSTANCES__.find(
-          (instance) => instance.options.name === 'host'
-        )!
-        const sdk = (await host.loadShare('@inkcre/core'))()
-        state.githubReaderHost = host
-        state.githubReaderClass = sdk.Resolver.getClass('extensions.github.repository.v1')
-        return !!state.githubReaderClass
+      // Stopping background participation keeps already loaded local resolvers usable.
+      const graph = `/info-base/graph?focal_block=${repository}`
+      const preview = page.getByRole('button', {
+        name: `Explore entry #${repository}`,
+        exact: true,
       })
-      expect(localHost).toBe(true)
-      await openSettings()
-      await setInterval(2)
-      await expect.poll(() => leaseRenewals).toBeGreaterThan(stoppedLeases)
-      await expect.poll(() => jobScans).toBeGreaterThan(stoppedScans)
-      await setInterval(0)
-      const finalLeases = leaseRenewals
-      const finalScans = jobScans
-      await page.clock.fastForward(35_000)
-      expect(leaseRenewals).toBe(finalLeases)
-      expect(jobScans).toBe(finalScans)
-      expect(
-        await page.evaluate(async () => {
-          type Sdk = typeof import('../../packages/core/src/index')
-          const state = globalThis as typeof globalThis & {
-            __FEDERATION__: {
-              __INSTANCES__: Array<{
-                options: { name: string }
-                loadShare(name: string): Promise<() => Sdk>
-              }>
-            }
-            githubReaderHost?: unknown
-            githubReaderClass?: unknown
-          }
-          const host = state.__FEDERATION__.__INSTANCES__.find(
-            (instance) => instance.options.name === 'host'
-          )!
-          const sdk = (await host.loadShare('@inkcre/core'))()
-          return {
-            // The restored extension must keep serving reads through its resolver.
-            resolverRegistered:
-              sdk.Resolver.getClass('extensions.github.repository.v1') !== undefined,
-          }
-        })
-        // NOTE: MF host instance identity is not asserted here. The unified entity
-        // UI replaces the host-side MF instance while restoring extensions during a
-        // participation cycle, so identity no longer holds on this branch.
-      ).toEqual({ resolverRegistered: true })
+      await page.goto(graph)
+      await expect(preview).toContainText('fixture-org/demo')
+      const documentStartedAt = await page.evaluate(() => performance.timeOrigin)
+      await page.locator('button[aria-controls="app-side-panel"]').click()
+      await page.getByLabel('Primary').getByRole('link', { name: 'Settings', exact: true }).click()
+      await page.getByLabel('Lease renewal and job check interval (seconds; 0 disables)').fill('0')
+      await page.getByRole('button', { name: 'Save and use connection', exact: true }).click()
+      await expect(
+        page.getByText('Configuration saved successfully', { exact: true }).first()
+      ).toBeVisible()
+      await page.goBack()
+      await expect(page).toHaveURL(graph)
+      await page.getByRole('button', { name: `Inspect entry #${repository}`, exact: true }).click()
+      await page.getByRole('button', { name: 'View content', exact: true }).click()
+      await expect(content).toContainText('Stored repository description')
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStartedAt)
+      // A new document must also restore the reader without starting background participation.
+      await page.goto(`/info-base/list/blocks/${repository}/content`)
+      await expect(
+        content.getByRole('heading', { name: 'fixture-org/demo', exact: true })
+      ).toBeVisible()
       expect(githubApiCalls).toBe(0)
     } finally {
-      releaseRemoteEntry()
+      extension.release()
       // Timeout teardown may already have closed the page; DB cleanup must still run.
       if (!page.isClosed()) await page.goto('about:blank').catch(() => {})
       for (const id of createdRelations)

@@ -345,12 +345,13 @@ export function readExternalDatabaseDescriptor(provider) {
   if (
     descriptor.project !== `inkcre-core-py-${descriptor.identity}` ||
     !descriptor.docker?.daemon_id ||
+    !/^[a-f0-9]{40}$/.test(descriptor.source_revision) ||
     !/^[a-f0-9]{64}$/.test(descriptor.source_fingerprint) ||
     typeof descriptor.contract_revision !== 'string' ||
     descriptor.contract_revision.length === 0
   ) {
     throw new Error(
-      'external database provenance is incomplete: check project, Docker daemon, source fingerprint and contract revision with the impl-py owner'
+      'external database provenance is incomplete: check project, Docker daemon, source revision, source fingerprint and contract revision with the impl-py owner'
     )
   }
   return descriptor
