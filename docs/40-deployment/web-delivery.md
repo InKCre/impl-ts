@@ -14,6 +14,12 @@ validates the candidate but uploads no deployable SPA, Module Federation, or Reg
 artifact. Preview and production each build at their own authority boundary and cannot publish
 first-party Extensions.
 
+Workspace compilation, Web and WebExt browser acceptance, and Pages preview start with
+`pnpm review:candidate` in a clean detached checkout. The command applies that checkout's
+pending Changesets and refreshes workspace dependencies before dispatching to the requested
+build or acceptance. App checks use the event commit and Pages preview uses the exact PR head.
+Release workflows use the committed release versions.
+
 The browser-side authority behind this invariant belongs to
 [App Runtime and Delegation](../30-unit-tdd/app-runtime-and-delegation.md).
 
