@@ -27,12 +27,16 @@ function database(t, job, abortWhenClaimed) {
     select() {
       if (fields.status === JobStatus.RUNNING)
         return {
-          maybeSingle: async () => ({
-            data: { ...job, status: JobStatus.RUNNING, abort_requested: abortWhenClaimed },
-          }),
+          maybeSingle() {
+            return {
+              throwOnError: async () => ({
+                data: { ...job, status: JobStatus.RUNNING, abort_requested: abortWhenClaimed },
+              }),
+            }
+          },
         }
       updates.push(fields.status)
-      return Promise.resolve({ data: [{ id: job.id }] })
+      return { throwOnError: async () => ({ data: [{ id: job.id }] }) }
     },
   }))
   return updates
