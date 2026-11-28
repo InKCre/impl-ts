@@ -30,17 +30,21 @@ async function main() {
     })
     return
   }
-  const config = await fetch('/config').then((response) => response.json())
+  const query = new URLSearchParams(location.search)
+  const provider = query.get('provider')
+  const secondProvider = query.get('secondProvider')
+  const otherOrigin = query.get('otherOrigin')
+  check(provider && secondProvider && otherOrigin, 'Missing fixture provider or origin')
   configStore.metaConfig = MetaConfigSchema.parse({
     INKCRE_PGREST_URL: `${location.origin}/unused-database`,
     INKCRE_PEER_ID: crypto.randomUUID(),
   })
   const found = await BrowserAccess.discover()
   check(found.length === 2, `Expected two authorized providers, found ${found.length}`)
-  const binding = found.find((item) => item.provider === config.provider)!
-  check(binding.provider === config.provider, 'Discovery returned another provider')
+  const binding = found.find((item) => item.provider === provider)
+  check(binding, 'The authorized provider was not discovered')
   BrowserAccess.bind(binding)
-  check(BrowserAccess.hasBinding(binding.provider), 'Explicit binding was not persisted')
+  check(BrowserAccess.hasBinding(binding.provider), 'Explicit binding is not available to Sources')
   const baseline = await BrowserAccess.tabs(binding.provider)
   let stalePage: { evaluate: (value: string) => Promise<unknown> } | undefined
   const extracted = await BrowserAccess.withPage(
@@ -208,7 +212,7 @@ async function main() {
   )
 
   stage = 'provider-revoke-isolation'
-  const secondBinding = found.find((item) => item.provider === config.secondProvider)
+  const secondBinding = found.find((item) => item.provider === secondProvider)
   check(secondBinding, 'Second provider is missing')
   BrowserAccess.bind(secondBinding)
   await BrowserAccess.withPage(
@@ -230,6 +234,11 @@ async function main() {
       )
     }
   )
+  const stillAuthorized = await BrowserAccess.discover()
+  check(
+    stillAuthorized.length === 1 && stillAuthorized[0]?.provider === secondProvider,
+    'Discovery did not reflect the provider-specific revocation'
+  )
   const wrongProvider = crypto.randomUUID()
   BrowserAccess.bind({ ...binding, provider: wrongProvider })
   const wrongProviderSignal = AbortSignal.timeout(100)
@@ -250,7 +259,7 @@ async function main() {
       method: 'POST',
       body: JSON.stringify({
         type: 'fixture-open-probe',
-        url: `${config.otherOrigin}${route}?token=${token}`,
+        url: `${otherOrigin}${route}?token=${token}`,
       }),
     }).then((response) => response.json())
     check(opened.ok, 'Could not open a separate top-level Web origin')
@@ -269,7 +278,7 @@ async function main() {
     method: 'POST',
     body: JSON.stringify({
       type: 'browser-automation-grant',
-      origin: config.otherOrigin,
+      origin: otherOrigin,
       provider: secondBinding.provider,
     }),
   }).then((response) => response.json())

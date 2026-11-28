@@ -47,8 +47,8 @@ function check(response: { error: { message: string; code?: string } | null; sta
 
 /** Peer-local collection over ordinary graph/storage operations; no database business RPC. */
 export class WebMaterialClient {
-  readonly blocks: DBAPIClient<'blocks'>
-  readonly relations: DBAPIClient<'relations'>
+  private readonly blocks: DBAPIClient<'blocks'>
+  private readonly relations: DBAPIClient<'relations'>
   private readonly storages: DBAPIClient<'storages'>
 
   constructor(
@@ -60,7 +60,7 @@ export class WebMaterialClient {
     this.storages = new DBAPIClient('storages', undefined, 'inkcre', url, token)
   }
 
-  async storage(id = -4): Promise<WritableStorage<Uint8Array>> {
+  private async storage(id = -4): Promise<WritableStorage<Uint8Array>> {
     const { data, error, status } = await this.storages.from().select().eq('id', id).single()
     check({ error, status })
     const row = { ...data!, config: data!.config as Record<string, unknown> }

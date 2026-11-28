@@ -46,7 +46,7 @@ test.beforeEach(async ({ page }) => {
   )
 })
 
-test('built browser artifact reads and writes the peer protocol', async ({ page }) => {
+test('the Web origin can read and write the admitted database protocol', async ({ page }) => {
   await page.goto('/')
 
   const authorization = `Bearer ${await token()}`
@@ -1596,10 +1596,16 @@ test('saved content keeps Markdown structure and literal text in Web reading and
         }
       }
       if (block.resolver !== 'core.html.v1') {
-        await page.goto(`/info-base/graph/blocks/${block.id}`)
-        await expect(
-          page.locator('.content-preview').filter({ hasText: 'stays literal' }).first()
-        ).toContainText('<node>')
+        await page.goto(`/info-base/graph?focal_block=${block.id}`)
+        const preview = page.getByRole('button', {
+          name: `Explore entry #${block.id}`,
+          exact: true,
+        })
+        await expect(preview).toContainText(
+          block.resolver === 'core.text.v1'
+            ? 'Plain <node> stays literal'
+            : '`<node>` stays literal'
+        )
       }
     }
   } finally {
@@ -1611,6 +1617,84 @@ test('saved content keeps Markdown structure and literal text in Web reading and
       }
     )
     expect(cleanup.status).toBe(204)
+  }
+})
+
+test('the graph retries a failed read and keeps a dragged node when highlighting incoming relations', async ({
+  page,
+}) => {
+  const headers = {
+    Authorization: `Bearer ${await token()}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  }
+  const created = await fetch(`${postgrestUrl}blocks`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(
+      ['Graph focus', 'Outgoing neighbor'].map((content) => ({
+        resolver: 'core.text.v1',
+        storage: null,
+        content,
+      }))
+    ),
+  })
+  expect(created.status).toBe(201)
+  const [focus, neighbor] = await created.json()
+  try {
+    const relation = await fetch(`${postgrestUrl}relations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ from_: focus.id, to_: neighbor.id, content: 'related' }),
+    })
+    expect(relation.status).toBe(201)
+    let rejectRead = true
+    let rejected = 0
+    await page.route('**/blocks?**', async (route) => {
+      if (
+        rejectRead &&
+        new URL(route.request().url()).searchParams.get('id') === `eq.${focus.id}`
+      ) {
+        rejected++
+        await route.fulfill({ status: 403, json: { message: 'Fixture graph read rejected' } })
+      } else await route.continue()
+    })
+    await page.goto(`/info-base/graph?focal_block=${focus.id}`)
+    await expect(page.getByText('Unable to load the graph', { exact: true })).toBeVisible()
+    expect(rejected).toBeGreaterThan(0)
+    rejectRead = false
+    await page.getByRole('button', { name: 'Retry', exact: true }).click()
+    const focusNode = page.locator('.block-node').filter({
+      has: page.getByRole('button', { name: `Explore entry #${focus.id}`, exact: true }),
+    })
+    const neighborNode = page.locator('.block-node').filter({
+      has: page.getByRole('button', { name: `Explore entry #${neighbor.id}`, exact: true }),
+    })
+    await expect(focusNode).toContainText('Graph focus')
+    await expect(neighborNode).toContainText('Outgoing neighbor')
+    const offset = async () =>
+      (await focusNode.boundingBox())!.x - (await neighborNode.boundingBox())!.x
+    const handle = focusNode.getByText(`#${focus.id}`, { exact: true })
+    await handle.click({ trial: true })
+    const before = await offset()
+    const box = (await handle.boundingBox())!
+    await page.mouse.move(box.x + 3, box.y + 3)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 68, box.y + 23, { steps: 6 })
+    await page.mouse.up()
+    await expect.poll(offset).toBeGreaterThan(before + 40)
+    const dragged = await offset()
+    await page.getByText('View options', { exact: true }).click()
+    await page.getByRole('combobox', { name: 'Emphasize relations' }).click()
+    await page.getByRole('option', { name: 'Incoming', exact: true }).click()
+    await expect(neighborNode).toHaveCSS('border-top-style', 'dashed')
+    expect(Math.abs((await offset()) - dragged)).toBeLessThan(2)
+  } finally {
+    const cleanup = await fetch(`${postgrestUrl}blocks?id=in.(${focus.id},${neighbor.id})`, {
+      method: 'DELETE',
+      headers,
+    })
+    expect(cleanup.status).toBe(200)
   }
 })
 
@@ -1991,7 +2075,9 @@ test('Job preserves readable errors and logs and distinguishes failed and missin
   }
 })
 
-test('Source titles follow saved names across navigation and refresh', async ({ page }) => {
+test('Sources preserve the draft after a lost creation response and reopen the saved source', async ({
+  page,
+}) => {
   const authorization = `Bearer ${await token()}`
   const headers = { Authorization: authorization, 'Content-Type': 'application/json' }
   const type = `e2e.title.${crypto.randomUUID()}`
@@ -2010,16 +2096,35 @@ test('Source titles follow saved names across navigation and refresh', async ({ 
   expect(createdType.status).toBe(201)
   let sourceId: number | undefined
   try {
-    const created = await fetch(`${postgrestUrl}sources`, {
-      method: 'POST',
-      headers: { ...headers, Prefer: 'return=representation' },
-      body: JSON.stringify({ type, nickname: initialName, config: {} }),
+    let submitted = 0
+    await page.route('**/sources?**', async (route) => {
+      if (route.request().method() !== 'POST' || route.request().postDataJSON().id !== undefined)
+        return route.continue()
+      submitted++
+      const response = await route.fetch()
+      expect(response.status()).toBe(201)
+      sourceId = (await response.json()).id
+      // The database accepted the source, but the creating browser never receives its ID.
+      await route.abort('connectionreset')
     })
-    expect(created.status).toBe(201)
-    const [source] = await created.json()
-    sourceId = source.id
     await page.goto('/sources')
     await expect(page).toHaveTitle('Sources - InKCre')
+    await page.getByRole('button', { name: 'Create source', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Create source', exact: true })
+    await dialog.getByLabel('Nickname', { exact: true }).fill(initialName)
+    await dialog.getByRole('combobox', { name: 'Type', exact: true }).click()
+    await dialog.getByRole('option', { name: type, exact: true }).click()
+    await dialog.locator('.cm-content').fill('{"review":"kept"}')
+    await dialog.getByRole('button', { name: 'Create source', exact: true }).click()
+    await expect(dialog.getByRole('alert')).toContainText(
+      'Unable to confirm creation. Check the source list before trying again.'
+    )
+    await expect(dialog.getByLabel('Nickname', { exact: true })).toHaveValue(initialName)
+    await expect(dialog.locator('.cm-content')).toContainText('"review":"kept"')
+    page.once('dialog', (confirmation) => confirmation.accept())
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+    expect(submitted).toBe(1)
     await page.getByRole('link', { name: initialName, exact: true }).click()
     await expect(page).toHaveTitle(`${initialName} - Sources - InKCre`)
     await page.getByRole('tab', { name: 'Config' }).click()

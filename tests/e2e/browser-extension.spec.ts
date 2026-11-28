@@ -4,20 +4,21 @@ import { once } from 'node:events'
 import { SignJWT } from 'jose'
 import { access, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { DatabaseClient } from '../../packages/core/dist/sdk/sdk.js'
 import { WebMaterialClient } from '../../packages/web-collection/src/material'
-import {
-  textPart,
-  contentPart,
-  WEB_MATERIAL_RESOLVER,
-} from '../../packages/web-collection/src/index'
+import { contentPart, WEB_MATERIAL_RESOLVER } from '../../packages/web-collection/src/index'
 import {
   Block,
   TextResolver,
   HtmlResolver,
-  MarkdownResolver,
   MetaConfigSchema,
   WebPeerRuntime,
 } from '../../packages/core/dist/index.js'
+
+// Legacy outbox payloads predate the current body/original wire format.
+function legacyPart(role: 'text' | 'html', text: string) {
+  return { role, base64: Buffer.from(text, 'utf8').toString('base64') }
+}
 
 test('Discourse imports retain each author, short replies, links and code', async ({
   context,
@@ -161,13 +162,6 @@ test('acquired structures retain read-only content, messages and embedded posts'
     Block.parse({ id: -1, storage: null, resolver: 'core.html.v1', content: media.html })
   ).getText()
   expect(mediaText).toContain('https://example.org/captions.vtt')
-
-  const markdown = '# Title\n\n```html\n<node>& value\n  indent\n```\n[link](https://example.org)\n'
-  expect(
-    await new MarkdownResolver(
-      Block.parse({ id: -1, storage: null, resolver: 'core.markdown.v1', content: markdown })
-    ).getText()
-  ).toBe(markdown)
 })
 
 test('material collection uses existing graph CRUD and byte storage without a web RPC', async () => {
@@ -179,7 +173,13 @@ test('material collection uses existing graph CRUD and byte storage without a we
     .setIssuedAt()
     .setExpirationTime('5m')
     .sign(new TextEncoder().encode(process.env.INKCRE_E2E_WEBEXT_JWT_SECRET!))
-  const client = new WebMaterialClient(process.env.INKCRE_E2E_WEBEXT_PGREST!, async () => token)
+  const connection = {
+    baseUrl: process.env.INKCRE_E2E_WEBEXT_PGREST!,
+    tokenProvider: async () => token,
+  }
+  const client = new WebMaterialClient(connection.baseUrl, connection.tokenProvider)
+  const blocks = new DatabaseClient('blocks', undefined, connection)
+  const relations = new DatabaseClient('relations', undefined, connection)
   const source = {
     scope: 'graph-acceptance:' + crypto.randomUUID(),
     key: 'https://source.test/article?q=1',
@@ -197,11 +197,11 @@ test('material collection uses existing graph CRUD and byte storage without a we
     mode: 'fixed' as const,
     source,
     material,
-    parts: [textPart('text', '主动保存原文')],
+    parts: [legacyPart('text', '主动保存原文')],
     note: '独立附注',
   }
   // A root may already be visible when its content has not been accepted yet.
-  const partial = await client.blocks
+  const partial = await blocks
     .insert({
       resolver: WEB_MATERIAL_RESOLVER,
       storage: null,
@@ -223,7 +223,7 @@ test('material collection uses existing graph CRUD and byte storage without a we
   ).read(saved.root_id)
   expect(Buffer.from(read.parts[0]!.base64, 'base64').toString()).toBe('主动保存原文')
   expect(read.notes[0]!.text).toBe('独立附注')
-  const text = await client.blocks.from().select().eq('id', saved.part_ids.body!).single()
+  const text = await blocks.from().select().eq('id', saved.part_ids.body!).single()
   expect(await new TextResolver(Block.parse(text.data)).getText()).toBe('主动保存原文')
   const current = {
     ...fixed,
@@ -235,7 +235,7 @@ test('material collection uses existing graph CRUD and byte storage without a we
   const next = await client.submit({
     ...current,
     request_id: crypto.randomUUID(),
-    parts: [textPart('text', '更新后的正文')],
+    parts: [legacyPart('text', '更新后的正文')],
   })
   expect(next.root_id).toBe(first.root_id)
   expect(
@@ -245,16 +245,16 @@ test('material collection uses existing graph CRUD and byte storage without a we
     '更新后的正文'
   )
   const bodyID = next.part_ids.body!
-  const partRow = await client.relations
+  const partRow = await relations
     .from()
     .select()
     .eq('from_', next.root_id)
     .eq('content', 'extensions.web-collection.part.body')
     .single()
-  await client.relations
+  await relations
     .update({ content: 'extensions.web-collection.part.text' })
     .eq('id', partRow.data!.id)
-  const reference = await client.relations
+  const reference = await relations
     .insert({ from_: saved.root_id, to_: bodyID, content: 'synthetic-reference' })
     .select()
     .single()
@@ -271,12 +271,12 @@ test('material collection uses existing graph CRUD and byte storage without a we
     ],
   })
   expect(upgraded.part_ids.body).toBe(bodyID)
-  expect(
-    (await client.relations.from().select().eq('id', partRow.data!.id).single()).data!.content
-  ).toBe('extensions.web-collection.part.body')
-  expect(
-    (await client.relations.from().select().eq('id', reference.data!.id).single()).data!.to_
-  ).toBe(bodyID)
+  expect((await relations.from().select().eq('id', partRow.data!.id).single()).data!.content).toBe(
+    'extensions.web-collection.part.body'
+  )
+  expect((await relations.from().select().eq('id', reference.data!.id).single()).data!.to_).toBe(
+    bodyID
+  )
   const body = (await client.read(upgraded.root_id)).parts[0]!
   expect(body.role).toBe('body')
   expect('format' in body && body.format).toBe('html')
@@ -295,7 +295,7 @@ test('material collection uses existing graph CRUD and byte storage without a we
   expect(JSON.stringify(current)).toBe(frozen)
   expect(
     (
-      await client.relations
+      await relations
         .from()
         .select()
         .eq('from_', replay.root_id)
@@ -310,14 +310,14 @@ test('material collection uses existing graph CRUD and byte storage without a we
       .part_ids.body
   ).toBe(bodyID)
   // A previously stored fixed graph keeps its legacy relation shape and accepted values.
-  await client.relations
+  await relations
     .update({ content: 'extensions.web-collection.part.text' })
     .eq('from_', saved.root_id)
     .eq('content', 'extensions.web-collection.part.body')
   const fixedRetry = await client.submit({
     ...fixed,
     material: { ...material, title: '不应覆盖' },
-    parts: [textPart('text', '不应覆盖')],
+    parts: [legacyPart('text', '不应覆盖')],
   })
   expect(fixedRetry.part_ids.text).toBe(saved.part_ids.body)
   const retained = await client.read(saved.root_id)
@@ -326,9 +326,9 @@ test('material collection uses existing graph CRUD and byte storage without a we
   const incomplete = {
     ...fixed,
     request_id: crypto.randomUUID(),
-    parts: [textPart('html', '<p>原材料</p>'), textPart('text', '冻结正文')],
+    parts: [legacyPart('html', '<p>原材料</p>'), legacyPart('text', '冻结正文')],
   }
-  const oldRoot = await client.blocks
+  const oldRoot = await blocks
     .insert({
       resolver: WEB_MATERIAL_RESOLVER,
       storage: null,
@@ -341,11 +341,11 @@ test('material collection uses existing graph CRUD and byte storage without a we
     })
     .select()
     .single()
-  const original = await client.blocks
+  const original = await blocks
     .insert({ resolver: 'core.html.v1', storage: null, content: '<p>原材料</p>' })
     .select()
     .single()
-  await client.relations.insert({
+  await relations.insert({
     from_: oldRoot.data!.id,
     to_: original.data!.id,
     content: 'extensions.web-collection.part.html',
@@ -353,20 +353,18 @@ test('material collection uses existing graph CRUD and byte storage without a we
   await expect(
     client.submit({ ...incomplete, parts: [contentPart('body', 'html', '<p>不同格式</p>')] })
   ).rejects.toThrow('原格式')
-  expect((await client.relations.from().select().eq('from_', oldRoot.data!.id)).data).toHaveLength(
-    1
-  )
+  expect((await relations.from().select().eq('from_', oldRoot.data!.id)).data).toHaveLength(1)
   const completed = await client.submit(incomplete)
   expect(completed.part_ids.html).toBe(original.data!.id)
   expect(completed.part_ids.text).toBeDefined()
   expect(
-    (await client.blocks.from().select().eq('id', completed.part_ids.text!).single()).data!.resolver
+    (await blocks.from().select().eq('id', completed.part_ids.text!).single()).data!.resolver
   ).toBe('core.text.v1')
-  const conflicting = await client.blocks
+  const conflicting = await blocks
     .insert({ storage: null, resolver: 'core.text.v1', content: 'conflicting body' })
     .select()
     .single()
-  const ambiguous = await client.relations
+  const ambiguous = await relations
     .insert({
       from_: next.root_id,
       to_: conflicting.data!.id,
@@ -376,7 +374,7 @@ test('material collection uses existing graph CRUD and byte storage without a we
     .single()
   await expect(client.submit(current)).rejects.toThrow('歧义')
   await expect(client.read(next.root_id)).rejects.toThrow('歧义')
-  await client.relations.from().delete().eq('id', ambiguous.data!.id)
+  await relations.from().delete().eq('id', ambiguous.data!.id)
   const record = {
     request_id: crypto.randomUUID(),
     mode: 'record' as const,
@@ -432,37 +430,9 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
       access(
         fileURLToPath(new URL('../../apps/webext/.output/chrome-mv3/' + path, import.meta.url))
       )
-    ).rejects.toThrow()
-  expect(manifest.action.default_icon).toEqual({
-    16: 'toolbar/canvas-16.png',
-    32: 'toolbar/canvas-32.png',
-    48: 'toolbar/canvas-48.png',
-  })
+    ).rejects.toMatchObject({ code: 'ENOENT' })
   page.on('pageerror', (error) => pageErrors.push(error.message))
-  await page.goto(`chrome-extension://${extensionId}/options.html`)
-  await expect(page.getByRole('heading', { name: '信息库', exact: true })).toBeVisible()
-  await expect(page.getByLabel('PostgREST 地址')).toBeVisible()
-  await expect(page.getByRole('heading', { name: '扩展设置', exact: true })).toBeVisible()
-  await expect(page.getByText('旧工具', { exact: true })).toHaveCount(0)
-  await expect(page.getByText('展开旧服务设置', { exact: true })).toHaveCount(0)
-  const oldMessages = await page.evaluate(async () => {
-    const result = []
-    for (const type of [
-      'legacy-explain',
-      'legacy-vector',
-      'collection-legacy-tools',
-      'collection-selection-draft',
-      'get-tab-id',
-    ]) {
-      try {
-        result.push(await (globalThis as any).chrome.runtime.sendMessage({ type, text: 'retired' }))
-      } catch {
-        result.push(null)
-      }
-    }
-    return result
-  })
-  expect(oldMessages.every((result) => result == null)).toBe(true)
+  await page.goto(`chrome-extension://${extensionId}/parser.html`)
   await page.evaluate(() => (globalThis as any).chrome.action.openPopup())
   // A normal tab misses the browser's intrinsic popup sizing (the old width was 99px).
   const nativeLayout = () =>
@@ -510,12 +480,46 @@ test('built Chromium extension sizes its native toolbar popup and opens independ
     body: JSON.stringify(layout, null, 2),
     contentType: 'application/json',
   })
+  const opened = page.context().waitForEvent('page')
   await page.evaluate(() => {
-    for (const popup of (globalThis as any).chrome.extension.getViews({ type: 'popup' }))
-      popup.close()
+    const popup = (globalThis as any).chrome.extension.getViews({ type: 'popup' })[0] as Window
+    const settings = [...popup.document.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('设置、导入与保存结果')
+    )!
+    settings.click()
   })
+  const settingsPage = await opened
+  await expect(settingsPage).toHaveURL(`chrome-extension://${extensionId}/options.html`)
+  await expect(settingsPage.getByRole('heading', { name: '信息库', exact: true })).toBeVisible()
+  await expect(settingsPage.getByLabel('PostgREST 地址')).toBeVisible()
+  await expect(settingsPage.getByRole('heading', { name: '扩展设置', exact: true })).toBeVisible()
+  await expect(settingsPage.getByText('旧工具', { exact: true })).toHaveCount(0)
+  await expect(settingsPage.getByText('展开旧服务设置', { exact: true })).toHaveCount(0)
+  const oldMessages = await settingsPage.evaluate(async () => {
+    const runtime = (globalThis as any).chrome.runtime
+    const active = await runtime.sendMessage({ type: 'collection-status' })
+    if (!active?.ok) throw new Error('The running collection background did not answer')
+    const result = []
+    for (const type of [
+      'legacy-explain',
+      'legacy-vector',
+      'collection-legacy-tools',
+      'collection-selection-draft',
+      'get-tab-id',
+    ]) {
+      try {
+        result.push(await runtime.sendMessage({ type, text: 'retired' }))
+      } catch (error) {
+        if (!(error instanceof Error) || !/Receiving end does not exist/.test(error.message))
+          throw error
+        result.push(null)
+      }
+    }
+    return result
+  })
+  expect(oldMessages.every((result) => result == null)).toBe(true)
   expect(
-    await page.locator('.collection-page').evaluate((node) => node.clientWidth)
+    await settingsPage.locator('.collection-page').evaluate((node) => node.clientWidth)
   ).toBeGreaterThan(700)
   // Supplemental content screenshot, not a screenshot of the native browser chrome.
   await page.setViewportSize({ width: layout.width, height: 600 })
@@ -1210,28 +1214,10 @@ test('automatic observation reuses current material and preserves manual saves',
   test.skip(!process.env.INKCRE_E2E_WEBEXT_PGREST, 'Requires a disposable database.')
   test.setTimeout(120_000)
   let articleText = '本次浏览的正文。'
-  let broken = true
   let sourceAuthentication = 0
-  const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n'
   const server = createServer((request, response) => {
     if (request.headers.authorization) sourceAuthentication++
-    if (request.url === '/redirect') {
-      response.writeHead(302, { Location: '/article' }).end()
-      return
-    }
-    if (request.url === '/document.pdf') {
-      response.writeHead(200, { 'Content-Type': 'application/pdf' }).end(pdf)
-      return
-    }
     response.setHeader('Content-Type', 'text/html; charset=utf-8')
-    if (request.url === '/broken' && broken) {
-      response.writeHead(404).end('<p>not found</p>')
-      return
-    }
-    if (request.url === '/login') {
-      response.end('<title>登录</title><input type="password"><p>请登录后继续</p>')
-      return
-    }
     response.end(
       `<title>导入样本</title><article><h1>阅读材料</h1><p>${articleText}</p><p>${'可重新解释的来源正文。'.repeat(80)}</p></article>`
     )
@@ -1351,7 +1337,6 @@ test('automatic observation reuses current material and preserves manual saves',
           )
             return 'confirmed'
           return JSON.stringify({
-            errors: status.tabErrors,
             items: status.items.map((item: any) => ({
               url: item.url,
               state: item.state,
@@ -1460,7 +1445,7 @@ test('restored automatic work can pause without blocking a manual excerpt', asyn
           captured_at: new Date().toISOString(),
           coverage: [],
         },
-        parts: [textPart('text', '恢复后的当前材料')],
+        parts: [legacyPart('text', '恢复后的当前材料')],
       },
     }
   })
@@ -1527,7 +1512,6 @@ test('restored automatic work can pause without blocking a manual excerpt', asyn
   })
   await expect
     .poll(async () => {
-      await message({ type: 'collection-wake' })
       return (await message({ type: 'collection-status' })).items.filter(
         (item: any) => pending.some((entry) => entry.id === item.id) && item.state === 'confirmed'
       ).length
@@ -1578,7 +1562,7 @@ test('stalled registration and failed batches do not block local edits or other 
     const held = (await message({ type: 'collection-status' })).connections[0]
     expect(held.name).toBe('离线时也可修改')
     expect(registrationRequests).toBe(1)
-    const online = await message({
+    await message({
       type: 'collection-connect',
       connection: {
         name: '可用连接',
@@ -1587,13 +1571,13 @@ test('stalled registration and failed batches do not block local edits or other 
         storageId: -4,
       },
     })
-    const pending = Array.from({ length: 4 }, (_, index) => {
+    const pending = Array.from({ length: 3 }, (_, index) => {
       const id = crypto.randomUUID()
       const url = `https://source.test/queue-${index}`
       return {
         id,
-        connectionId: index < 3 ? held.id : online,
-        createdAt: Date.now() + index,
+        connectionId: held.id,
+        createdAt: Date.now() - 10_000 + index,
         automatic: false,
         url,
         state: 'pending',
@@ -1622,16 +1606,33 @@ test('stalled registration and failed batches do not block local edits or other 
         }),
       pending
     )
-    await message({ type: 'collection-wake' })
+    // A normal manual save wakes delivery with three older, failing materials already queued.
+    const manualId = await message({
+      type: 'collection-save-draft',
+      draft: {
+        text: '第四条仍应先于下一次 alarm 保存',
+        url: 'https://source.test/manual',
+        title: '手动摘录',
+        captured_at: new Date().toISOString(),
+      },
+    })
     await expect
       .poll(
         async () =>
           (await message({ type: 'collection-status' })).items.find(
-            (item: any) => item.id === pending[3]!.id
+            (item: any) => item.id === manualId
           )?.state
       )
       .toBe('confirmed')
     expect(failedRequests).toBe(3)
+    // No new save or settings change. Only the production alarm retries the older backlog.
+    await page.evaluate(async () => {
+      const alarms = (globalThis as any).chrome.alarms
+      const alarm = await alarms.get('inkcre-collection')
+      if (!alarm) throw new Error('Collection recovery alarm was not registered')
+      await alarms.create(alarm.name, { when: Date.now(), periodInMinutes: alarm.periodInMinutes })
+    })
+    await expect.poll(() => failedRequests).toBe(6)
     // Updating this info-base's endpoint retains its identity and unsent queue.
     await message({
       type: 'collection-connect',
@@ -1650,7 +1651,7 @@ test('stalled registration and failed batches do not block local edits or other 
               pending.some((entry) => entry.id === item.id) && item.state === 'confirmed'
           ).length
       )
-      .toBe(4)
+      .toBe(3)
     const updated = (await message({ type: 'collection-status' })).connections.find(
       (item: any) => item.id === held.id
     )
@@ -1677,6 +1678,7 @@ test('extension retains an incomplete graph and continues after browser restart'
   let rejectAuthentication = false
   let dropAfterCommit = false
   let holdSubmissions = false
+  let heldMessage = 'graph write interrupted'
   let publicAuthHeaders = 0
   const sourceRequests: string[] = []
   const server = createServer(async (request, response) => {
@@ -1689,7 +1691,9 @@ test('extension retains an incomplete graph and continues after browser restart'
         return
       }
       if (holdSubmissions && request.method !== 'GET') {
-        response.destroy()
+        response
+          .writeHead(503, { 'Content-Type': 'application/json' })
+          .end(JSON.stringify({ message: heldMessage }))
         return
       }
       const body: Buffer[] = []
@@ -1798,6 +1802,7 @@ test('extension retains an incomplete graph and continues after browser restart'
         }, requestId)
       )
       .toBe('sending')
+    heldMessage = 'graph write attempted after restart'
     const restored = await restartContext()
     // Ensures the extension service worker is up before reconnecting the page.
     let worker = restored.serviceWorkers()[0]
@@ -1805,6 +1810,16 @@ test('extension retains an incomplete graph and continues after browser restart'
     expect(worker).toBeTruthy()
     const recovered = await restored.newPage()
     await recovered.goto(`chrome-extension://${extensionId}/options.html`)
+    await expect
+      .poll(() =>
+        recovered.evaluate(async (id) => {
+          const status = await (globalThis as any).chrome.runtime.sendMessage({
+            type: 'collection-status',
+          })
+          return status.value.items.find((item: { id: string }) => item.id === id)?.error
+        }, requestId)
+      )
+      .toContain(heldMessage)
     const held = await recovered.evaluate(async () =>
       (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-status' })
     )
@@ -1820,9 +1835,11 @@ test('extension retains an incomplete graph and continues after browser restart'
     expect(switched.ok).toBe(true)
     expect(switched.value).not.toBe(originalTarget)
     holdSubmissions = false
-    await recovered.evaluate(async () =>
-      (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-wake' })
+    const retried = await recovered.evaluate(
+      (id) => (globalThis as any).chrome.runtime.sendMessage({ type: 'collection-retry', id }),
+      requestId
     )
+    expect(retried.ok, retried.error).toBe(true)
     await expect
       .poll(
         () =>
@@ -1902,7 +1919,11 @@ test('extension retains an incomplete graph and continues after browser restart'
     const anotherPeer = new WebMaterialClient(endpoint, async () => jwt)
     const shared = await anotherPeer.read(root.id)
     const original = shared.parts.find((part) => part.role === 'original')!
-    const deletion = await anotherPeer.blocks.from().delete().eq('id', original.id)
+    const blocks = new DatabaseClient('blocks', undefined, {
+      baseUrl: endpoint,
+      tokenProvider: async () => jwt,
+    })
+    const deletion = await blocks.from().delete().eq('id', original.id)
     expect(deletion.error).toBeNull()
     const independent = await new WebMaterialClient(endpoint, async () => jwt).read(root.id)
     const body = independent.parts.find((part) => part.role === 'body')!

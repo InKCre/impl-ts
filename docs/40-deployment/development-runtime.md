@@ -20,14 +20,15 @@
 
 ## 测试与验收入口
 
-`pnpm check` 依次执行格式、lint、类型、全部工作区构建和 `pnpm test:contracts`。CI 的 Workspace contract 在准备待发布的兼容版本后调用同一个 `test:contracts`，不另维护一份测试文件清单。该入口运行 `scripts/tests/*.test.mjs`、三个发布/准入测试入口，以及 Bilibili、CalDAV 和本地文件的 TypeScript 契约。`test:contracts` 需要本次源码对应的 Core `dist`；独立执行前先构建 Core。它包含 tarball 消费、声明编译、外部格式、故障注入和受控 HTTP 合同，不证明真实数据库或浏览器行为。
+`pnpm check` 依次执行格式、lint、类型、全部工作区构建和 `pnpm test:contracts`。CI 的 Workspace contract 在准备待发布的兼容版本后调用同一个 `test:contracts`，不另维护一份测试文件清单。该入口运行 `scripts/tests/*.test.mjs`、三个发布/准入测试入口，以及 Bilibili、CalDAV 和本地文件的 TypeScript 契约。`test:contracts` 需要本次源码对应的 Core `dist`；独立执行前先构建 Core。它通过安装 tarball、编译声明、解析真实 Vite/WXT 配置和运行 CLI 检验各自的调用契约。SSH 测试执行随仓库分发的远端脚本，在进程边界用夹具接收 Docker 命令。真实数据库与浏览器行为由下列验收入口证明。
 
-| 入口                        | 证明与执行边界                                                                                                                                                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm test:e2e:web`         | 创建并清理独占数据库，构建 Web、GitHub/Mail MF，运行浏览器数据库、已连接页面无障碍、Mail Host 读取与恢复。保留真实写入、重新读取及数据库 reset 后的基线核对。                                                                                      |
-| `pnpm test:e2e:webext`      | 构建 Chromium/Firefox 产物并验证身份与图标合同，运行真实浏览器自动化桥，再创建独占数据库执行采集、连接、部分进度和浏览器重启恢复；默认入口必须提供数据库，不能把缺少环境导致的跳过计为通过。Firefox 此处是构建/产物合同，不是 Firefox 运行时 E2E。 |
-| `pnpm test:mail`            | 真实 Mail renderer/Resolver 的浏览器阅读、键盘、窄屏、内容隔离和阅读位置恢复；图数据来自合成 I/O fixture，不代表 Python 邮箱采集或共享数据库持久化。                                                                                               |
-| `pnpm test:e2e` / `pnpm ci` | 前者执行以上三个浏览器入口；后者先执行 `pnpm check`。                                                                                                                                                                                              |
+| 入口                        | 证明与执行边界                                                                                                                                                                                                                                                              |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test:e2e:web`         | 创建并清理独占数据库，构建 Web 和验收所需的原生 MF，运行浏览器数据库、已连接页面无障碍、扩展在 Host 中的设置与阅读，以及 Mail 读取与恢复。保留真实写入、重新读取及数据库 reset 后的基线核对。                                                                               |
+| `pnpm test:e2e:firefox`     | 单独构建并运行 Gecko 采集验收。本机先运行 `pnpm exec playwright install firefox`。只对临时 profile 预授予环回站点，合成存储拒绝写入；检查待办保留真实 URL 与错误。                                                                                                          |
+| `pnpm test:e2e:webext`      | 构建 Chromium/Firefox 产物并验证身份与图标合同，运行真实浏览器自动化桥，再创建独占数据库执行采集、连接、部分进度和浏览器重启恢复；默认入口必须提供数据库，不能把缺少环境导致的跳过计为通过。Firefox 会在独立 profile 临时安装实际扩展，验证离线时同文档导航前后的自动采集。 |
+| `pnpm test:mail`            | 真实 Mail renderer/Resolver 的浏览器阅读、键盘、窄屏、内容隔离和阅读位置恢复；图数据来自合成 I/O fixture，不代表 Python 邮箱采集或共享数据库持久化。                                                                                                                        |
+| `pnpm test:e2e` / `pnpm ci` | 前者执行以上三个浏览器入口；后者先执行 `pnpm check`。                                                                                                                                                                                                                       |
 
 两个数据库 E2E 共享实例准备、就绪、失败证据和清理 owner，但各自持有独立实例。CI 两个浏览器 job 使用同次解析的不可变 Core 镜像。本机 `local` 与 `ssh` provider 沿用运行时配置；选择 `external` 时，E2E 转用 `INKCRE_E2E_DATABASE_PROVIDER`（缺省 `ssh`），拒绝继续附着共享外部数据库。失败输出在 `test-results/database/<lane>/`，浏览器输出在 `test-results/playwright/`；清理失败保留 descriptor 并以非零退出，不能当作通过。
 

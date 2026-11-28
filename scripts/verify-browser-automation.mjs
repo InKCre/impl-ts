@@ -16,8 +16,6 @@ await mkdir(join(root, '.runtime'), { recursive: true })
 const temporary = await mkdtemp(join(root, '.runtime/browser-automation-'))
 const dist = join(temporary, 'web')
 const extension = join(temporary, 'extension')
-const provider = randomUUID()
-const secondProvider = randomUUID()
 const nativeCommands = []
 const nativeReplies = new Map()
 const probeResults = new Map()
@@ -33,8 +31,10 @@ const finished = new Promise((resolve) => {
 
 async function handle(request, response) {
   const url = new URL(request.url, appOrigin ?? 'http://127.0.0.1')
-  if (url.pathname === '/config')
-    return response.end(JSON.stringify({ provider, secondProvider, otherOrigin }))
+  if (url.pathname.startsWith('/unused-database/'))
+    return response
+      .writeHead(401, { 'Content-Type': 'application/json' })
+      .end(JSON.stringify({ code: 'PGRST301', message: 'Local-only browser fixture' }))
   if (url.pathname === '/state') return response.end(JSON.stringify({ complete: !!webReport }))
   if (url.pathname === '/fixture-next')
     return response.end(JSON.stringify(nativeCommands.shift() ?? null))
@@ -140,27 +140,14 @@ try {
     join(extension, 'automation-fixture.html'),
     '<script src="automation-fixture.js"></script>'
   )
+  const fixturePage = 'automation-fixture.html?' + new URLSearchParams({ appOrigin, otherOrigin })
   await writeFile(
     join(extension, 'automation-fixture-background.js'),
-    "import './background.js'; chrome.runtime.onInstalled.addListener(() => { void chrome.tabs.create({url: chrome.runtime.getURL('automation-fixture.html')}); });"
+    `import './background.js'; chrome.runtime.onInstalled.addListener(() => { void chrome.tabs.create({url: chrome.runtime.getURL(${JSON.stringify(fixturePage)})}); });`
   )
-  await writeFile(
-    join(extension, 'automation-fixture.js'),
-    `
-(async()=>{
-const origin=${JSON.stringify(appOrigin)},provider=${JSON.stringify(provider)},secondProvider=${JSON.stringify(secondProvider)};
-const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('inkcre-webext-collection',1);r.onupgradeneeded=()=>{for(const name of ['settings','connections','outbox','imports','legacy'])if(!r.result.objectStoreNames.contains(name))r.result.createObjectStore(name)};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
-await new Promise((resolve,reject)=>{const tx=db.transaction(['connections'],'readwrite');for(const peerId of [provider,secondProvider]){const id=crypto.randomUUID();tx.objectStore('connections').put({id,name:'Fixture browser',url:origin+'/unused-database',secret:'fixture-only-not-a-real-secret-32-bytes',peerId,storageId:-4},id)}tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});
-let result;
-for(let i=0;i<30;i++){try{result=await chrome.runtime.sendMessage({type:'browser-automation-grant',origin,provider});if(result?.ok)break}catch{}await new Promise(r=>setTimeout(r,100))}
-if(!result?.ok)throw new Error(result?.error??'Background did not initialize');
-const second=await chrome.runtime.sendMessage({type:'browser-automation-grant',origin,provider:secondProvider});if(!second?.ok)throw new Error(second?.error??'Second provider grant failed');
-await chrome.tabs.create({url:origin+'/borrowed',active:false});
-await chrome.tabs.create({url:origin+'/app',active:false});
-for(let i=0;i<1200;i++){const command=await fetch(origin+'/fixture-next').then(r=>r.json());if(command){const reply=command.message.type==='fixture-open-probe'?{ok:true,value:await chrome.tabs.create({url:command.message.url,active:false})}:command.message.type==='fixture-close-probe'?{ok:true,value:await chrome.tabs.remove(command.message.tabId)}:await chrome.runtime.sendMessage(command.message);await fetch(origin+'/fixture-reply',{method:'POST',body:JSON.stringify({id:command.id,reply})})}if((await fetch(origin+'/state').then(r=>r.json())).complete){const targets=await chrome.debugger.getTargets();await fetch(origin+'/native-report',{method:'POST',body:JSON.stringify({attached:targets.filter(t=>t.attached).map(t=>({id:t.id,tabId:t.tabId,url:t.url}))})});return}await new Promise(r=>setTimeout(r,100))}
-throw new Error('Web fixture timed out');
-})().catch(async error=>{await fetch(${JSON.stringify(appOrigin)}+'/report',{method:'POST',body:JSON.stringify({ok:false,error:error.stack})});await fetch(${JSON.stringify(appOrigin)}+'/native-report',{method:'POST',body:'{}'})});
-`
+  await cp(
+    join(root, 'scripts/tests/browser-automation/extension-fixture.js'),
+    join(extension, 'automation-fixture.js')
   )
   const executable = globalThis.process.env.INKCRE_CHROMIUM_BINARY || chromium.executablePath()
   browserProcess = spawn(

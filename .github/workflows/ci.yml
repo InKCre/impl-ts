@@ -209,8 +209,8 @@ jobs:
       - name: Install the frozen workspace
         run: pnpm install --frozen-lockfile
 
-      - name: Install the exact browser engine
-        run: pnpm exec playwright install --with-deps chromium
+      - name: 安装锁定的 Chromium 和 Firefox
+        run: pnpm exec playwright install --with-deps chromium firefox
 
       - name: Authenticate to GHCR
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0

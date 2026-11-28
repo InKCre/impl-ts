@@ -16,6 +16,7 @@ run('pnpm', ['--filter', '@inkcre/core', 'build'])
 run('pnpm', ['--filter', '@inkcre/webext', 'build'])
 run('pnpm', ['--filter', '@inkcre/webext', 'build:firefox'])
 run('node', ['--test', 'scripts/tests/webext-artifacts.mjs'])
+run('node', ['scripts/verify-firefox-collection.mjs'])
 run('node', ['scripts/verify-browser-automation.mjs'])
 await runIsolatedDatabaseTest('webext', async (state, credentials) => {
   run(
