@@ -25,6 +25,8 @@ const cases = [
 for (const [scenario, expected] of cases) {
   test(`MIME read contract: ${scenario}`, async ({ page }) => {
     await page.goto(`/mime-reads.html?case=${scenario}`)
-    await expect(page.locator('#result')).toHaveText(JSON.stringify(expected))
+    const result = page.locator('#result')
+    await expect(result).not.toHaveText('running')
+    expect(JSON.parse(await result.innerText())).toEqual(expected)
   })
 }

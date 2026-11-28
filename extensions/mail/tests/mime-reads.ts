@@ -4,9 +4,17 @@ import {
   Resolver,
   ResolverCache,
   PeerManager,
+  TextResolver,
   type ProjectionOptions,
 } from '@inkcre/core'
+import { markRaw } from 'vue'
 import { MailMimePartResolver } from '../src/resolver'
+import BodyRenderer from '../src/components/contentNewsletterBody.vue'
+import BodyPreview from '../src/components/contentNewsletterPreview.vue'
+
+TextResolver.previewRenderer = markRaw(BodyPreview)
+TextResolver.solvedContentRenderer = markRaw(BodyRenderer)
+Resolver.register(TextResolver.type, TextResolver)
 
 const mode = new URLSearchParams(location.search).get('case')
 const blocks = new Map<number, Block>()
@@ -54,7 +62,7 @@ Relation.getByBlock = async (id) => {
 PeerManager.delegate = (async () => {
   delegates++
   relate(mime.id, 2)
-  return { status: 200, body: blocks.get(2)! }
+  return { status: 200, body: JSON.parse(JSON.stringify(blocks.get(2)!)) }
 }) as typeof PeerManager.delegate
 
 class CustomResolver extends Resolver<string, string> {
