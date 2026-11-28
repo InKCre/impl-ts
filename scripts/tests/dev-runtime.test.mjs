@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
-  existsSync,
+  realpathSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -184,10 +184,9 @@ void test('WXT launches Chromium only with an explicit binary and worktree profi
     },
   })
   assert.equal(
-    profile.replaceAll('//', '/'),
-    join(tools.bin, '.runtime/dev', instance, 'chromium-profile')
+    realpathSync(profile),
+    realpathSync(join(tools.bin, '.runtime/dev', instance, 'chromium-profile'))
   )
-  assert.ok(existsSync(profile))
   process.env.INKCRE_WXT_PROFILE_DIR = profile
   assert.equal((await load()).disabled, true)
   process.env.INKCRE_CHROMIUM_BINARY = '/chosen/chrome'

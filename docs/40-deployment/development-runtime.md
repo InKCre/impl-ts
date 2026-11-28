@@ -129,7 +129,7 @@ owns provider parsing and transport safety.
   control tunnel exposes them locally; the optional forwarding host defaults to remote loopback.
 - `external` attaches to one absolute, machine-local impl-py `runtime.json` descriptor. Attachment
   succeeds only for a development runtime owned by `InKCre/impl-py` when its runtime instance,
-  Compose project, Docker daemon, contract revision, migration head, source fingerprint, descriptor,
+  Compose project, Docker daemon, contract revision, migration head, source revision and fingerprint, descriptor,
   and live readiness agree.
 
 For a App-owned `local` or `ssh` runtime, the database provisioner resolves impl-py's admitted
