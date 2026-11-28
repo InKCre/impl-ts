@@ -85,7 +85,12 @@ export async function deliverBatch(attempted: Set<string>): Promise<number> {
       )
     } catch (error) {
       // Keep the captured command and target; graph-level recovery is best effort.
-      const blocked = error instanceof DatabaseFailure && error.status >= 400 && error.status < 500
+      // Timeouts and rate limits recover on a later wake; other 4xx need owner action.
+      const blocked =
+        error instanceof DatabaseFailure &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        ![408, 429].includes(error.status)
       await coordinate(() =>
         updateOutbox({
           ...item,
